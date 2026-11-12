@@ -34,6 +34,22 @@ python3 tests/probe_all.py
 
 ---
 
+## Репозиторий и синхронизация
+
+- код: **https://github.com/pavelb-coder/sim-ard**
+- живая версия (GitHub Pages): **https://pavelb-coder.github.io/sim-ard/**
+
+```bash
+./sync.sh                 # закоммитить все изменения и запушить в main
+./sync.sh "сообщение"     # со своим сообщением коммита
+```
+
+Авторизация — деплой-ключ `~/.ssh/id_ed25519`: права только на этот репозиторий, к остальному
+аккаунту доступа нет. Скрипт сам восстанавливает `user.name`, `core.sshCommand` и `remote origin`,
+если `.git/config` пропал. Отозвать доступ можно в *Settings → Deploy keys* репозитория.
+
+---
+
 ## Что уже работает
 
 | Возможность | Состояние |
