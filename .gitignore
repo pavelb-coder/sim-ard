@@ -1,0 +1,9 @@
+# системный мусор
+.DS_Store
+Thumbs.db
+*.log
+# временные файлы разработки
+/tmp/
+node_modules/
+.venv/
+__pycache__/

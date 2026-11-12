@@ -1,0 +1,466 @@
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel-2:#1b222c; --line:#26303c;
+  --text:#e6edf3; --muted:#8b98a5; --accent:#ff8a3d; --accent-2:#37b6ff;
+  --ok:#3fb950; --warn:#d29922; --danger:#f85149; --code-bg:#0b0f14;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:radial-gradient(1200px 600px at 20% -10%,#16202b 0,#0d1117 60%);
+  color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,sans-serif;
+  overflow:hidden;
+}
+.app{display:grid;grid-template-rows:auto 1fr auto;height:100vh}
+
+/* ---------------- верхняя панель ---------------- */
+.topbar{
+  display:flex;align-items:center;gap:14px;padding:8px 14px;
+  border-bottom:1px solid var(--line);background:rgba(22,27,34,.92);backdrop-filter:blur(6px);
+}
+.brand{display:flex;align-items:center;gap:9px;color:var(--accent-2);font-weight:700;letter-spacing:.2px}
+.brand span{display:flex;flex-direction:column;line-height:1.05;color:var(--text);font-size:14px}
+.brand small{font-size:10px;color:var(--muted);font-weight:500;letter-spacing:.4px;text-transform:uppercase}
+.tools{display:flex;align-items:center;gap:8px}
+.tools-right{margin-left:auto}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--line);background:#1f2731;color:var(--text);font:inherit;font-weight:600;font-size:13px;
+  transition:transform .06s ease,background .15s ease,border-color .15s;
+}
+.btn:hover{background:#26313d;border-color:#33414f}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-run{background:linear-gradient(180deg,#2ea043,#1f7a33);border-color:#2c8f3e;color:#fff}
+.btn-run:hover{background:linear-gradient(180deg,#35b14c,#22823a)}
+.btn-stop{background:#3a1f22;border-color:#6c2b30;color:#ffb3ae}
+.btn-stop:not(:disabled):hover{background:#4a2529}
+.btn-small{padding:5px 10px;font-size:12px}
+.timer{font:600 13px var(--mono);color:var(--muted);min-width:70px}
+.select{
+  background:#1f2731;color:var(--text);border:1px solid var(--line);border-radius:8px;
+  padding:7px 9px;font:inherit;font-size:13px;cursor:pointer;max-width:190px;
+}
+
+/* ---------------- рабочая область ---------------- */
+.workspace{
+  display:grid;min-width:0;grid-template-columns:minmax(320px,26vw) 1fr minmax(200px,17vw);
+  gap:10px;padding:10px;min-height:0;
+}
+.panel{
+  display:flex;flex-direction:column;min-height:0;min-width:0;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+}
+.panel-head{
+  display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#1c242e,#171e26);flex:0 0 auto;
+}
+.panel-head h2{margin:0;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#b6c3d1}
+.panel-head .spacer{flex:1}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.dot-red{background:#ff5f56}
+.badge{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:1px 7px}
+.hint{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn{
+  background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;
+  border-radius:6px;padding:2px 7px;font-size:13px;line-height:1.2;
+}
+.icon-btn:hover{background:#232c37;color:var(--text);border-color:var(--line)}
+
+/* ---------------- редактор кода ---------------- */
+.editor{position:relative;flex:1 1 auto;min-height:120px;background:var(--code-bg);overflow:hidden}
+.editor .gutter{
+  position:absolute;left:0;top:0;bottom:0;width:38px;padding:10px 6px 10px 0;text-align:right;
+  font:12px/1.55 var(--mono);color:#3f4b58;background:#0a0e13;border-right:1px solid #141b22;
+  overflow:hidden;user-select:none;white-space:pre;
+}
+.highlight,.editor textarea{
+  position:absolute;left:38px;top:0;right:0;bottom:0;margin:0;padding:10px 12px;
+  font:12.5px/1.55 var(--mono);white-space:pre;overflow:auto;border:0;tab-size:2;
+}
+.highlight{color:#c9d1d9;pointer-events:none;overflow:hidden}
+.editor textarea{
+  resize:none;background:transparent;color:transparent;caret-color:#ffb26b;outline:none;
+  -webkit-text-fill-color:transparent;
+}
+.editor textarea::selection{background:#2f4a63;color:transparent}
+.tok-kw{color:#ff7b72}
+.tok-type{color:#79c0ff}
+.tok-fn{color:#d2a8ff}
+.tok-num{color:#79c0ff}
+.tok-str{color:#a5d6a7}
+.tok-com{color:#5b6b7a;font-style:italic}
+.tok-pre{color:#ffa657}
+.tok-const{color:#ffa657}
+
+/* ---------------- консоль / проблемы ---------------- */
+.console-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--line);background:#141a21}
+.tab{white-space:nowrap;
+  background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;
+  font:600 11px inherit;padding:4px 9px;border-radius:6px;letter-spacing:.3px;text-transform:uppercase;
+}
+.tab-active{color:var(--text);background:#1f2833;border-color:var(--line)}
+.pill{background:#2b3644;border-radius:20px;padding:0 5px;font-size:10px;color:#cfd8e3}
+.pill.bad{background:#5a1d1d;color:#ffb0ac}
+.baud{font-size:10px;color:var(--muted);margin-left:auto;padding-right:4px}
+.console-body{
+  flex:0 0 32%;min-height:70px;overflow:auto;padding:8px 10px;background:#0a0e13;
+  font:12px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;
+}
+.console-body .sys{color:#5b6b7a}
+.console-body .err{color:var(--danger)}
+.problems{padding:6px 8px}
+.problem{padding:5px 7px;border-left:2px solid var(--danger);background:#1d1417;border-radius:0 6px 6px 0;margin-bottom:5px;cursor:pointer}
+.problem b{color:#ff9c95}
+.problem.warn{border-color:var(--warn);background:#1d1a12}
+.problem .ln{color:var(--muted);font-size:11px}
+.hidden{display:none!important}
+.console-input{display:flex;gap:6px;padding:6px 8px;border-top:1px solid var(--line);background:#12181f}
+.console-input input{
+  flex:1;min-width:0;background:#0e141a;border:1px solid var(--line);border-radius:7px;
+  color:var(--text);padding:6px 9px;font:12px var(--mono);outline:none;
+}
+.console-input input:focus{border-color:#3d5a75}
+
+/* ---------------- холст ---------------- */
+.panel-canvas{position:relative}
+.stage{position:relative;flex:1;min-height:0;overflow:hidden;background:#0f1620;cursor:default}
+#svg{width:100%;height:100%;display:block;touch-action:none}
+.canvas-foot .probe{margin-left:auto;color:#7fa7c9}
+.canvas-foot{
+  display:flex;gap:14px;padding:5px 11px;border-top:1px solid var(--line);
+  font:11px var(--mono);color:var(--muted);background:#141a21;
+}
+.part{cursor:grab}
+.part.dragging{cursor:grabbing}
+.part .body{filter:drop-shadow(0 2px 4px rgba(0,0,0,.45))}
+.part.selected .body{filter:drop-shadow(0 0 5px rgba(55,182,255,.9))}
+.pin{
+  fill:#0b1118;stroke:#5d87a8;stroke-width:1.2;cursor:crosshair;
+}
+.pin:hover{fill:#37b6ff;stroke:#dff3ff}
+.pin.active{fill:#ffb26b;stroke:#fff}
+.pin.high{fill:#3fb950;stroke:#b7f6c4}
+.pin.low{fill:#1b2530;stroke:#3c5468}
+.wire{fill:none;stroke:#5aa9e6;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wire.selected{stroke:#ffb26b;stroke-width:2.6}
+.wire-hit{fill:none;stroke:transparent;stroke-width:12;cursor:pointer}
+.pending-wire{fill:none;stroke:#ffb26b;stroke-width:1.8;stroke-dasharray:5 4}
+.empty-hint{
+  fill:#5a6b7d;font:13px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-anchor:middle;
+}
+
+/* ---------------- палитра ---------------- */
+.panel-palette{min-width:0}
+.palette{overflow:auto;padding:8px;flex:1 1 auto}
+.cat{font:600 10px inherit;letter-spacing:.8px;text-transform:uppercase;color:#6f7f8f;margin:10px 4px 5px}
+.pal-item{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;cursor:pointer;
+  background:#1b232c;border:1px solid var(--line);border-radius:9px;padding:7px 9px;margin-bottom:5px;
+  color:var(--text);font:600 12px inherit;
+}
+.pal-item:hover{border-color:#3f5a74;background:#212b36}
+.pal-item svg{flex:0 0 auto}
+.palette-note{padding:8px 11px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);background:#141a21}
+.palette-note b{display:block;color:#b6c3d1;margin-bottom:3px;font-size:11px}
+.palette-note ol{margin:0;padding-left:16px}
+.palette-note li{margin:2px 0}
+
+/* ---------------- статус ---------------- */
+.statusbar{
+  display:flex;align-items:center;gap:10px;padding:6px 14px;border-top:1px solid var(--line);
+  background:#161b22;font-size:12px;color:var(--muted);
+}
+.statusbar .spacer{flex:1}
+.warn{color:var(--warn);font-size:12px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.statusbar .ok{color:var(--ok)}
+
+@media (max-width:1100px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100vh}
+  .workspace{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:minmax(240px,38vh) minmax(300px,52vh) auto;
+    min-width:0;
+  }
+  .panel-palette{max-height:220px}
+  .palette{display:flex;flex-wrap:wrap;gap:5px}
+  .pal-item{width:auto}
+  .cat{width:100%;margin:4px 4px 0}
+  .palette-note{display:none}
+  .hint{display:none}
+}
+
+@media (max-width:760px){
+  .topbar{flex-wrap:wrap;gap:6px;padding:6px 8px}
+  .brand small{display:none}
+  .brand span{font-size:13px}
+  .tools{flex-wrap:wrap;gap:5px}
+  .tools-right{margin-left:0;width:100%;flex-wrap:wrap}
+  .timer{display:none}
+  .btn{padding:6px 9px;font-size:12px}
+  .select{max-width:none;flex:1;min-width:120px}
+  /* схема и осциллограф растут по содержимому, палитра — внизу */
+  .workspace{padding:6px;gap:6px;grid-template-rows:minmax(240px,44vh) auto auto}
+  .panel-head{padding:6px 8px}
+  .canvas-foot .probe{display:none}
+  .console-body{flex-basis:26%}
+  /* на телефоне осциллограф не должен «съедать» схему */
+  .stage{min-height:220px}
+}
+
+/* ---------------- вкладки скетчей (несколько плат) ---------------- */
+.sketch-tabs{
+  display:flex;align-items:stretch;gap:5px;padding:5px 8px;border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);background:#12181f;overflow-x:auto;
+}
+.sketch-tab{
+  display:flex;align-items:baseline;gap:6px;cursor:pointer;white-space:nowrap;
+  background:#1a222b;border:1px solid var(--line);border-radius:7px;padding:3px 9px;
+  color:var(--muted);font:600 11px inherit;
+}
+.sketch-tab:hover{border-color:#3f5a74;color:var(--text)}
+.sketch-tab.active{background:#1f2b38;border-color:#37b6ff;color:#dff3ff}
+.sketch-tab b{font-weight:700}
+.sketch-tab i{font-style:normal;font-size:9px;color:#7f93a6;letter-spacing:.3px;text-transform:uppercase}
+.sketch-tab.active i{color:#8ecbf0}
+.tab-empty{font-size:11px;color:var(--muted);padding:3px 2px}
+
+/* ---------------- осциллограф ---------------- */
+.mini-select{
+  background:#161d25;color:var(--text);border:1px solid var(--line);border-radius:5px;
+  font:11px inherit;padding:2px 4px;cursor:pointer;
+}
+.mini-select:focus{outline:none;border-color:#3d5a75}
+.scope{border-top:1px solid var(--line);background:#0d1319}
+.scope-head{
+  display:flex;align-items:center;gap:10px;padding:5px 9px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);
+}
+.scope-head label{display:flex;align-items:center;gap:4px}
+.scope-title{font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#b6c3d1;font-size:10px}
+.scope-hint{margin-left:auto;font-size:10px;color:#5d7790}
+.scope-body{display:flex;gap:8px;padding:7px;align-items:stretch}
+.scope canvas{
+  flex:1 1 auto;min-width:0;height:168px;display:block;border-radius:6px;
+  border:1px solid #1b2836;background:#0a0f14;
+}
+.scope-channels{display:flex;flex-direction:column;gap:5px;flex:0 0 auto;justify-content:center}
+.scope-ch{display:flex;align-items:center;gap:6px;background:#111a22;border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+.scope-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.scope-ch .mini-select{max-width:150px}
+
+@media (max-width:760px){
+  .scope-body{flex-direction:column}
+  .scope canvas{height:130px}
+  .scope-channels{flex-direction:row;flex-wrap:wrap}
+  .scope-hint{display:none}
+  .scope-ch .mini-select{max-width:none;width:120px}
+}
+
+/* ---------------- задания: кнопка в шапке ---------------- */
+.btn-tasks{position:relative}
+.btn-tasks .pill{margin-left:2px;background:#24405a;color:#bfe0ff}
+
+/* ---------------- задания: выдвижная панель ---------------- */
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(760px,100%);
+  display:flex;flex-direction:column;z-index:40;
+  background:#11171e;border-left:1px solid var(--line);
+  box-shadow:-18px 0 40px rgba(0,0,0,.55);
+  animation:drawer-in .18s ease-out;
+}
+@keyframes drawer-in{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}
+.drawer-head{
+  display:flex;align-items:center;gap:8px;padding:10px 12px;
+  border-bottom:1px solid var(--line);background:#161d25;
+}
+.drawer-head h2{margin:0;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#b6c3d1}
+.drawer-head .spacer{flex:1}
+.drawer-body{display:grid;grid-template-columns:210px minmax(0,1fr);flex:1;min-height:0}
+
+/* список заданий */
+.task-list{overflow:auto;border-right:1px solid var(--line);padding:8px}
+.task-group{font:600 10px inherit;letter-spacing:.7px;text-transform:uppercase;color:#6f7f8f;margin:10px 4px 5px}
+.task-item{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer;
+  background:#1a222b;border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:5px;
+  color:var(--text);font:600 12px inherit;
+}
+.task-item:hover{border-color:#3f5a74;background:#212b36}
+.task-item.active{border-color:#37b6ff;background:#1d2a38}
+.task-item.solved .task-tick{background:#1f6f3f;color:#d8ffe4;border-color:#2ea05a}
+.task-tick{
+  flex:0 0 auto;width:18px;height:18px;border-radius:5px;border:1px solid var(--line);
+  display:grid;place-items:center;font-size:10px;color:var(--muted);background:#131a22;
+}
+.task-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-min{font-size:10px;color:var(--muted)}
+
+/* карточка задания */
+.task-card{overflow:auto;padding:14px 16px 22px}
+.task-head h3{margin:0 0 6px;font-size:17px}
+.task-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 8px;background:#161d25}
+.chip.ok{color:#a5f3c0;border-color:#2ea05a;background:#132318}
+.task-brief{margin:0 0 12px;font-size:13px;line-height:1.55;color:#cbd6e2}
+.task-goals,.task-checks{margin-bottom:12px;font-size:12px}
+.task-goals b,.task-checks b{display:block;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#8b9cae;margin-bottom:5px}
+.task-goals ul{margin:0;padding-left:18px;color:#b6c3d1}
+.task-goals li{margin:3px 0}
+.task-checks ul{list-style:none;margin:0;padding:0}
+.check{display:flex;gap:8px;padding:6px 8px;border-radius:7px;background:#151c24;margin-bottom:4px;border:1px solid var(--line)}
+.check.ok{border-color:#2c6b45;background:#12211a}
+.check.bad{border-color:#6c2b30;background:#1d1417}
+.check.skip{border-color:#3d4a58;background:#151c24}
+.check-icon{flex:0 0 auto;width:16px;text-align:center;color:#7f93a6;font-weight:700}
+.check.ok .check-icon{color:#3fb950}
+.check.bad .check-icon{color:#ff7b72}
+.check-body{min-width:0}
+.check-text{color:#cbd6e2;line-height:1.35}
+.check-kind{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#5d7790;border:1px solid #263241;border-radius:4px;padding:0 4px;margin-left:4px}
+.check-detail{margin-top:3px;font-size:11px;color:#8fa3b6}
+.verdict{border-radius:8px;padding:8px 11px;font-size:12px;margin-bottom:12px;border:1px solid var(--line);background:#151c24}
+.verdict.ok{border-color:#2ea05a;background:#12251a;color:#c8f5d8}
+.verdict.part{border-color:#6b5a2c;background:#221e12;color:#f0e0b0}
+.verdict.bad{border-color:#6c2b30;background:#1d1417;color:#ffc7c2}
+.task-hint{border-left:2px solid #ffd166;background:#1d1a12;border-radius:0 8px 8px 0;padding:8px 11px;margin-bottom:12px;font-size:12px;color:#e8dcb8}
+.task-hint p{margin:4px 0}
+.task-actions{display:flex;gap:7px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--line)}
+.muted{color:var(--muted);font-size:12px}
+
+/* ---------------- подсказки в консоли ---------------- */
+.hints{padding:6px 8px}
+.hint-row{padding:5px 7px;border-left:2px solid #3d5a75;background:#141c24;border-radius:0 6px 6px 0;margin-bottom:5px;cursor:pointer;font-size:12px;color:#c3d1de}
+.hint-row .hint-ln{color:var(--muted);font-size:11px;margin-left:6px}
+.hint-row.warn{border-color:var(--warn);background:#1d1a12}
+.hint-row.danger{border-color:var(--danger);background:#1d1417}
+.hint-row b{color:#dbe7f2;font-weight:600}
+
+@media (max-width:760px){
+  .drawer{width:100%}
+  .drawer-body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .task-list{max-height:150px;border-right:none;border-bottom:1px solid var(--line)}
+  .task-card{padding:12px}
+  .task-actions .btn{flex:1 1 40%}
+}
+
+/* ================= режим ROS 2: квартира ================= */
+.mode-switch{
+  display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:9px;
+  background:#11171e;
+}
+.mode-btn{
+  border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:600;
+  padding:6px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s;
+}
+.mode-btn:hover{color:var(--text);background:#1d2631}
+.mode-btn.active{background:#243040;color:var(--text);box-shadow:inset 0 0 0 1px #35485e}
+
+.workspace{grid-row:2;grid-column:1}
+.statusbar{grid-row:3;grid-column:1}
+.ros-layout{
+  grid-row:2;grid-column:1;min-height:0;display:grid;
+  grid-template-columns:1fr minmax(320px,30vw);gap:10px;padding:10px;
+}
+.ros-main{
+  display:flex;flex-direction:column;min-width:0;min-height:0;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+}
+.ros-hud{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.ros-stat{display:flex;flex-direction:column;line-height:1.15;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.ros-stat b{font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:0}
+.ros-poses b{font-size:11px}
+
+.ros-stage{position:relative;flex:1;min-height:0;background:#0a1016}
+.ros-stage canvas{display:block;width:100%;height:100%}
+.ros-overlay{position:absolute;top:10px;left:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.seg{display:flex;gap:2px;padding:3px;border-radius:8px;background:rgba(14,20,26,.86);border:1px solid var(--line)}
+.seg-btn{
+  border:0;background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:600;
+  padding:5px 9px;border-radius:6px;cursor:pointer;white-space:nowrap;
+}
+.seg-btn.active{background:#243040;color:#cfe3f5}
+.ros-overlay .btn{background:rgba(14,20,26,.86);font-size:11px;padding:5px 9px}
+.ros-overlay .btn.active{border-color:#2f6f8d;color:#9fd8f2}
+
+.ros-pad{position:absolute;right:12px;bottom:44px;display:grid;grid-template-columns:repeat(3,38px);grid-template-rows:repeat(2,38px);gap:4px}
+.pad-btn{
+  border:1px solid var(--line);background:rgba(20,28,36,.9);color:#cfdae6;border-radius:9px;
+  font-size:15px;cursor:pointer;user-select:none;touch-action:none;
+}
+.pad-btn:active{background:#2b6f8d;color:#fff;border-color:#3c8fb5}
+.pad-up{grid-column:2;grid-row:1}
+.pad-left{grid-column:1;grid-row:2}
+.pad-down{grid-column:2;grid-row:2}
+.pad-right{grid-column:3;grid-row:2}
+
+.ros-hintline{
+  position:absolute;left:12px;bottom:10px;font-size:11px;color:#8ea3b8;
+  background:rgba(12,18,24,.72);padding:4px 9px;border-radius:7px;pointer-events:none;
+}
+.ros-foot{display:flex;align-items:center;gap:8px;padding:8px 11px;border-top:1px solid var(--line);background:#171e26}
+.ros-foot .spacer{flex:1}
+.ros-keys{font-size:11px;color:var(--muted)}
+
+.ros-side{display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0}
+.ros-tasks-box{
+  display:flex;flex-direction:column;min-height:0;max-height:50%;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+}
+.ros-tasks{overflow:auto;padding:8px}
+.ros-task{
+  border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-bottom:8px;background:#141b23;
+}
+.ros-task.done{border-color:#2b6b3d;background:rgba(43,107,61,.14)}
+.ros-task-head{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600}
+.ros-task-mark{color:var(--muted);width:14px}
+.ros-task.done .ros-task-mark{color:var(--ok)}
+.ros-task-title{flex:1}
+.ros-task-progress{font-size:11px;color:#9fd8f2;font-variant-numeric:tabular-nums}
+.ros-task-topic{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:3px 0 5px 21px}
+.ros-task-text{font-size:11px;line-height:1.4;color:#9fb0c2;margin-left:21px}
+
+.ros-term{
+  display:flex;flex-direction:column;flex:1;min-height:0;
+  background:#0c1218;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+}
+.ros-term .panel-head{background:linear-gradient(180deg,#1c242e,#171e26)}
+.term-out{
+  flex:1;overflow:auto;padding:8px 10px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:#c8d6e2;white-space:pre-wrap;word-break:break-word;
+}
+.term-line{margin:0 0 1px}
+.term-cmd{color:#eaf3fb;margin-top:6px}
+.term-prompt{color:#4ec9a0;font-weight:600}
+.term-err{color:#ff8f8f}
+.term-ok{color:#7ee2a8}
+.term-dim{color:#7b8b9c}
+.term-input{display:flex;align-items:center;gap:7px;padding:7px 10px;border-top:1px solid var(--line);background:#0a1015}
+.term-input input{
+  flex:1;min-width:0;background:transparent;border:0;outline:none;color:#eaf3fb;
+  font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.term-input input::placeholder{color:#4d5b69}
+
+@media (max-width:1100px){
+  .ros-layout{grid-template-columns:1fr;grid-template-rows:1fr auto}
+  .ros-side{flex-direction:row;max-height:38vh}
+  .ros-tasks-box{max-height:none;width:44%}
+  .ros-term{width:56%}
+  .ros-hud{gap:9px}
+  .ros-poses{display:none}
+}
+@media (max-width:720px){
+  .mode-btn{padding:6px 8px;font-size:11px}
+  .ros-side{flex-direction:column;max-height:46vh}
+  .ros-tasks-box,.ros-term{width:100%}
+  .ros-keys{display:none}
+  .ros-pad{bottom:38px}
+}
+
+/* на телефоне карта занимает примерно свою натуральную высоту, а не полэкрана */
+@media (max-width:720px){
+  .ros-stage{flex:0 0 auto;height:min(78vw,360px)}
+  .ros-hintline{font-size:10px;right:10px;left:10px}
+}

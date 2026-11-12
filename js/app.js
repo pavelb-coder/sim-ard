@@ -1,0 +1,1198 @@
+/**
+ * app.js — сборка приложения: редактор кода, схемный редактор, рантаймы плат,
+ * осциллограф.
+ *
+ * Поток запуска (может быть несколько плат одновременно):
+ *   для каждой платы: транспайлер C++ или MicroPython → AsyncFunction
+ *   драйвер кадра: 4 подшага решателя + отсчёт осциллографа, затем отрисовка
+ */
+
+import { Schematic } from './schematic.js';
+import { PARTS, fmtR, BOARDS_LIST } from './parts.js';
+import { BOARDS } from './boards.js';
+import { Circuit } from './circuit.js';
+import { ArduinoRuntime } from './runtime.js';
+import { transpile, bracketHint } from './transpiler.js';
+import { transpilePython } from './mpy-transpiler.js';
+import { createLibraries, checkIncludes } from './libraries.js';
+import { Scope, TIME_DIVS, VOLT_DIVS } from './scope.js';
+import { EXAMPLES, defaultCodeFor } from './examples.js';
+import { TASKS, taskById, solutionOf } from './tasks.js';
+import { CheckContext } from './checker.js';
+import { lint } from './hints.js';
+import { TasksPanel } from './ui-tasks.js';
+import { loadProgress, readHashProject, decodeProject } from './classroom.js';
+import { createRosMode } from './ros/app.js';
+
+const $ = (id) => document.getElementById(id);
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+
+const codeEl = $('code');
+const hlEl = $('highlight');
+const gutterEl = $('gutter');
+const serialEl = $('serialOut');
+const problemsEl = $('problemsOut');
+const statusEl = $('statusText');
+const warnEl = $('warnText');
+
+let running = false;
+let runtimes = new Map();      // boardId → ArduinoRuntime
+let activeBoardId = null;
+let timerHandle = null;
+let lastSolve = null;
+
+// ------------------------------------------------------------------ схема ----
+const schematic = new Schematic({
+  svg: $('svg'),
+  onChange: () => {
+    circuit.setSchematic(schematic.parts, schematic.wires);
+    syncTabs();
+    updateStats();
+    scheduleAutosave();
+    refreshHints();
+    if (running) solveOnce(1 / 60);
+  },
+});
+
+let circuit = new Circuit([], []);
+
+schematic.onHoverPin = (info) => {
+  const el = $('probe');
+  if (!info) { el.textContent = 'наведите на вывод — покажу напряжение'; return; }
+  const v = circuit.pinVoltage(info.compId, info.pin);
+  const part = schematic.part(info.compId);
+  const name = part ? (PARTS[part.type]?.name || part.type) : info.compId;
+  el.textContent = v === null ? `${name}.${info.pin}: нет данных` : `${name}.${info.pin} = ${v.toFixed(2)} В`;
+};
+
+// ------------------------------------------------------------------ палитра ----
+const CATS = ['Платы', 'Компоненты', 'Датчики', 'Модули'];
+const palette = $('palette');
+for (const cat of CATS) {
+  const head = document.createElement('div');
+  head.className = 'cat';
+  head.textContent = cat;
+  palette.appendChild(head);
+  for (const [type, def] of Object.entries(PARTS)) {
+    if (def.category !== cat) continue;
+    const b = document.createElement('button');
+    b.className = 'pal-item';
+    b.dataset.type = type;
+    b.innerHTML = `${iconFor(type)}<span>${def.name}</span>`;
+    b.addEventListener('click', () => {
+      const spot = freeSpot(type);
+      const part = schematic.addPart(type, spot.x, spot.y, initialProps(type));
+      if (def.board) {
+        part.props.code = defaultCodeFor(type, part.props.lang);
+        activeBoardId = part.id;
+        syncTabs();
+        showBoard(part);
+      }
+      updateStats();
+    });
+    palette.appendChild(b);
+  }
+}
+
+function initialProps(type) {
+  const spec = BOARDS[type];
+  if (spec) return { lang: spec.defaultLang, code: '' };
+  return {};
+}
+
+function iconFor(type) {
+  const c = 'width="26" height="18" viewBox="0 0 26 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"';
+  switch (type) {
+    case 'uno': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#1276b0" stroke="#1276b0"/><path d="M6 3v-1M10 3v-1M14 3v-1M18 3v-1"/></svg>`;
+    case 'esp32': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#2f3b46"/><rect x="9" y="5" width="8" height="5" rx="1" fill="#4a5b6b"/></svg>`;
+    case 'pico': return `<svg ${c} aria-hidden="true"><rect x="4" y="3" width="18" height="12" rx="2" fill="#1f4d3a"/><rect x="9" y="5" width="8" height="5" rx="1" fill="#3d7a5c"/></svg>`;
+    case 'led': return `<svg ${c} aria-hidden="true"><path d="M2 9h5M19 9h5"/><path d="M9 4l6 5-6 5z" fill="#ffd7c9" stroke="#ff8a3d"/><path d="M16 3v12" stroke="#ff8a3d"/></svg>`;
+    case 'resistor': return `<svg ${c} aria-hidden="true"><path d="M2 9h4l2-4 3 8 3-8 3 8 2-4h5"/></svg>`;
+    case 'capacitor': return `<svg ${c} aria-hidden="true"><path d="M2 9h8M16 9h8"/><path d="M10 3v12M16 3v12"/></svg>`;
+    case 'electrolytic': return `<svg ${c} aria-hidden="true"><path d="M2 9h8M18 9h6"/><path d="M10 3v12"/><path d="M16 3a 6 6 0 0 1 0 12" /></svg>`;
+    case 'inductor': return `<svg ${c} aria-hidden="true"><path d="M2 9h3a4 4 0 0 1 8 0a4 4 0 0 1 8 0h3"/></svg>`;
+    case 'button': return `<svg ${c} aria-hidden="true"><path d="M2 12h6M18 12h6"/><path d="M8 12h3M15 12h3"/><path d="M9 6h8" stroke="#9fb6c9"/></svg>`;
+    case 'pot': return `<svg ${c} aria-hidden="true"><rect x="5" y="5" width="16" height="6" rx="1"/><path d="M13 11v6M10 2l3 3 3-3"/></svg>`;
+    case 'ldr': return `<svg ${c} aria-hidden="true"><circle cx="13" cy="9" r="6"/><path d="M7 5l12 8M7 9h12M7 13l12-8"/></svg>`;
+    case 'pir': return `<svg ${c} aria-hidden="true"><path d="M4 13a9 9 0 0 1 18 0z"/><circle cx="13" cy="8" r="2.5" stroke="#ffd166"/></svg>`;
+    case 'dht11': return `<svg ${c} aria-hidden="true"><rect x="6" y="4" width="14" height="10" rx="1"/><path d="M9 7h8"/></svg>`;
+    case 'hcsr04': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="22" height="8" rx="1"/><circle cx="8" cy="9" r="2.5"/><circle cx="18" cy="9" r="2.5"/></svg>`;
+    case 'servo': return `<svg ${c} aria-hidden="true"><rect x="5" y="6" width="16" height="8" rx="2"/><circle cx="13" cy="6" r="3"/><path d="M13 3v-3"/></svg>`;
+    case 'lcd1602': return `<svg ${c} aria-hidden="true"><rect x="2" y="4" width="22" height="11" rx="1" fill="#0d3a1f" stroke="#1d6b38"/><path d="M5 8h16M5 11h10" stroke="#7ef29d"/></svg>`;
+    case 'oled': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="2" fill="#04121f" stroke="#24405c"/><path d="M8 7h10M8 10h6" stroke="#9ad7ff"/></svg>`;
+    case 'buzzer': return `<svg ${c} aria-hidden="true"><path d="M6 13a7 7 0 0 1 14 0z"/><path d="M2 13h4M20 13h4"/></svg>`;
+    default: return `<svg ${c} aria-hidden="true"><rect x="4" y="4" width="18" height="10" rx="2"/></svg>`;
+  }
+}
+
+function freeSpot(type) {
+  const def = PARTS[type];
+  const w = def.w || 70, h = def.h || 40;
+  const c = screenCenterWorld();
+  const offsets = [
+    [0, 0], [0, -(h + 110)], [-(w + 120), -(h + 40)], [w + 120, -(h + 40)],
+    [0, h + 110], [-(w + 120), h + 40], [w + 120, h + 40], [0, -(2 * h + 160)],
+    [-(2 * w), 0], [2 * w, 0], [-(2 * w), -(h + 160)], [2 * w, -(h + 160)],
+  ];
+  const boxes = schematic.parts.map((p) => {
+    const d = PARTS[p.type];
+    return { x1: p.x - d.w / 2, y1: p.y - d.h / 2, x2: p.x + d.w / 2, y2: p.y + d.h / 2 };
+  });
+  for (const [dx, dy] of offsets) {
+    const x = c.x + dx, y = c.y + dy;
+    const box = { x1: x - w / 2 - 12, y1: y - h / 2 - 12, x2: x + w / 2 + 12, y2: y + h / 2 + 12 };
+    const clash = boxes.some((b) => box.x1 < b.x2 && box.x2 > b.x1 && box.y1 < b.y2 && box.y2 > b.y1);
+    if (!clash) return { x, y };
+  }
+  return { x: c.x + w, y: c.y - h - 120 };
+}
+
+function screenCenterWorld() {
+  const r = $('svg').getBoundingClientRect();
+  return {
+    x: (r.width / 2 - schematic.view.x) / schematic.view.s,
+    y: (r.height / 2 - schematic.view.y) / schematic.view.s,
+  };
+}
+
+function updateStats() {
+  $('statParts').textContent = `${schematic.parts.length} деталей`;
+  $('statWires').textContent = `${schematic.wires.length} проводов`;
+}
+
+// ------------------------------------------------------------------ платы ----
+const boards = () => schematic.parts.filter((p) => p.__def?.board);
+const activeBoard = () => schematic.part(activeBoardId) || boards()[0] || null;
+
+function syncTabs() {
+  const wrap = $('sketchTabs');
+  const list = boards();
+  if (!list.length) { wrap.innerHTML = '<span class="tab-empty">На схеме нет платы</span>'; return; }
+  wrap.innerHTML = list.map((b) => {
+    const spec = BOARDS[b.type];
+    const lang = b.props.lang === 'mpy' ? 'MicroPython' : 'C++';
+    const active = b.id === activeBoard()?.id ? ' active' : '';
+    return `<button class="sketch-tab${active}" data-board="${b.id}">
+      <b>${spec.short}</b><i>${lang}</i></button>`;
+  }).join('');
+  wrap.querySelectorAll('.sketch-tab').forEach((el) => {
+    el.addEventListener('click', () => {
+      syncEditorToBoard();
+      activeBoardId = el.dataset.board;
+      showBoard(schematic.part(activeBoardId));
+      syncTabs();
+    });
+  });
+}
+
+function syncEditorToBoard() {
+  const b = activeBoard();
+  if (b) b.props.code = codeEl.value;
+}
+
+function showBoard(part) {
+  if (!part) return;
+  activeBoardId = part.id;
+  codeEl.value = part.props.code ?? defaultCodeFor(part.type, part.props.lang);
+  $('langBadge').textContent = part.props.lang === 'mpy' ? 'MicroPython' : 'Arduino C++';
+  refreshEditor();
+}
+
+// ---------------------------------------------------------------- редактор ----
+const KW = new Set(['if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'return', 'true', 'false', 'default', 'import', 'from', 'in', 'and', 'or', 'not', 'def', 'elif', 'pass', 'while']);
+const TYPES = new Set(['void', 'int', 'float', 'double', 'long', 'short', 'char', 'bool', 'boolean', 'byte', 'word', 'unsigned', 'const', 'static', 'String', 'uint8_t', 'int8_t', 'uint16_t', 'int16_t', 'uint32_t', 'int32_t']);
+const CONSTS = new Set(['HIGH', 'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP', 'LED_BUILTIN', 'PI', 'True', 'False', 'None']);
+
+const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function highlight(src) {
+  const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|^([ \t]*#[^\n]*)|\b([A-Za-z_]\w*)\b|(\d+(?:\.\d+)?)/gm;
+  let out = '', last = 0, m;
+  while ((m = re.exec(src))) {
+    out += escapeHtml(src.slice(last, m.index));
+    const [text, com, str, pre, word, num] = m;
+    let cls = '';
+    if (com && !pre) cls = 'tok-com';
+    else if (str) cls = 'tok-str';
+    else if (pre) cls = 'tok-pre';
+    else if (word) {
+      const after = src.slice(m.index + text.length).match(/^\s*\(/);
+      if (KW.has(word)) cls = 'tok-kw';
+      else if (TYPES.has(word)) cls = 'tok-type';
+      else if (CONSTS.has(word)) cls = 'tok-const';
+      else if (after) cls = 'tok-fn';
+    } else if (num) cls = 'tok-num';
+    out += cls ? `<span class="${cls}">${escapeHtml(text)}</span>` : escapeHtml(text);
+    last = m.index + text.length;
+  }
+  out += escapeHtml(src.slice(last));
+  return out;
+}
+
+function refreshEditor() {
+  const src = codeEl.value;
+  hlEl.innerHTML = highlight(src) + '\n';
+  const lines = src.split('\n').length;
+  gutterEl.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+  syncScroll();
+}
+function syncScroll() {
+  hlEl.scrollTop = codeEl.scrollTop;
+  hlEl.scrollLeft = codeEl.scrollLeft;
+  gutterEl.scrollTop = codeEl.scrollTop;
+}
+codeEl.addEventListener('input', () => { refreshEditor(); syncEditorToBoard(); scheduleAutosave(); refreshHints(); });
+codeEl.addEventListener('scroll', syncScroll);
+codeEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = codeEl.selectionStart, en = codeEl.selectionEnd;
+    codeEl.setRangeText('  ', s, en, 'end');
+    refreshEditor();
+  }
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
+});
+
+// ----------------------------------------------------------------- консоль ----
+function appendSerial(text, kind = 'out', boardPart = null) {
+  const many = boards().length > 1 && boardPart;
+  const prefix = many ? `[${BOARDS[boardPart.type].short}] ` : '';
+  const span = document.createElement('span');
+  if (kind === 'sys') span.className = 'sys';
+  if (kind === 'err') span.className = 'err';
+  span.textContent = prefix + text;
+  // наблюдения для автопроверки заданий
+  for (const line of String(text).split('\n')) {
+    if (!line.trim()) continue;
+    trace.serial.push((prefix + line).slice(0, 200));
+  }
+  if (trace.serial.length > 400) trace.serial.splice(0, trace.serial.length - 400);
+  serialEl.appendChild(span);
+  serialEl.scrollTop = serialEl.scrollHeight;
+  while (serialEl.childNodes.length > 800) serialEl.removeChild(serialEl.firstChild);
+}
+
+let problems = [];
+function setProblems(list) {
+  problems = list;
+  $('problemsCount').textContent = String(list.length);
+  $('problemsCount').classList.toggle('bad', list.length > 0);
+  problemsEl.innerHTML = list.map((p, i) =>
+    `<div class="problem ${p.level === 'warn' ? 'warn' : ''}" data-i="${i}">
+       <b>${escapeHtml(p.msg)}</b>${p.line ? ` <span class="ln">строка ${p.line}</span>` : ''}
+     </div>`).join('');
+  problemsEl.querySelectorAll('.problem').forEach((el) => {
+    el.addEventListener('click', () => {
+      const p = problems[Number(el.dataset.i)];
+      if (p?.line) focusLine(p.line);
+    });
+  });
+}
+
+function focusLine(line) {
+  const lines = codeEl.value.split('\n');
+  const upto = lines.slice(0, line - 1).join('\n').length + (line > 1 ? 1 : 0);
+  codeEl.focus();
+  codeEl.setSelectionRange(upto, upto + (lines[line - 1] || '').length);
+  const lh = codeEl.scrollHeight / Math.max(1, lines.length);
+  codeEl.scrollTop = Math.max(0, (line - 3) * lh);
+  syncScroll();
+}
+
+const setStatus = (text, cls = '') => { statusEl.textContent = text; statusEl.className = cls; };
+const updateWarnings = (warnings) => {
+  const w = warnings?.find((x) => x.level === 'danger') || warnings?.[0];
+  warnEl.textContent = w ? `⚠ ${w.text}` : '';
+};
+
+// ------------------------------------------------------------- библиотеки ----
+function makeBus(boardPart) {
+  const spec = BOARDS[boardPart.type];
+  const pinsOf = (part) => PARTS[part.type].pins(part);
+  return {
+    partOnPin(pinNum, type) {
+      const pin = spec.pins.find((p) => p.num === Number(pinNum));
+      if (!pin) return null;
+      const net = circuit.netOf(boardPart.id, pin.id);
+      if (!net) return null;
+      return schematic.parts.find((p) => p.type === type && pinsOf(p).some((pp) => circuit.netOf(p.id, pp.id) === net)) || null;
+    },
+    firstOfType(type) { return schematic.parts.find((p) => p.type === type) || null; },
+    changed(part) { schematic.refreshPart(part.id); },
+  };
+}
+
+function mpyGlobals(rt) {
+  const Pin = (num, mode) => rt.machinePin(num, mode ?? 'IN');
+  Pin.OUT = 'OUT'; Pin.IN = 'IN'; Pin.PULL_UP = 'PULL_UP'; Pin.PULL_DOWN = 'PULL_DOWN'; Pin.OPEN_DRAIN = 'OPEN_DRAIN';
+  const pinNum = (x) => (typeof x === 'number' ? x : x?.num ?? x?.id ?? x);
+  const PWM = (x) => rt.pwmPin(pinNum(x), 1000);
+  const ADC = (x) => rt.adcPin(pinNum(x));
+  return {
+    Pin, PWM, ADC,
+    machine: { Pin, PWM, ADC },
+    time: { sleep: (s) => rt.sleepSeconds(s), sleep_ms: (ms) => rt.sleepMs(ms), ticks_ms: () => rt.millis() },
+    utime: { sleep: (s) => rt.sleepSeconds(s), sleep_ms: (ms) => rt.sleepMs(ms) },
+    str: String, int: (x) => Math.trunc(Number(x)), float: Number, len: (x) => (x?.length ?? String(x).length),
+    range: (a, b, s = 1) => { const out = []; if (b === undefined) { b = a; a = 0; } for (let i = a; i < b; i += s) out.push(i); return out; },
+  };
+}
+
+// --------------------------------------------------------------- запуск ----
+function exactAttack(err, lineMap, offset = 0) {
+  const stack = String(err?.stack || '');
+  const m = /sketch_[\w-]+\.js:(\d+):(\d+)/.exec(stack);
+  if (!m) return null;
+  const line = Number(m[1]) - offset;      // строка внутри тела скетча
+  if (line < 1) return 1;
+  if (lineMap) return lineMap[line - 1] ?? line;
+  return line;
+}
+
+function prepareBoard(part) {
+  const spec = BOARDS[part.type];
+  const lang = part.props.lang === 'mpy' ? 'mpy' : 'cpp';
+  const src = part.props.code ?? '';
+  const errors = [];
+  const warnings = [];
+
+  if (lang === 'cpp') {
+    for (const msg of checkIncludes(src)) errors.push({ msg, line: 1, level: 'danger' });
+  }
+
+  const bus = makeBus(part);
+  const libs = createLibraries(bus);
+  const rt = new ArduinoRuntime({
+    spec,
+    boardId: part.id,
+    onSerial: (t, kind) => appendSerial(t, kind || 'out', part),
+    onFrame: () => {},
+    onPinChange: (n) => recordFlip(part.id, n),
+    readPin: (n) => {
+      const v = circuit.voltageOf(part.id, n);
+      recordAnalog(part.id, n, v, spec);
+      return v;
+    },
+    onTone: (boardId, pin, freq, dur, on) => handleTone(part, pin, freq, on),
+    onPulseIn: (boardId, pin) => handlePulseIn(part, pin),
+  });
+
+  let body, lineMap = null;
+  // AsyncFunction оборачивает тело в «function anonymous(…\n) {\n» — это +2 строки,
+  // плюс наша строка «use strict» — итого первая строка скетча = 3-я в теле.
+  let lineOffset = 3;
+  if (lang === 'mpy') {
+    const t = transpilePython(src);
+    errors.push(...t.errors.map((e) => ({ ...e, level: 'danger' })));
+    warnings.push(...t.warnings.map((w) => ({ ...w, level: 'warn' })));
+    body = t.js;
+    lineMap = t.lineMap;
+    lineOffset = 3 + (t.js.match(/^\n*/)[0].length);
+  } else {
+    const t = transpile(src);
+    errors.push(...t.errors.map((e) => ({ ...e, level: 'danger' })));
+    warnings.push(...t.warnings.map((w) => ({ ...w, level: 'warn' })));
+    body = `${t.js}\n//# sourceURL=sketch_${part.id}.js\nreturn { setup: typeof setup === "function" ? setup : null, loop: typeof loop === "function" ? loop : null };`;
+    lineOffset = 3 + (t.js.match(/^\n*/)[0].length);
+    if (t.errors.length === 0 && /async function loop\s*\(/.test(t.js)) body = body.replace('//# sourceURL', '//# sourceURL');
+  }
+
+  const globals = { ...rt.globals(), ...libs, ...mpyGlobals(rt) };
+  const names = Object.keys(globals).filter((k) => /^[A-Za-z_$][\w$]*$/.test(k));
+  let fn = null;
+  try {
+    fn = new AsyncFunction(...names, `"use strict";\n${body}\n//# sourceURL=sketch_${part.id}.js`);
+  } catch (e) {
+    const hint = lang === 'cpp' ? bracketHint(body) : null;
+    errors.push({ msg: `Синтаксис: ${e.message}${hint ? ' — ' + hint.msg : ''}`, line: hint?.line || 1, level: 'danger' });
+  }
+
+  return {
+    part, rt, lang, errors, warnings, fn, names,
+    values: names.map((n) => globals[n]),
+    lineMap, lineOffset,
+  };
+}
+
+async function run() {
+  if (running) await stopAll();
+  syncEditorToBoard();
+
+  const list = boards();
+  if (!list.length) {
+    setProblems([{ msg: 'На схеме нет платы — перетащите Arduino Uno, ESP32 или Pico из палитры', line: 0, level: 'danger' }]);
+    showProblemsTab();
+    return;
+  }
+
+  const prepared = list.map(prepareBoard);
+  const bad = prepared.find((p) => p.errors.length);
+  if (bad) {
+    const name = BOARDS[bad.part.type].short;
+    setProblems(bad.errors.map((e) => ({ ...e, msg: prepared.length > 1 ? `${name}: ${e.msg}` : e.msg })));
+    showProblemsTab();
+    setStatus('Ошибка в скетче', '');
+    return;
+  }
+
+  setProblems(prepared.flatMap((p) => p.warnings.map((w) => ({ ...w, msg: prepared.length > 1 ? `${BOARDS[p.part.type].short}: ${w.msg}` : w.msg }))));
+
+  runtimes = new Map(prepared.map((p) => [p.part.id, p.rt]));
+  circuit.setSchematic(schematic.parts, schematic.wires);
+  resetTrace();
+  trace.hasRun = true;
+  running = true;
+  $('stopBtn').disabled = false;
+  $('serialInput').disabled = false;
+  $('sendBtn').disabled = false;
+  setStatus('Симуляция идёт', 'ok');
+  startTimer();
+  startDriver();
+
+  for (const p of prepared) startSketch(p);
+}
+
+function startSketch(prep) {
+  const { part, rt, lang, fn, names, values, lineMap, lineOffset } = prep;
+  (async () => {
+    try {
+      if (lang === 'mpy') {
+        await fn(...values);
+      } else {
+        const api = await fn(...values);
+        if (api?.setup) await api.setup();
+        await rt.delay(0);
+        while (running && runtimes.get(part.id) === rt) {
+          if (api?.loop) await api.loop();
+          await rt.delay(0);
+        }
+      }
+    } catch (e) {
+      if (e?.name !== 'StopSketch') {
+        const line = exactAttack(e, lineMap, lineOffset || 0);
+        const prefix = boards().length > 1 ? `${BOARDS[part.type].short}: ` : '';
+        appendSerial(`\n✗ ${prefix}${e?.name || 'Ошибка'}: ${e?.message}\n`, 'err', null);
+        setProblems([{ msg: `${prefix}${e?.name || 'Ошибка'}: ${e?.message}`, line, level: 'danger' }]);
+        showProblemsTab();
+        setStatus('Скетч упал', '');
+      }
+    }
+  })();
+}
+
+// звук только если зуммер реально подключён к этому выводу
+function handleTone(boardPart, pin, freq, on) {
+  const spec = BOARDS[boardPart.type];
+  const p = spec.pins.find((x) => x.num === Number(pin));
+  if (!p) return;
+  const net = circuit.netOf(boardPart.id, p.id);
+  const buzzer = schematic.parts.find((part) => part.type === 'buzzer' &&
+    (circuit.netOf(part.id, '1') === net || circuit.netOf(part.id, '2') === net));
+  if (!buzzer) return;
+  beep(freq, on);
+}
+
+// pulseIn: спрашиваем у дальномера расстояние и переводим в микросекунды
+function handlePulseIn(boardPart, pin) {
+  const spec = BOARDS[boardPart.type];
+  const p = spec.pins.find((x) => x.num === Number(pin));
+  if (!p) return 0;
+  const net = circuit.netOf(boardPart.id, p.id);
+  const sonar = schematic.parts.find((part) => part.type === 'hcsr04' && circuit.netOf(part.id, 'ECHO') === net);
+  if (!sonar) return 0;
+  const cm = Number(sonar.props?.distance ?? 50);
+  trace.sonarDistances.push(Math.round(cm));
+  if (trace.sonarDistances.length > 40) trace.sonarDistances.shift();
+  return Math.round(cm * 58);   // 58 мкс на сантиметр — паспортная величина HC-SR04
+}
+
+let audioCtx = null, osc = null;
+function beep(freq, on) {
+  if (!on || !freq) {
+    if (osc) { try { osc.stop(); } catch { /* уже остановлен */ } osc = null; }
+    return;
+  }
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (osc) { osc.frequency.value = freq; return; }
+    osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    g.gain.value = 0.03;
+    osc.frequency.value = freq;
+    osc.type = 'square';
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start();
+  } catch { /* звук не критичен */ }
+}
+
+// --------------------------------------------------------------- драйвер ----
+const SUB = 4;
+const scope = new Scope($('scopeCanvas'));
+let driverLast = performance.now();
+let frameCount = 0;
+
+function solveOnce(dt) {
+  const res = circuit.solve(runtimes, dt);
+  lastSolve = res;
+  schematic.applySim(res.partInfo, runtimes);
+  updateWarnings(res.warnings);
+  $('statIter').textContent = res.ok ? `MNA: ${res.iterations ?? '—'} итер.` : 'цепь не решается';
+  return res;
+}
+
+function sampleScope() {
+  if (!scopeOn) return;
+  const vals = scope.channels.map((ch) => (ch.source ? circuit.voltageOf(ch.source.boardId, ch.source.pin) : null));
+  scope.push(vals);
+}
+
+function startDriver() {
+  driverLast = performance.now();
+  const tick = () => {
+    if (!running) return;
+    const now = performance.now();
+    const frameDt = Math.min(0.05, Math.max(0.002, (now - driverLast) / 1000));
+    driverLast = now;
+    const dt = frameDt / SUB;
+    let res = null;
+    for (let i = 0; i < SUB; i++) {
+      res = circuit.solve(runtimes, dt);
+      lastSolve = res;
+      sampleScope();
+    }
+    if (res) {
+      schematic.applySim(res.partInfo, runtimes);
+      updateWarnings(res.warnings);
+      $('statIter').textContent = res.ok ? `MNA: ${res.iterations ?? '—'} итер.` : 'цепь не решается';
+    }
+    updateScopePwm();
+    sampleTrace(res);
+    if (++frameCount % 2 === 0) scope.draw();
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function stopAll() {
+  for (const rt of runtimes.values()) rt.stop();
+  running = false;
+  runtimes = new Map();
+  $('stopBtn').disabled = true;
+  $('serialInput').disabled = true;
+  $('sendBtn').disabled = true;
+  clearInterval(timerHandle);
+  timerHandle = null;
+  if (statusEl.classList.contains('ok')) setStatus('Остановлено');
+  solveOnce(1 / 60);
+  return new Promise((res) => setTimeout(res, 40));
+}
+
+function reset() {
+  stopAll();
+  $('timer').textContent = '00:00.0';
+  scope.clear();
+  setStatus('Сброшено');
+}
+
+function startTimer() {
+  const t0 = performance.now();
+  clearInterval(timerHandle);
+  timerHandle = setInterval(() => {
+    const ms = performance.now() - t0;
+    const s = ms / 1000;
+    $('timer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}.${Math.floor((ms % 1000) / 100)}`;
+  }, 100);
+}
+
+// ------------------------------------------------------------ осциллограф ----
+let scopeOn = false;
+
+function buildScopeControls() {
+  const tSel = $('timeDiv');
+  TIME_DIVS.forEach((v) => {
+    const o = document.createElement('option');
+    o.value = String(v);
+    o.textContent = v < 1 ? `${v * 1000} мс` : `${v} с`;
+    tSel.appendChild(o);
+  });
+  tSel.value = String(scope.timeDiv);
+  tSel.addEventListener('change', () => { scope.timeDiv = Number(tSel.value); scope.draw(); });
+
+  const vSel = $('voltDiv');
+  VOLT_DIVS.forEach((v) => {
+    const o = document.createElement('option');
+    o.value = String(v);
+    o.textContent = `${v} В`;
+    vSel.appendChild(o);
+  });
+  vSel.value = String(scope.voltDiv);
+  vSel.addEventListener('change', () => { scope.voltDiv = Number(vSel.value); scope.draw(); });
+
+  $('scopeBtn').addEventListener('click', () => {
+    scopeOn = !scopeOn;
+    $('scopeWrap').classList.toggle('hidden', !scopeOn);
+    if (scopeOn) { buildScopeChannels(); setTimeout(() => scope._resize(), 30); }
+  });
+  $('scopePause').addEventListener('click', () => {
+    scope.paused = !scope.paused;
+    $('scopePause').textContent = scope.paused ? 'Продолжить' : 'Пауза';
+  });
+  $('scopeClear').addEventListener('click', () => scope.clear());
+  window.addEventListener('resize', () => { if (scopeOn) scope._resize(); });
+}
+
+function buildScopeChannels() {
+  const wrap = $('scopeChannels');
+  const options = [];
+  for (const b of boards()) {
+    const spec = BOARDS[b.type];
+    for (const p of spec.pins) {
+      if (typeof p.num !== 'number') continue;
+      options.push({ value: `${b.id}|${p.num}`, label: `${spec.short} ${p.label}` });
+    }
+  }
+  wrap.innerHTML = scope.channels.map((ch, i) => `
+    <div class="scope-ch">
+      <span class="scope-dot" style="background:${ch.color}"></span>
+      <select class="mini-select" data-ch="${i}">
+        <option value="">—</option>
+        ${options.map((o) => `<option value="${o.value}" ${ch.source?.key === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+      </select>
+    </div>`).join('');
+
+  wrap.querySelectorAll('select').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const i = Number(sel.dataset.ch);
+      if (!sel.value) { scope.setChannel(i, null); }
+      else {
+        const [boardId, pin] = sel.value.split('|');
+        const b = schematic.part(boardId);
+        const spec = BOARDS[b.type];
+        const p = spec.pins.find((x) => x.num === Number(pin));
+        scope.setChannel(i, { key: sel.value, boardId, pin: Number(pin), label: `${spec.short} ${p.label}` });
+      }
+      scope.draw();
+    });
+  });
+}
+
+function updateScopePwm() {
+  if (!scopeOn) return;
+  for (const ch of scope.channels) {
+    if (!ch.source) continue;
+    const rt = runtimes.get(ch.source.boardId);
+    const st = rt?.pins.get(ch.source.pin);
+    const b = schematic.part(ch.source.boardId);
+    ch.source.pwm = (st && st.mode === 'OUTPUT' && st.pwm > 0 && st.pwm < 255)
+      ? { duty: st.pwm / 255, vcc: BOARDS[b.type].vcc, freq: 490 }
+      : null;
+  }
+}
+
+// ------------------------------------------------------------------ кнопки ----
+const CONSOLE_TABS = {
+  serial: ['serialOut', 'tabSerial'],
+  problems: ['problemsOut', 'tabProblems'],
+  hints: ['hintsOut', 'tabHints'],
+};
+
+function switchTab(name) {
+  for (const [key, [body, tab]] of Object.entries(CONSOLE_TABS)) {
+    $(body).classList.toggle('hidden', key !== name);
+    $(tab).classList.toggle('tab-active', key === name);
+  }
+  if (name === 'hints') refreshHints();
+}
+function showProblemsTab() { switchTab('problems'); }
+function showSerialTab() { switchTab('serial'); }
+
+$('runBtn').addEventListener('click', run);
+$('stopBtn').addEventListener('click', () => { stopAll(); });
+$('resetBtn').addEventListener('click', () => { if (appMode === 'ros') rosApp?.fullReset(); else reset(); });
+$('tabSerial').addEventListener('click', showSerialTab);
+$('tabProblems').addEventListener('click', showProblemsTab);
+$('tabHints').addEventListener('click', () => switchTab('hints'));
+$('clearConsoleBtn').addEventListener('click', () => { serialEl.innerHTML = ''; });
+$('sendBtn').addEventListener('click', () => { $('serialInput').value = ''; });
+$('serialInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); appendSerial(`> ${e.target.value}\n`); e.target.value = ''; }
+});
+$('deleteBtn').addEventListener('click', () => schematic.removeSelected());
+$('clearBtn').addEventListener('click', () => { if (confirm('Очистить схему?')) schematic.clear(); });
+
+window.addEventListener('keydown', (e) => {
+  if (appMode === 'ros') return;                       // у ROS-режима свои клавиши
+  if (e.target === codeEl || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); schematic.removeSelected(); }
+  if (e.key === 'Escape') { schematic.pending = null; schematic.render(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+  if (e.key === 't' || e.key === 'T' || e.key === 'е' || e.key === 'Е') { e.preventDefault(); tasksPanel?.toggle(); }
+});
+
+// ----------------------------------------------------------- файлы и примеры ----
+$('saveBtn').addEventListener('click', () => {
+  syncEditorToBoard();
+  const data = { app: 'robosim', version: 2, schematic: schematic.toJSON(), code: codeEl.value };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'project.robosim';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus('Файл сохранён');
+});
+
+$('openBtn').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (data.schematic) schematic.fromJSON(data.schematic);
+    if (data.code && !data.schematic) {
+      const b = activeBoard();
+      if (b) { b.props.code = data.code; showBoard(b); }
+    }
+    schematic.centerBoard();
+    syncTabs();
+    setStatus(`Открыт ${file.name}`);
+  } catch (err) {
+    setStatus('Не удалось открыть файл');
+    appendSerial(`✗ ${err.message}\n`, 'err');
+  } finally {
+    e.target.value = '';
+  }
+});
+
+const exSelect = $('exampleSelect');
+for (const ex of EXAMPLES) {
+  const opt = document.createElement('option');
+  opt.value = ex.id;
+  opt.textContent = ex.name;
+  exSelect.appendChild(opt);
+}
+exSelect.addEventListener('change', () => {
+  const ex = EXAMPLES.find((e) => e.id === exSelect.value);
+  exSelect.value = '';
+  if (ex) loadExample(ex);
+});
+
+/** Вывод платы по «человеческому» имени: A0, D9, GP25, 13. */
+function pinBySelector(spec, want) {
+  const w = String(want).trim();
+  const a = /^A(\d+)$/i.exec(w);
+  if (a) return spec.pins.filter((p) => p.kind === 'analog')[Number(a[1])] || null;
+  const d = /^D(\d+)$/i.exec(w);
+  if (d) return spec.pins.find((p) => p.num === Number(d[1])) || null;
+  const byLabel = spec.pins.find((p) => p.label === w);
+  if (byLabel) return byLabel;
+  return spec.pins.find((p) => typeof p.num === 'number' && p.num === Number(w)) || null;
+}
+
+/** Какие каналы осциллографа включить для этого примера. */
+function applyExampleScope(ex) {
+  for (let i = 0; i < scope.channels.length; i++) scope.setChannel(i, null);
+  const found = [];
+  const b = boards()[0];
+  if (b && ex?.scope?.length) {
+    const spec = BOARDS[b.type];
+    for (const want of ex.scope) {
+      const p = pinBySelector(spec, want);
+      if (p) found.push({ key: `${b.id}|${p.num}`, boardId: b.id, pin: p.num, label: `${spec.short} ${p.label}` });
+    }
+  }
+  found.slice(0, 4).forEach((src, i) => scope.setChannel(i, src));
+
+  if (ex?.timeDiv) scope.timeDiv = ex.timeDiv;
+  $('timeDiv').value = String(scope.timeDiv);
+
+  scopeOn = found.length > 0;
+  $('scopeWrap').classList.toggle('hidden', !scopeOn);
+  buildScopeChannels();
+  scope.clear();
+  if (scopeOn) setTimeout(() => scope._resize(), 40);
+}
+
+async function loadExample(ex) {
+  await stopAll();
+  serialEl.innerHTML = '';
+  schematic.fromJSON(ex.schematic);
+  schematic.centerBoard();
+  circuit.setSchematic(schematic.parts, schematic.wires);
+  const list = boards();
+  const primary = ex.boardId || list[0]?.id || null;
+  for (const b of list) {
+    if (ex.extraCode && ex.extraCode[b.id] != null) b.props.code = ex.extraCode[b.id];
+    else if (b.id === primary) b.props.code = ex.code || defaultCodeFor(b.type, b.props.lang);
+    else b.props.code = defaultCodeFor(b.type, b.props.lang);
+  }
+  activeBoardId = primary;
+  syncTabs();
+  if (activeBoard()) showBoard(activeBoard());
+  updateStats();
+  setProblems([]);
+  setStatus(`Пример: ${ex.name}`);
+  applyExampleScope(ex);
+  if (ex.autorun) setTimeout(run, 50);
+}
+
+
+// ------------------------------------------- наблюдения для автопроверки ----
+/*
+ * Пока скетч работает, симулятор записывает то, что видит «снаружи»:
+ * сколько раз переключался вывод, какие скважности ШИМ были, как менялась
+ * яркость светодиодов, углы серво, текст на LCD, расстояния дальномера.
+ * Проверки заданий читают именно эти наблюдения — подделать их из скетча
+ * нельзя, потому что пишет их сам симулятор.
+ */
+const trace = {
+  hasRun: false,
+  startedAt: 0,
+  seconds: 0,
+  pinFlips: {},        // 'b1:9' → сколько раз менялся вывод
+  pinPwm: {},          // 'b1:9' → какие скважности принимал
+  leds: {},            // 'l1'  → максимальная яркость
+  ledSpread: 0,        // разброс яркости (для «регулятора яркости»)
+  analog: {},          // 'b1:14' → { min, max }
+  servos: {},          // 'srv' → { min, max }
+  lcd: {},             // 'lcd' → строки на экране
+  sonarDistances: [],  // расстояния, которые прочитал скетч
+  pressSeen: false,
+  ledWhilePressed: 0,
+  serial: [],
+  _ledMin: Infinity,
+  _ledMax: 0,
+};
+
+function resetTrace() {
+  trace.hasRun = false;
+  trace.startedAt = performance.now();
+  trace.seconds = 0;
+  trace.pinFlips = {};
+  trace.pinPwm = {};
+  trace.leds = {};
+  trace.ledSpread = 0;
+  trace.analog = {};
+  trace.servos = {};
+  trace.lcd = {};
+  trace.sonarDistances = [];
+  trace.pressSeen = false;
+  trace.ledWhilePressed = 0;
+  trace.serial = [];
+  trace._ledMin = Infinity;
+  trace._ledMax = 0;
+}
+
+function recordFlip(boardId, num) {
+  const key = `${boardId}:${num}`;
+  trace.pinFlips[key] = (trace.pinFlips[key] || 0) + 1;
+}
+
+function recordAnalog(boardId, num, volts, spec) {
+  const adcMax = spec?.adcMax || 1023;
+  const vcc = spec?.vcc || 5;
+  const raw = Math.max(0, Math.min(adcMax, Math.round((volts / vcc) * adcMax)));
+  const key = `${boardId}:${num}`;
+  const cur = trace.analog[key] || { min: raw, max: raw };
+  cur.min = Math.min(cur.min, raw);
+  cur.max = Math.max(cur.max, raw);
+  trace.analog[key] = cur;
+}
+
+let traceClock = 0;
+function sampleTrace(res) {
+  if (!running) return;
+  const now = performance.now();
+  if (now - traceClock < 40) return;          // 25 раз в секунду — достаточно
+  traceClock = now;
+  trace.seconds = Math.round(((now - trace.startedAt) / 1000) * 10) / 10;
+
+  for (const [boardId, rt] of runtimes) {
+    for (const [num, st] of rt.pins) {
+      if (st.mode !== 'OUTPUT') continue;
+      const key = `${boardId}:${num}`;
+      const arr = trace.pinPwm[key] || (trace.pinPwm[key] = []);
+      if (arr.length < 120 && !arr.includes(st.pwm)) arr.push(st.pwm);
+    }
+  }
+
+  let maxLed = 0;
+  const info = res?.partInfo;
+  if (info) {
+    for (const [id, pi] of info) {
+      const part = schematic.part(id);
+      if (!part || part.type !== 'led') continue;
+      const b = Math.max(0, pi.brightness || 0);
+      trace.leds[id] = Math.max(trace.leds[id] || 0, b);
+      maxLed = Math.max(maxLed, b);
+    }
+  }
+  trace._ledMin = Math.min(trace._ledMin, maxLed);
+  trace._ledMax = Math.max(trace._ledMax, maxLed);
+  trace.ledSpread = Math.max(0, trace._ledMax - trace._ledMin);
+
+  for (const p of schematic.parts) {
+    if (p.type === 'button' && p.props?.pressed) {
+      trace.pressSeen = true;
+      trace.ledWhilePressed = Math.max(trace.ledWhilePressed, maxLed);
+    } else if (p.type === 'servo') {
+      const a = Number(p.props?.angle ?? 0);
+      const s = trace.servos[p.id] || { min: a, max: a };
+      s.min = Math.min(s.min, a);
+      s.max = Math.max(s.max, a);
+      trace.servos[p.id] = s;
+    } else if (p.type === 'lcd1602') {
+      trace.lcd[p.id] = [...(p.props?.lines || [])];
+    }
+  }
+}
+
+/** Контекст для движка проверок: схема + код активной платы + наблюдения. */
+function currentContext() {
+  const b = activeBoard();
+  return new CheckContext({
+    parts: schematic.parts,
+    wires: schematic.wires,
+    code: codeEl.value,
+    lang: b?.props?.lang === 'mpy' ? 'mpy' : 'cpp',
+    trace,
+  });
+}
+
+// ------------------------------------------------------------- подсказки ----
+let hintsTimer = null;
+function refreshHints() {
+  clearTimeout(hintsTimer);
+  hintsTimer = setTimeout(() => {
+    const b = activeBoard();
+    const spec = b ? PARTS[b.type].spec : null;
+    const cx = currentContext();
+    const list = lint({
+      code: codeEl.value,
+      lang: b?.props?.lang === 'mpy' ? 'mpy' : 'cpp',
+      ctx: {
+        spec,
+        ledWithoutResistor: cx.ledWithoutResistor(),
+        usedAnalogPins: cx.usedAnalogPins(),
+      },
+    });
+    renderHints(list);
+  }, 200);
+}
+
+function renderHints(list) {
+  const out = $('hintsOut');
+  $('hintsCount').textContent = String(list.length);
+  $('hintsCount').classList.toggle('bad', list.length > 0);
+  if (!list.length) {
+    out.innerHTML = '<div class="hint-row"><b>Подсказок нет.</b> Схема и скетч выглядят рабочими — запускайте.</div>';
+    return;
+  }
+  out.innerHTML = list.map((h, i) =>
+    `<div class="hint-row ${h.level}" data-i="${i}"><b>${escapeHtml(h.text)}</b><span class="hint-ln">строка ${h.line}</span></div>`).join('');
+  out.querySelectorAll('.hint-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const h = list[Number(row.dataset.i)];
+      if (h?.line) focusLine(h.line);
+    });
+  });
+}
+
+// --------------------------------------------------- загрузка схемы целиком ----
+/** Поставить на холст схему и раздать скетчи платам. */
+function applyBundle({ schematic: schema, code = '', extraCode = {} }, { primaryId = null } = {}) {
+  stopAll();
+  serialEl.innerHTML = '';
+  resetTrace();
+  schematic.fromJSON(schema);
+  schematic.centerBoard();
+  const list = boards();
+  const primary = primaryId || list[0]?.id || null;
+  for (const b of list) {
+    if (extraCode && extraCode[b.id] != null) b.props.code = extraCode[b.id];
+    else if (b.id === primary) b.props.code = code || defaultCodeFor(b.type, b.props.lang);
+    else b.props.code = defaultCodeFor(b.type, b.props.lang);
+  }
+  activeBoardId = primary;
+  syncTabs();
+  if (activeBoard()) showBoard(activeBoard());
+  circuit.setSchematic(schematic.parts, schematic.wires);
+  updateStats();
+  setProblems([]);
+  solveOnce(1 / 60);
+  scope.clear();
+  scopeOn = false;
+  $('scopeWrap').classList.add('hidden');
+  buildScopeChannels();
+  refreshHints();
+}
+
+function openTask(task) {
+  applyBundle({ schematic: task.start, code: task.start.code });
+  setStatus(`Задание: ${task.title}`);
+  showProblemsTab();
+  switchTab('problems');
+}
+
+function openSolution(solution) {
+  applyBundle({
+    schematic: solution.schematic,
+    code: solution.code,
+    extraCode: solution.extraCode,
+  }, { primaryId: solution.boardId || null });
+  setStatus('Загружен эталон задания — сравните со своей схемой');
+}
+
+// -------------------------------------------------------------- задания ----
+const progress = loadProgress();
+let tasksPanel = null;
+
+function initTasks() {
+  tasksPanel = new TasksPanel({
+    root: $('taskDrawer'),
+    progress,
+    hooks: {
+      getContext: currentContext,
+      run: () => run(),
+      loadTask: openTask,
+      loadSolution: openSolution,
+      syncSchematic: () => {
+        syncEditorToBoard();
+        return { schematic: schematic.toJSON(), code: codeEl.value };
+      },
+      notify: (text) => setStatus(text),
+      onProgress: (stat) => { $('tasksBadge').textContent = `${stat.solved}/${stat.total}`; },
+    },
+  });
+  $('tasksBtn').addEventListener('click', () => tasksPanel.toggle());
+}
+
+// --------------------------------------------------------------- режимы ----
+/** Два экрана, как в оригинале: «Плата» и «Робот» (ROS 2). */
+let appMode = 'sim';
+let rosApp = null;
+let rosBooted = false;
+
+function ensureRos() {
+  if (rosBooted) { rosApp.start(); return; }
+  rosApp = createRosMode({
+    onLog: (text) => setStatus(text),
+    onTasksChanged: () => {
+      const solved = Object.values(rosApp?.state?.solved || {}).filter(Boolean).length;
+      $('rosTaskCount').textContent = `${solved}/3`;
+    },
+  });
+  rosBooted = true;
+  rosApp.boot();
+}
+
+function setMode(mode) {
+  if (mode !== 'sim' && mode !== 'ros') return;
+  if (mode === appMode) return;
+  appMode = mode;
+  const ros = mode === 'ros';
+  $('rosLayout').classList.toggle('hidden', !ros);
+  document.querySelector('.workspace').classList.toggle('hidden', ros);
+  $('modeSimBtn').classList.toggle('active', !ros);
+  $('modeRosBtn').classList.toggle('active', ros);
+  $('modeSimBtn').setAttribute('aria-selected', String(!ros));
+  $('modeRosBtn').setAttribute('aria-selected', String(ros));
+  for (const id of ['tasksBtn', 'runBtn', 'stopBtn', 'timer', 'exampleSelect', 'saveBtn', 'openBtn']) {
+    $(id)?.classList.toggle('hidden', ros);          // инструменты платы в ROS-режиме не нужны
+  }
+  if (ros) {
+    tasksPanel?.close();
+    if (runtimes.size) stopAll();
+    ensureRos();
+    setStatus('ROS 2: квартира — постройте карту, уберите мусор, вернитесь на док');
+  } else {
+    rosApp?.pause();
+    setStatus('Симулятор платы');
+  }
+}
+
+$('modeSimBtn').addEventListener('click', () => setMode('sim'));
+$('modeRosBtn').addEventListener('click', () => setMode('ros'));
+
+// ------------------------------------------------------------- автозапуск ----
+let autosaveTimer = null;
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    try {
+      syncEditorToBoard();
+      localStorage.setItem('robosim:autosave', JSON.stringify({ schematic: schematic.toJSON() }));
+    } catch { /* приватный режим — не страшно */ }
+  }, 500);
+}
+
+function keepCentered() {
+  const stage = $('stage');
+  if (!stage || typeof ResizeObserver === 'undefined') return;
+  let last = '';
+  new ResizeObserver(() => {
+    const key = `${stage.clientWidth}x${stage.clientHeight}`;
+    if (key === last) return;
+    last = key;
+    if (!schematic.userMoved) schematic.centerBoard();
+    if (scopeOn) scope._resize();
+  }).observe(stage);
+}
+
+function boot() {
+  buildScopeControls();
+  initTasks();
+
+  // схема из ссылки (#p=…) важнее локального автосохранения
+  const shared = readHashProject();
+  if (shared) {
+    applyBundle({ schematic: shared.schematic, code: shared.code });
+    setStatus('Схема открыта по ссылке');
+    refreshHints();
+    keepCentered();
+    return;
+  }
+
+  let restored = null;
+  try {
+    const raw = localStorage.getItem('robosim:autosave');
+    if (raw) restored = JSON.parse(raw);
+  } catch { /* нет сохранения */ }
+
+  if (restored?.schematic?.parts?.length) {
+    schematic.fromJSON(restored.schematic);
+    schematic.centerBoard();
+    activeBoardId = boards()[0]?.id || null;
+    syncTabs();
+    if (activeBoard()) showBoard(activeBoard());
+    circuit.setSchematic(schematic.parts, schematic.wires);
+    updateStats();
+    solveOnce(1 / 60);
+    setStatus('Схема восстановлена — нажмите «Старт»');
+  } else {
+    loadExample(EXAMPLES[0]);
+  }
+  refreshHints();
+  keepCentered();
+  if (location.hash.replace('#', '').startsWith('ros')) setMode('ros');
+}
+
+window.__sim = {
+  get ros() { return rosApp; },
+  setMode, get mode() { return appMode; },
+  get schematic() { return schematic; },
+  get circuit() { return circuit; },
+  get runtimes() { return runtimes; },
+  get scope() { return scope; },
+  get trace() { return trace; },
+  get tasks() { return TASKS; },
+  get tasksPanel() { return tasksPanel; },
+  get progress() { return progress; },
+  context: currentContext,
+  checkTask: (id) => { tasksPanel.select(id); return tasksPanel.check(); },
+  openTask: (id) => { tasksPanel.open(id); },
+  openTask, openSolution, applyBundle, resetTrace,
+  run, stopAll, solveOnce, refreshHints,
+};
+
+boot();
