@@ -10,15 +10,50 @@
 
 ---
 
-## Запуск
+## Как запустить локально
+
+Сборки и зависимостей нет: это статические файлы. Нужен только **локальный сервер**
+(браузер не даёт загружать ES-модули по `file://`), то есть подойдёт любой — Python, Node, nginx.
+
+### 1. Проще всего — двойной клик
 
 ```bash
-cd sim
-python3 -m http.server 8000        # любой статический сервер
+git clone https://github.com/pavelb-coder/sim-ard.git
+cd sim-ard
+./start.sh          # macOS / Linux
+```
+На Windows — **двойной клик по `start.bat`**: он найдёт Python (или Node.js), поднимет сервер
+и сам откроет браузер на `http://localhost:8000`. Скрипты понимают и другой порт: `./start.sh 9000`.
+
+Без git: на странице репозитория **Code → Download ZIP**, распаковать, запустить `start.bat`/`start.sh`.
+
+### 2. Одна команда, если Python уже есть
+
+```bash
+python3 -m http.server 8000     # Windows: python -m http.server 8000
 # открыть http://localhost:8000
 ```
 
-Ни установки, ни сборки, ни зависимостей: `index.html` + 18 ES-модулей.
+### 3. Любой другой статический сервер
+
+```bash
+npx serve -l 8000 .             # Node.js
+php -S localhost:8000           # PHP
+# или «Live Server» в VS Code — правый клик по index.html → Open with Live Server
+```
+
+### Если что-то не открылось
+
+| Симптом | Причина и решение |
+|---|---|
+| Пустая страница, в консоли `Cross origin requests are only supported for protocol schemes` | Открыли `index.html` двойным кликом (`file://`). Нужен сервер: `start.bat` / `start.sh` |
+| `Address already in use` / «порт занят» | Порт занят другим приложением — `./start.sh 9000` или `python3 -m http.server 9000` |
+| `python3: command not found` | Python не установлен. Windows: python.org (галочка «Add python.exe to PATH»); macOS: `brew install python`; Linux: `sudo apt install python3` |
+| Нужно без интернета и без установки | Откройте один раз живой сайт **https://pavelb-coder.github.io/sim-ard/** — он кэшируется, но по-настоящему офлайн работает именно локальная копия |
+
+Локальная копия весит ~7 МБ, ноль внешних запросов: шрифты системные, иконки — inline SVG.
+Можно положить на флешку и раздать классу, подняв сервер на учительском ноутбуке:
+`python3 -m http.server 8000 --bind 0.0.0.0`, ученики заходят по `http://IP-учителя:8000`.
 
 Проверки (решатель, транспайлеры, библиотеки, переходные процессы, платы):
 
