@@ -163,9 +163,15 @@ export class Schematic {
     let bsvg = '';
     for (const p of this.parts) {
       const sel = this.selected?.kind === 'part' && this.selected.id === p.id ? ' selected' : '';
-      const markup = p.__def.render(p);
-      const wrap = `<g transform="translate(${p.x} ${p.y})" data-wrap="${p.id}">${markup.replace('class="part"', `class="part${sel}"`)}</g>`;
-      if (p.__def.board) bsvg += wrap; else psvg += wrap;
+      const markup = p.__def.render(p).replace('class="part"', `class="part${sel}"`);
+      const tr = `translate(${p.x} ${p.y})`;
+      if (p.__def.board) {
+        // плата — в нижний слой (провод доходит до площадки), а её шильдик —
+        // в слой деталей, чтобы провод не рвал подпись
+        const tag = markup.match(/<g class="tag">[\s\S]*?<\/g>/);
+        bsvg += `<g transform="${tr}" data-wrap="${p.id}">${tag ? markup.replace(tag[0], '') : markup}</g>`;
+        if (tag) psvg += `<g transform="${tr}" data-wrap-tag="${p.id}">${tag[0]}</g>`;
+      } else psvg += `<g transform="${tr}" data-wrap="${p.id}">${markup}</g>`;
     }
     this.layerParts.innerHTML = psvg;
     this.layerBoards.innerHTML = bsvg;
@@ -425,8 +431,9 @@ export class Schematic {
         if (Math.abs(dx) + Math.abs(dy) > 2) this.moved = true;
         part.x = snap(this.drag.partX + dx);
         part.y = snap(this.drag.partY + dy);
-        const wrap = this.wrapOf(part.id);
-        if (wrap) wrap.setAttribute('transform', `translate(${part.x} ${part.y})`);
+        for (const wrap of this.wrapsOf(part.id)) {
+          wrap.setAttribute('transform', `translate(${part.x} ${part.y})`);
+        }
         this._updateWiresFor(part.id);
       }
     });
@@ -479,19 +486,29 @@ export class Schematic {
     this.svg.setPointerCapture?.(ev.pointerId);
   }
 
-  /** Обёртка детали: платы живут в отдельном слое. */
-  wrapOf(id) {
-    return this.layerParts.querySelector(`[data-wrap="${id}"]`)
-      || this.layerBoards.querySelector(`[data-wrap="${id}"]`);
+  /** Обёртки детали: тело и (у плат) отдельно лежащий шильдик. */
+  wrapsOf(id) {
+    return [
+      ...this.layerParts.querySelectorAll(`[data-wrap="${id}"]`),
+      ...(this.layerBoards ? this.layerBoards.querySelectorAll(`[data-wrap="${id}"]`) : []),
+      ...this.layerParts.querySelectorAll(`[data-wrap-tag="${id}"]`),
+    ];
   }
+
+  wrapOf(id) { return this.wrapsOf(id)[0] || null; }
 
   refreshPart(partOrId) {
     const part = typeof partOrId === 'string' ? this.part(partOrId) : partOrId;
     if (!part || !part.__def) return;
-    const wrap = this.wrapOf(part.id);
-    if (!wrap) return;
+    const wraps = this.wrapsOf(part.id);
+    if (!wraps.length) return;
     const sel = this.selected?.kind === 'part' && this.selected.id === part.id ? ' selected' : '';
-    wrap.innerHTML = part.__def.render(part).replace('class="part"', `class="part${sel}"`);
+    const markup = part.__def.render(part).replace('class="part"', `class="part${sel}"`);
+    const tag = markup.match(/<g class="tag">[\s\S]*?<\/g>/);
+    for (const wrap of wraps) {
+      if (wrap.hasAttribute('data-wrap-tag')) wrap.innerHTML = tag ? tag[0] : '';
+      else wrap.innerHTML = tag ? markup.replace(tag[0], '') : markup;
+    }
   }
 
   _updateWiresFor(partId) {
