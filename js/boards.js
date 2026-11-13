@@ -516,27 +516,30 @@ function buildPico() {
 /** Raspberry Pi 5: физические выводы 1…40, GPIO-номера как в MicroPython. */
 function buildRpi5() {
   // пары «физический вывод → функция»; odd — сверху, even — снизу
+  const G = (n) => pwr(n === 1 ? 'GND' : `GND${n}`, 'GND', 'gnd', 'GND');
+  const gpio = (n) => ({ id: `GPIO${n}`, num: n, label: `GPIO${n}`, silk: `GP${n}`, kind: 'digital' });
+  // настоящая распиновка Raspberry Pi 5: 40 контактов, нечётные — сверху, чётные — снизу
   const layout = [
     [1, pwr('3V3', '3V3', 'v33')], [2, pwr('5V', '5V', 'vcc')],
-    [3, { id: 'GPIO2', num: 2, label: 'GPIO2', silk: 'GP2', kind: 'digital' }], [4, pwr('5V2', '5V', 'vcc', '5V')],
-    [5, { id: 'GPIO3', num: 3, label: 'GPIO3', silk: 'GP3', kind: 'digital' }], [6, pwr('GND', 'GND', 'gnd')],
-    [7, { id: 'GPIO4', num: 4, label: 'GPIO4', silk: 'GP4', kind: 'digital' }], [8, pwr('GND2', 'GND', 'gnd', 'GND')],
-    [9, pwr('GND3', 'GND', 'gnd', 'GND')], [10, { id: 'GPIO14', num: 14, label: 'GPIO14', silk: 'GP14', kind: 'digital' }],
-    [11, { id: 'GPIO17', num: 17, label: 'GPIO17', silk: 'GP17', kind: 'digital' }], [12, { id: 'GPIO15', num: 15, label: 'GPIO15', silk: 'GP15', kind: 'digital' }],
-    [13, { id: 'GPIO27', num: 27, label: 'GPIO27', silk: 'GP27', kind: 'digital' }], [14, pwr('GND4', 'GND', 'gnd', 'GND')],
-    [15, { id: 'GPIO22', num: 22, label: 'GPIO22', silk: 'GP22', kind: 'digital' }], [16, { id: 'GPIO18', num: 18, label: 'GPIO18', silk: 'GP18', kind: 'digital' }],
-    [17, pwr('3V3_2', '3V3', 'v33', '3V3')], [18, { id: 'GPIO23', num: 23, label: 'GPIO23', silk: 'GP23', kind: 'digital' }],
-    [19, { id: 'GPIO10', num: 10, label: 'GPIO10', silk: 'GP10', kind: 'digital' }], [20, { id: 'GPIO24', num: 24, label: 'GPIO24', silk: 'GP24', kind: 'digital' }],
-    [21, { id: 'GPIO9', num: 9, label: 'GPIO9', silk: 'GP9', kind: 'digital' }], [22, pwr('GND5', 'GND', 'gnd', 'GND')],
-    [23, { id: 'GPIO11', num: 11, label: 'GPIO11', silk: 'GP11', kind: 'digital' }], [24, { id: 'GPIO25', num: 25, label: 'GPIO25', silk: 'GP25', kind: 'digital' }],
-    [25, pwr('GND6', 'GND', 'gnd', 'GND')], [26, { id: 'GPIO8', num: 8, label: 'GPIO8', silk: 'GP8', kind: 'digital' }],
-    [27, { id: 'GPIO0', num: 0, label: 'GPIO0', silk: 'GP0', kind: 'digital' }], [28, { id: 'GPIO7', num: 7, label: 'GPIO7', silk: 'GP7', kind: 'digital' }],
-    [29, { id: 'GPIO5', num: 5, label: 'GPIO5', silk: 'GP5', kind: 'digital' }], [30, pwr('GND7', 'GND', 'gnd', 'GND')],
-    [31, { id: 'GPIO6', num: 6, label: 'GPIO6', silk: 'GP6', kind: 'digital' }], [32, { id: 'GPIO12', num: 12, label: 'GPIO12', silk: 'GP12', kind: 'digital' }],
-    [33, { id: 'GPIO13', num: 13, label: 'GPIO13', silk: 'GP13', kind: 'digital' }], [34, pwr('GND8', 'GND', 'gnd', 'GND')],
-    [35, { id: 'GPIO19', num: 19, label: 'GPIO19', silk: 'GP19', kind: 'digital' }], [36, { id: 'GPIO16', num: 16, label: 'GPIO16', silk: 'GP16', kind: 'digital' }],
-    [37, { id: 'GPIO26', num: 26, label: 'GPIO26', silk: 'GP26', kind: 'digital' }], [38, { id: 'GPIO20', num: 20, label: 'GPIO20', silk: 'GP20', kind: 'digital' }],
-    [39, pwr('GND9', 'GND', 'gnd', 'GND')], [40, { id: 'GPIO21', num: 21, label: 'GPIO21', silk: 'GP21', kind: 'digital' }],
+    [3, gpio(2)], [4, pwr('5V2', '5V', 'vcc', '5V')],
+    [5, gpio(3)], [6, G(1)],
+    [7, gpio(4)], [8, gpio(14)],
+    [9, G(2)], [10, gpio(15)],
+    [11, gpio(17)], [12, gpio(18)],
+    [13, gpio(27)], [14, G(3)],
+    [15, gpio(22)], [16, gpio(23)],
+    [17, pwr('3V3_2', '3V3', 'v33', '3V3')], [18, gpio(24)],
+    [19, gpio(10)], [20, G(4)],
+    [21, gpio(9)], [22, gpio(25)],
+    [23, gpio(11)], [24, gpio(8)],
+    [25, G(5)], [26, gpio(7)],
+    [27, gpio(0)], [28, gpio(1)],
+    [29, gpio(5)], [30, G(6)],
+    [31, gpio(6)], [32, gpio(12)],
+    [33, gpio(13)], [34, G(7)],
+    [35, gpio(19)], [36, gpio(16)],
+    [37, gpio(26)], [38, gpio(20)],
+    [39, G(8)], [40, gpio(21)],
   ];
   const topRow = [];
   const botRow = [];

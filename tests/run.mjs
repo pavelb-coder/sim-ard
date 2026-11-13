@@ -672,10 +672,12 @@ console.log('\nОтрисовка плат и подписи элементов'
     && near(+(byId(BOARDS.mega).D23.y - byId(BOARDS.mega).D22.y).toFixed(2), 0)
     && near(Math.abs(+(byId(BOARDS.mega).D22.y - byId(BOARDS.mega).D24.y).toFixed(2)), PITCH));
 
-  check('Raspberry Pi 5: гребёнка 1…40, 27 выводов GPIO и честная шина 5 В',
+  check('Raspberry Pi 5: гребёнка 1…40, 28 выводов GPIO, 8 земель и честная шина 5 В',
     BOARDS.rpi5.pins.length === 40
-    && BOARDS.rpi5.pins.filter((p) => typeof p.num === 'number').length === 27
+    && BOARDS.rpi5.pins.filter((p) => typeof p.num === 'number').length === 28
+    && BOARDS.rpi5.pins.filter((p) => p.kind === 'gnd').length === 8
     && BOARDS.rpi5.pins.some((p) => p.id === 'GPIO17' && p.num === 17)
+    && BOARDS.rpi5.pins.some((p) => p.id === 'GPIO14' && p.num === 14)
     && BOARDS.rpi5.rails?.some((r) => r.pin === '5V' && r.volts === 5)
     && BOARDS.rpi5.vcc === 3.3 && BOARDS.rpi5.defaultLang === 'mpy',
     `${BOARDS.rpi5.pins.length} выводов, GPIO ${BOARDS.rpi5.pins.filter((p) => typeof p.num === 'number').length}`);
