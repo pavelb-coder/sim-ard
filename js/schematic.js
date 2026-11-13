@@ -66,6 +66,12 @@ export class Schematic {
     if (type === 'led') return { color: '#ff5544' };
     if (type === 'pot') return { value: 0.5, ohms: 10000 };
     if (type === 'button') return { pressed: false };
+    if (type === 'toggle') return { on: false };
+    if (type === 'joystick') return { x: 0, y: 0, pressed: false };
+    if (type === 'relay') return { energized: false };
+    if (type === 'stepper28byj') return { angle: 0, steps: 0, phases: [false, false, false, false] };
+    if (type === 'rgbled') return {};
+    if (type === 'seg7') return {};
     return {};
   }
 
@@ -283,6 +289,7 @@ export class Schematic {
         voltage: info.voltage || 0,
         sounding: !!info.sounding,
         builtinOn: false,
+        info,                       // полная телеметрия детали (каналы RGB, сегменты, фазы…)
       };
       if (p.__def.board) {
         const rt = runtimes?.get?.(p.id);
@@ -362,12 +369,24 @@ export class Schematic {
         const id = partEl.dataset.id;
         const part = this.part(id);
         const knob = ev.target.closest('[data-role="knob"]');
+        const stick = ev.target.closest('[data-role="stick"]');
         this.selected = { kind: 'part', id };
         this.drag = {
           id, startWorld: this._toWorld(ev), partX: part.x, partY: part.y, knob: !!knob,
+          stick: !!stick, pressPending: false,
         };
         if (part.type === 'button' && !knob) {
           part.props.pressed = true;
+          this.refreshPart(part);
+        }
+        if (part.type === 'toggle') {
+          part.props.on = !part.props.on;
+          this.refreshPart(part);
+          this.onChange();
+        }
+        if (part.type === 'joystick' && stick) {
+          part.props.pressed = true;   // нажали на ручку — сработала кнопка SW
+          this.drag.pressPending = true;
           this.refreshPart(part);
         }
         this.render();
@@ -420,6 +439,18 @@ export class Schematic {
       if (this.drag) {
         const w = this._toWorld(ev);
         const part = this.part(this.drag.id);
+        if (this.drag.stick && part?.type === 'joystick') {
+          const dx = w.x - part.x, dy = w.y - part.y;
+          if (Math.abs(dx) + Math.abs(dy) > 4) {
+            part.props.x = clamp(dx / 26, -1, 1);
+            part.props.y = clamp(-dy / 26, -1, 1);
+            if (this.drag.pressPending) { part.props.pressed = false; this.drag.pressPending = false; }
+            this.refreshPart(part);
+            this.onChange();
+            this.moved = true;
+          }
+          return;
+        }
         if (this.drag.knob && part?.type === 'pot') {
           const local = (w.x - part.x + 18) / 36;
           part.props.value = clamp(local, 0, 1);
@@ -442,6 +473,7 @@ export class Schematic {
       if (this.drag) {
         const part = this.part(this.drag.id);
         if (part?.type === 'button') { part.props.pressed = false; this.refreshPart(part); }
+        if (part?.type === 'joystick' && part.props.pressed) { part.props.pressed = false; this.refreshPart(part); }
         if (this.moved) this.onChange();
         this.drag = null;
       }

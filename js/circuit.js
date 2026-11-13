@@ -19,6 +19,9 @@ const boardSpecOf = (type) => BOARDS[type] || BOARDS.uno;
 
 const R_OUT = 0.25;
 const R_PULLUP = 20000;
+const HFE = 100;                 // усиление BC547 — для модели ключа
+// последовательность фаз 28BYJ-48 (IN1…IN4): полушаги по кругу
+const STEP_SEQ = ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001'];
 
 export class Circuit {
   constructor(parts = [], wires = []) {
@@ -27,6 +30,7 @@ export class Circuit {
     this.pinNet = new Map();
     this.capState = new Map();   // partId -> { vprev }
     this.indState = new Map();   // partId -> { iprev }
+    this.stepState = new Map();  // partId -> { idx, angle, steps }  — фазы 28BYJ-48
     this.warnings = [];
     this.time = 0;
     this.rebuild();
@@ -109,11 +113,79 @@ export class Circuit {
     this.warnings = [];
     const partInfo = new Map();
     const diodeIdx = new Map();
+    const multiIdx = new Map();   // partId -> { канал: индекс диода } для RGB и 7-сегментника
     const pwmNets = new Map();
     this.time += dt;
 
     const push = (el) => { elements.push(el); return elements.length - 1; };
     const gnd = this.groundNet;
+    // напряжения прошлого шага: нужны транзистору, реле и шаговому двигателю —
+    // их состояние зависит от того, что было на выводах чуть раньше
+    const prevV = (net) => (this._last && net ? (this._last.get(net) ?? 0) : 0);
+    // ШИМ моделируем средним напряжением. Чтобы светодиод не «пропадал» на
+    // малой скважности (среднее ниже падения на нём), порог его диода
+    // сдвигаем: vf' = vf − (1−d)·(Vcc − vf). Тогда средний ток совпадает с
+    // настоящим импульсным, а диммирование остаётся честным.
+    const effVf = (net, vf) => {
+      const d = dutyOf.get(net);
+      if (!d || d.duty >= 0.995) return vf;
+      return vf - (1 - d.duty) * (d.vcc - vf);
+    };
+
+    for (const board of this.boards) {
+      const spec = board.spec;
+      const g = board.gndNet || gnd;
+      if (g !== gnd) push({ type: 'R', n1: g, n2: gnd, value: 0.001 });
+      if (board.vccNet && board.vccNet !== g) push({ type: 'V', n1: board.vccNet, n2: g, value: spec.vcc });
+      else if (board.vccNet && board.vccNet === g) this.warnings.push({ text: `${spec.name}: питание замкнуто на землю`, level: 'danger' });
+
+      const rt = runtimes?.get?.(board.part.id) || null;
+      for (const pin of spec.pins) {
+        if (typeof pin.num !== 'number') continue;
+        const net = this.netOf(board.part.id, pin.id);
+        if (!net) continue;
+        const st = rt?.pins.get(pin.num);
+        if (!st) continue;
+        if (st.mode === 'OUTPUT') {
+          const internal = `src_${board.part.id}_${pin.id}`;
+          push({ type: 'R', n1: net, n2: internal, value: R_OUT });
+          push({ type: 'V', n1: internal, n2: g, value: (st.pwm / 255) * spec.vcc });
+          // ШИМ считаем средним напряжением (это верно для RC-фильтров и АЦП),
+          // но яркость светодиода потом пересчитаем в «импульсную».
+          if (st.pwm > 0 && st.pwm < 255) pwmNets.set(net, { duty: st.pwm / 255, vcc: spec.vcc });
+        } else if (st.mode === 'INPUT_PULLUP') {
+          push({ type: 'R', n1: net, n2: this.vccNet(), value: R_PULLUP });
+        }
+      }
+    }
+
+    // Скважность ШИМ известна только на выводе платы, а светодиод обычно
+    // стоит за резистором. Разносим её по цепочке резисторов, не заходя на
+    // шины питания и земли.
+    const dutyOf = new Map(pwmNets);
+    {
+      const skip = new Set([gnd, this.vccNet()].filter(Boolean));
+      for (const b of this.boards) { skip.add(b.gndNet); skip.add(b.vccNet); }
+      const links = [];
+      for (const p of this.parts) {
+        const def = this.defOf(p);
+        if (!def || def.board) continue;
+        if (!['resistor', 'pot', 'ldr', 'inductor', 'button', 'toggle'].includes(p.type)) continue;
+        const ids = def.pins(p).map((x) => x.id);
+        for (let i = 0; i < ids.length; i++) {
+          for (let j = i + 1; j < ids.length; j++) {
+            const a = this.netOf(p.id, ids[i]), c = this.netOf(p.id, ids[j]);
+            if (a && c && a !== c) links.push([a, c]);
+          }
+        }
+      }
+      for (let hop = 0; hop < 3; hop++) {
+        for (const [a, c] of links) {
+          if (dutyOf.has(a) && !dutyOf.has(c) && !skip.has(c)) dutyOf.set(c, dutyOf.get(a));
+          else if (dutyOf.has(c) && !dutyOf.has(a) && !skip.has(a)) dutyOf.set(a, dutyOf.get(c));
+        }
+      }
+    }
 
     for (const p of this.parts) {
       const def = this.defOf(p);
@@ -125,7 +197,7 @@ export class Circuit {
       switch (p.type) {
         case 'led': {
           const a = n('A'), k = n('K');
-          if (a && k && a !== k) diodeIdx.set(p.id, push({ type: 'D', n1: a, n2: k, vf: 1.85, ron: 12, roff: 1e7 }));
+          if (a && k && a !== k) diodeIdx.set(p.id, push({ type: 'D', n1: a, n2: k, vf: effVf(a, 1.85), ron: 12, roff: 1e7 }));
           break;
         }
         case 'resistor': {
@@ -194,38 +266,149 @@ export class Circuit {
           if (a && b && a !== b) push({ type: 'R', n1: a, n2: b, value: 100 });
           break;
         }
+        case 'diode': {
+          // кремниевый диод: 0,65 В вперёд, обратное направление заперто
+          const a = n('A'), k = n('K');
+          if (a && k && a !== k) diodeIdx.set(p.id, push({ type: 'D', n1: a, n2: k, vf: effVf(a, 0.65), ron: 4, roff: 1e8 }));
+          break;
+        }
+        case 'npn': {
+          // Биполярный транзистор как ключ с усилением:
+          // переход база-эмиттер — диод, коллектор-эмиттер — резистор,
+          // который открывается током базы (Ic ≈ hFE·Iб, не больше насыщения).
+          const b = n('B'), c = n('C'), e = n('E');
+          if (b && e && b !== e) push({ type: 'D', n1: b, n2: e, vf: 0.68, ron: 30, roff: 2e8 });
+          if (c && e && c !== e) {
+            const vbe = prevV(b) - prevV(e);
+            const vce = prevV(c) - prevV(e);
+            const ib = Math.max(0, (vbe - 0.68) / 30);
+            let rce = 1e8, on = false;
+            if (ib > 2e-6 && vce > 0) {
+              const ic = Math.min(0.3, HFE * ib);        // предел корпуса — 300 мА
+              rce = Math.max(1.5, Math.min(1e7, vce / ic));
+              on = rce < 40;
+            }
+            info.ib = ib;
+            info.on = on;
+            info.rce = rce;
+            push({ type: 'R', n1: c, n2: e, value: rce });
+            if (ib > 0.03) {
+              this.warnings.push({
+                text: `Транзистор «${this.nameOf(p.id)}»: ток базы ${Math.round(ib * 1000)} мА — между выводом и базой нужен резистор 1–10 кОм.`,
+                level: 'danger',
+              });
+            }
+          }
+          break;
+        }
+        case 'rgbled': {
+          // три кристалла в одном корпусе, общий катод; у зелёного и синего выше падение
+          const k = n('K');
+          const chans = { R: [n('R'), 1.9], G: [n('G'), 2.6], B: [n('B'), 2.9] };
+          const idx = {};
+          for (const [ch, [anode, vf]] of Object.entries(chans)) {
+            if (anode && k && anode !== k) idx[ch] = push({ type: 'D', n1: anode, n2: k, vf: effVf(anode, vf), ron: 12, roff: 1e8 });
+          }
+          multiIdx.set(p.id, { idx, kind: 'rgb' });
+          break;
+        }
+        case 'toggle': {
+          // тумблер на три вывода: 1 — общий, 2 — «вкл», 3 — «выкл»
+          const c = n('1'), a = n('2'), b = n('3');
+          const on = !!p.props?.on;
+          if (c && a && c !== a) push({ type: 'R', n1: c, n2: a, value: on ? 0.05 : 1e9 });
+          if (c && b && c !== b) push({ type: 'R', n1: c, n2: b, value: on ? 1e9 : 0.05 });
+          break;
+        }
+        case 'relay': {
+          // Катушка между VCC и GND, вход IN через резистор (в модуле стоит
+          // транзистор-драйвер). Контакты гальванически развязаны: это
+          // отдельные узлы, как в железе.
+          const vcc = n('VCC'), gg = n('GND'), ctl = n('IN');
+          if (vcc && gg && vcc !== gg) push({ type: 'R', n1: vcc, n2: gg, value: 70 });
+          if (ctl && ctl !== gg) push({ type: 'R', n1: ctl, n2: gg || gnd, value: 10000 });
+          const vin = prevV(ctl) - prevV(gg);
+          const vcoil = vcc && gg ? prevV(vcc) - prevV(gg) : 0;
+          const energized = vin > 2.5 && vcoil > 3.5;
+          info.energized = energized;
+          info.coil = vcoil;
+          p.props.energized = energized;    // рисуем якорь по этому флагу
+          const com = n('COM'), no = n('NO'), nc = n('NC');
+          if (com && no && com !== no) push({ type: 'R', n1: com, n2: no, value: energized ? 0.02 : 1e9 });
+          if (com && nc && com !== nc) push({ type: 'R', n1: com, n2: nc, value: energized ? 1e9 : 0.02 });
+          break;
+        }
+        case 'joystick': {
+          // два потенциометра по 10 кОм и кнопка, замыкающая SW на землю
+          const vcc = n('VCC'), gg = n('GND');
+          const px = Math.min(1, Math.max(-1, p.props?.x ?? 0));
+          const py = Math.min(1, Math.max(-1, p.props?.y ?? 0));
+          // a — доля от земли: 0 → вывод на земле, 1 → на питании
+          const pair = (wiper, a) => {
+            if (!wiper || !vcc || wiper === vcc) return;
+            push({ type: 'R', n1: vcc, n2: wiper, value: Math.max(20, 10000 * Math.max(0.002, 1 - a)) });
+            if (gg && wiper !== gg) push({ type: 'R', n1: wiper, n2: gg, value: Math.max(20, 10000 * Math.max(0.002, a)) });
+          };
+          pair(n('VRx'), (px + 1) / 2);
+          pair(n('VRy'), (py + 1) / 2);
+          const sw = n('SW');
+          if (sw && gg && sw !== gg) push({ type: 'R', n1: sw, n2: gg, value: p.props?.pressed ? 0.05 : 1e9 });
+          break;
+        }
+        case 'seg7': {
+          // восемь диодов: каждый сегмент — свой светодиод на общий катод
+          const com = n('COM');
+          const idx = {};
+          for (const seg of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP']) {
+            const a = n(seg);
+            if (a && com && a !== com) idx[seg] = push({ type: 'D', n1: a, n2: com, vf: effVf(a, 1.9), ron: 12, roff: 1e8 });
+          }
+          multiIdx.set(p.id, { idx, kind: 'seg7' });
+          break;
+        }
+        case 'stepper28byj': {
+          // ULN2003 — драйвер: входы высокоомные, катушки питаются от VCC/GND.
+          // Поворот считаем по последовательности фаз на входах (см. STEP_SEQ).
+          const vcc = n('VCC'), gg = n('GND');
+          if (vcc && gg && vcc !== gg) push({ type: 'R', n1: vcc, n2: gg, value: 1500 });
+          const ins = ['IN1', 'IN2', 'IN3', 'IN4'].map((id) => n(id));
+          for (const net of ins) {
+            if (net && gg && net !== gg) push({ type: 'R', n1: net, n2: gg, value: 22000 });
+          }
+          const phases = ins.map((net) => prevV(net) > 2.0);
+          const st = this.stepState.get(p.id) || { idx: -1 };
+          // Шаги считаем в «полушагах» вала: 4096 полушагов на оборот.
+          // Если двигатель крутит библиотека Stepper, она сообщает шаги сама
+          // (props.half обновляется из libraries.js) — по фазе их не угадать,
+          // за один кадр выводы успевают переключиться много раз.
+          const libOwned = Date.now() - (Number(p.props.libTick) || 0) < 150;
+          let half = Number(p.props.half) || 0;
+          if (!libOwned) {
+            const key = phases.map((x) => (x ? '1' : '0')).join('');
+            const idx = STEP_SEQ.indexOf(key);
+            if (idx >= 0 && st.idx >= 0) {
+              let d = (idx - st.idx + 8) % 8;
+              if (d > 4) d -= 8;                     // короткий путь по кругу фаз
+              if (Math.abs(d) <= 2) half += d;        // 1 — полушаг, 2 — полный
+            }
+            if (idx >= 0) st.idx = idx;
+            else if (!phases.some(Boolean)) st.idx = -1;
+          }
+          this.stepState.set(p.id, st);
+          p.props.half = half;
+          p.props.angle = (((half * 360) / 4096) % 360 + 360) % 360;
+          p.props.steps = Math.round(Math.abs(half) / 2);
+          p.props.phases = phases;
+          info.angle = p.props.angle;
+          info.steps = p.props.steps;
+          info.phases = phases;
+          break;
+        }
         default: break;
       }
     }
 
     // платы
-    for (const board of this.boards) {
-      const spec = board.spec;
-      const g = board.gndNet || gnd;
-      if (g !== gnd) push({ type: 'R', n1: g, n2: gnd, value: 0.001 });
-      if (board.vccNet && board.vccNet !== g) push({ type: 'V', n1: board.vccNet, n2: g, value: spec.vcc });
-      else if (board.vccNet && board.vccNet === g) this.warnings.push({ text: `${spec.name}: питание замкнуто на землю`, level: 'danger' });
-
-      const rt = runtimes?.get?.(board.part.id) || null;
-      for (const pin of spec.pins) {
-        if (typeof pin.num !== 'number') continue;
-        const net = this.netOf(board.part.id, pin.id);
-        if (!net) continue;
-        const st = rt?.pins.get(pin.num);
-        if (!st) continue;
-        if (st.mode === 'OUTPUT') {
-          const internal = `src_${board.part.id}_${pin.id}`;
-          push({ type: 'R', n1: net, n2: internal, value: R_OUT });
-          push({ type: 'V', n1: internal, n2: g, value: (st.pwm / 255) * spec.vcc });
-          // ШИМ считаем средним напряжением (это верно для RC-фильтров и АЦП),
-          // но яркость светодиода потом пересчитаем в «импульсную».
-          if (st.pwm > 0 && st.pwm < 255) pwmNets.set(net, { duty: st.pwm / 255, vcc: spec.vcc });
-        } else if (st.mode === 'INPUT_PULLUP') {
-          push({ type: 'R', n1: net, n2: this.vccNet(), value: R_PULLUP });
-        }
-      }
-    }
-
     // третьи выводы платы (3V3/VIN) — просто источники, если это 3V3
     for (const p of this.boardParts()) {
       const spec = this.specOf(p);
@@ -260,19 +443,8 @@ export class Circuit {
       if (di === undefined) continue;
       const I = Math.abs(res.currents[di] || 0);
       info.current = I;
-      const p = this.parts.find((q) => q.id === partId);
-      const drive = pwmNets.get(this.netOf(partId, 'A')) || null;
-      if (drive && drive.duty > 0.02) {
-        // Решатель видит среднее напряжение ШИМ, а светодиод мигает на полном.
-        // Пересчитываем «импульсный» ток (по паспортному падению 1,85 В) и
-        // умножаем на скважность — получается честное визуальное диммирование.
-        const vf = 1.85;
-        const vOn = drive.duty * drive.vcc;
-        const peak = vOn > vf + 0.05 ? I * (drive.vcc - vf) / (vOn - vf) : 0;
-        info.brightness = Math.min(1.2, peak / 0.018) * drive.duty;
-      } else {
-        info.brightness = Math.min(1.2, I / 0.018);
-      }
+      // порог диода уже сдвинут под скважность, поэтому ток — средний
+      info.brightness = Math.min(1.2, I / 0.018);
       if (I > 0.045) {
         this.warnings.push({
           text: `Светодиод «${this.nameOf(partId)}»: ток ${Math.round(I * 1000)} мА — на реальной плате он бы уже сгорел. Нужен резистор 220–330 Ом.`,
@@ -280,6 +452,39 @@ export class Circuit {
         });
       } else if (I > 0.025) {
         this.warnings.push({ text: `Светодиод «${this.nameOf(partId)}»: ${Math.round(I * 1000)} мА — многовато, поставьте резистор побольше.`, level: 'warn' });
+      }
+    }
+
+    // RGB-светодиод и 7-сегментный индикатор: яркость по каждому каналу
+    const n0of = (partId) => (pin) => this.netOf(partId, pin);
+    for (const [partId, m] of multiIdx) {
+      const info = partInfo.get(partId);
+      if (!info) continue;
+      const n0 = n0of(partId);
+      const bright = (di, net) => {
+        if (di === undefined || !net) return 0;
+        return Math.min(1.2, Math.abs(res.currents[di] || 0) / 0.018);
+      };
+      if (m.kind === 'rgb') {
+        const chans = { R: n0('R'), G: n0('G'), B: n0('B') };
+        for (const [ch, net] of Object.entries(chans)) {
+          const b = bright(m.idx[ch], net);
+          info[ch] = b;
+          if (b > 2.2) this.warnings.push({ text: `RGB «${this.nameOf(partId)}»: канал ${ch} перегружен — нужен резистор на каждый цвет.`, level: 'danger' });
+        }
+        info.channels = [info.R || 0, info.G || 0, info.B || 0];
+        info.current = Math.max(info.R || 0, info.G || 0, info.B || 0);
+      } else {
+        info.segs = {};
+        let worst = 0;
+        for (const [seg, di] of Object.entries(m.idx)) {
+          const net = n0(seg);
+          const b = bright(di, net);
+          info.segs[seg] = b;
+          worst = Math.max(worst, b);
+        }
+        info.current = worst;
+        if (worst > 2.2) this.warnings.push({ text: `Индикатор «${this.nameOf(partId)}»: сегменты перегружены — поставьте резисторы 220–330 Ом.`, level: 'danger' });
       }
     }
 

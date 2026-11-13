@@ -118,6 +118,10 @@ function iconFor(type) {
     case 'uno': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#1276b0" stroke="#1276b0"/><path d="M6 3v-1M10 3v-1M14 3v-1M18 3v-1"/></svg>`;
     case 'esp32': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#2f3b46"/><rect x="9" y="5" width="8" height="5" rx="1" fill="#4a5b6b"/></svg>`;
     case 'pico': return `<svg ${c} aria-hidden="true"><rect x="4" y="3" width="18" height="12" rx="2" fill="#1f4d3a"/><rect x="9" y="5" width="8" height="5" rx="1" fill="#3d7a5c"/></svg>`;
+    case 'nano': return `<svg ${c} aria-hidden="true"><rect x="3" y="6" width="20" height="7" rx="1.5" fill="#1276b0" stroke="#1276b0"/><path d="M6 6v-1M10 6v-1M14 6v-1M18 6v-1M6 13v1M10 13v1M14 13v1M18 13v1"/></svg>`;
+    case 'promini': return `<svg ${c} aria-hidden="true"><rect x="5" y="6" width="16" height="6" rx="1.5" fill="#0f6d74"/><path d="M7 6v-1M10 6v-1M13 6v-1M16 6v-1M7 12v1M10 12v1M13 12v1M16 12v1"/></svg>`;
+    case 'leonardo': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#1276b0" stroke="#1276b0"/><rect x="3" y="7" width="3" height="4" rx="1" fill="#c3ccd4"/><path d="M9 3v-1M13 3v-1M17 3v-1"/></svg>`;
+    case 'mega': return `<svg ${c} aria-hidden="true"><rect x="1" y="4" width="24" height="10" rx="2" fill="#1276b0" stroke="#1276b0"/><path d="M6 4v-1M9 4v-1M12 4v-1M15 4v-1M18 4v-1M21 4v-1M6 14v1M9 14v1M12 14v1M15 14v1M18 14v1M21 14v1"/></svg>`;
     case 'led': return `<svg ${c} aria-hidden="true"><path d="M2 9h5M19 9h5"/><path d="M9 4l6 5-6 5z" fill="#ffd7c9" stroke="#ff8a3d"/><path d="M16 3v12" stroke="#ff8a3d"/></svg>`;
     case 'resistor': return `<svg ${c} aria-hidden="true"><path d="M2 9h4l2-4 3 8 3-8 3 8 2-4h5"/></svg>`;
     case 'capacitor': return `<svg ${c} aria-hidden="true"><path d="M2 9h8M16 9h8"/><path d="M10 3v12M16 3v12"/></svg>`;
@@ -133,6 +137,14 @@ function iconFor(type) {
     case 'lcd1602': return `<svg ${c} aria-hidden="true"><rect x="2" y="4" width="22" height="11" rx="1" fill="#0d3a1f" stroke="#1d6b38"/><path d="M5 8h16M5 11h10" stroke="#7ef29d"/></svg>`;
     case 'oled': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="2" fill="#04121f" stroke="#24405c"/><path d="M8 7h10M8 10h6" stroke="#9ad7ff"/></svg>`;
     case 'buzzer': return `<svg ${c} aria-hidden="true"><path d="M6 13a7 7 0 0 1 14 0z"/><path d="M2 13h4M20 13h4"/></svg>`;
+    case 'diode': return `<svg ${c} aria-hidden="true"><path d="M2 9h5M19 9h5"/><path d="M9 4l6 5-6 5z"/><path d="M15 4v10"/></svg>`;
+    case 'npn': return `<svg ${c} aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M2 9h4M6 4v10"/><path d="M6 6l6-2M6 12l6 2"/><path d="M13 11l-3 3 4 0"/></svg>`;
+    case 'rgbled': return `<svg ${c} aria-hidden="true"><circle cx="13" cy="8" r="5" fill="#ff5544" stroke="#ff5544"/><circle cx="9" cy="11" r="4" fill="#28d17c" stroke="#28d17c"/><circle cx="17" cy="11" r="4" fill="#3b82f6" stroke="#3b82f6"/><path d="M9 13v4M13 13v4M17 13v4"/></svg>`;
+    case 'toggle': return `<svg ${c} aria-hidden="true"><path d="M2 13h6M18 13h6"/><path d="M8 13h10"/><path d="M13 13l6-7"/><circle cx="19" cy="6" r="2.4"/></svg>`;
+    case 'seg7': return `<svg ${c} aria-hidden="true"><rect x="7" y="1" width="12" height="16" rx="1.5"/><path d="M9 4h8M9 9h8M9 14h8" stroke="#ff8a3d"/></svg>`;
+    case 'relay': return `<svg ${c} aria-hidden="true"><rect x="3" y="4" width="20" height="11" rx="1.5"/><rect x="5" y="6" width="8" height="7" rx="1" fill="#2f74b8" stroke="#2f74b8"/><path d="M15 12l5-4"/><circle cx="20" cy="12" r="1.4"/></svg>`;
+    case 'joystick': return `<svg ${c} aria-hidden="true"><rect x="3" y="4" width="20" height="11" rx="2"/><circle cx="13" cy="9" r="4"/><circle cx="13" cy="9" r="1.2"/></svg>`;
+    case 'stepper28byj': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="10" height="9" rx="1"/><circle cx="18" cy="9" r="5"/><circle cx="18" cy="9" r="1.6"/><path d="M18 4v2"/></svg>`;
     default: return `<svg ${c} aria-hidden="true"><rect x="4" y="4" width="18" height="10" rx="2"/></svg>`;
   }
 }
@@ -318,10 +330,25 @@ const updateWarnings = (warnings) => {
 };
 
 // ------------------------------------------------------------- библиотеки ----
+const steppers = [];          // экземпляры библиотеки Stepper — их крутит драйвер кадров
+let stepperOwner = null;      // плата, к которой относится текущий скетч
+
 function makeBus(boardPart) {
   const spec = BOARDS[boardPart.type];
   const pinsOf = (part) => PARTS[part.type].pins(part);
   return {
+    steppers,
+    addStepper(obj) { obj.boardId = boardPart.id; steppers.push(obj); },
+    /** библиотека Stepper сообщает шаг — двигатель на схеме получает поворот */
+    stepMotor(st, dir) {
+      for (const pin of st.pins) {
+        const motor = this.partOnPin(pin, 'stepper28byj');
+        if (!motor) continue;
+        motor.props.half = (Number(motor.props.half) || 0) + 2 * dir;
+        motor.props.libTick = Date.now();
+        return;
+      }
+    },
     partOnPin(pinNum, type) {
       const pin = spec.pins.find((p) => p.num === Number(pinNum));
       if (!pin) return null;
@@ -552,6 +579,16 @@ function solveOnce(dt) {
   return res;
 }
 
+/** Библиотека Stepper ставит шаги в очередь — здесь они превращаются в digitalWrite. */
+function tickSteppers(dt) {
+  if (!steppers.length) return;
+  for (const st of steppers) {
+    const rt = runtimes.get(st.boardId);
+    if (!rt) continue;
+    st.tick(dt, (pin, v) => rt.digitalWrite(pin, v));
+  }
+}
+
 function sampleScope() {
   if (!scopeOn) return;
   const vals = scope.channels.map((ch) => (ch.source ? circuit.voltageOf(ch.source.boardId, ch.source.pin) : null));
@@ -572,6 +609,7 @@ function startDriver() {
       lastSolve = res;
       sampleScope();
     }
+    tickSteppers(dt * SUB);
     if (res) {
       schematic.applySim(res.partInfo, runtimes);
       updateWarnings(res.warnings);
@@ -589,6 +627,7 @@ function stopAll() {
   for (const rt of runtimes.values()) rt.stop();
   running = false;
   runtimes = new Map();
+  steppers.length = 0;
   $('stopBtn').disabled = true;
   $('serialInput').disabled = true;
   $('sendBtn').disabled = true;

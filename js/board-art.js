@@ -296,7 +296,9 @@ function pinLabels(spec) {
     if (p.silk === '') return '';                 // подпись не нужна (её роль играет шелкография узла)
     // вывод сбоку (ICSP) — подпись слева от площадки, вдоль платы
     if (p.dir === 'right' || p.dir === 'left') {
-      const x = p.dir === 'right' ? p.x - 9 : p.x + 9;
+      // вторая колонка двойной гребёнки подписывается левее первой
+      const col = pins.filter((q) => q.dir === p.dir && Math.abs(q.y - p.y) < 0.6 && q.x < p.x).length;
+      const x = p.dir === 'right' ? p.x - 9 - col * 13 : p.x + 9 + col * 13;
       return silk(p.silk || p.label, x, p.y + 1.4, { size, rot: -90, fill: '#f4fbfb', opacity: 0.9, weight: 600 });
     }
     const up = p.y < 0;
@@ -308,10 +310,200 @@ function pinLabels(spec) {
   }).join('');
 }
 
+
+// ---------------------------------------------------------------- Nano ----
+function paintNano(spec) {
+  const { w, h } = spec;
+  const X = (mm) => mm * PX_PER_MM - w / 2;
+  const Y = (mm) => mm * PX_PER_MM - h / 2;
+  return `
+    ${pcbBody(w, h, '#0b8f95', '#076a70', { radius: 4 })}
+    ${header(spec.pins, { dir: 'up', w, band: 9 })}
+    ${header(spec.pins, { dir: 'down', w, band: 9 })}
+
+    <!-- mini-USB слева -->
+    ${usb(X(0) - 9, Y(5.4), 19, 28, { type: 'micro' })}
+
+    <!-- ATmega328P (TQFP-32), кварц, стабилизатор -->
+    ${chip(X(14.6), Y(4.6), 28, 28, 'MEGA328P', '', { legs: 8, silkSize: 3.2 })}
+    <rect x="${X(10.6)}" y="${Y(7.2)}" width="12" height="7" rx="1.6" fill="#c3ccd4" stroke="#8d99a3" stroke-width=".7"/>
+    ${silk('16M', X(12.1), Y(10.4), { size: 3, fill: '#2f3b46' })}
+    <rect x="${X(9)}" y="${Y(9.9)}" width="13" height="8" rx="1" fill="#15181c" stroke="#2b3138" stroke-width=".7"/>
+    ${silk('1117', X(10.2), Y(11.8), { size: 3, fill: '#8d9aa6' })}
+    ${tactile(X(4.8), Y(6.6), 8)}
+    ${silk('RST', X(4.8), Y(9.6), { size: 2.8, opacity: 0.8 })}
+
+    <!-- ICSP 2×3 у правого края -->
+    <rect x="${X(38.2)}" y="${Y(4.0)}" width="19" height="28" rx="1.2" fill="#101519" stroke="#20272e" stroke-width=".7"/>
+    ${[[39.6, 5.1], [42.1, 5.1], [39.6, 7.6], [42.1, 7.6], [39.6, 10.1], [42.1, 10.1]]
+    .map(([mx, my]) => `<circle cx="${X(mx)}" cy="${Y(my)}" r="1.5" fill="#0a0f14" stroke="#d4af37" stroke-width=".9"/>`).join('')}
+
+    <!-- индикаторы TX / RX / L / ON -->
+    ${boardLed(X(24.2), Y(11.8), '#ffd166', '', { r: 2.2 })}
+    ${boardLed(X(26.6), Y(11.8), '#ffd166', '', { r: 2.2 })}
+    <g class="led-on">
+      <circle cx="${X(29)}" cy="${Y(11.8)}" r="2.6" fill="#141b12" stroke="#2b3a24"/>
+      <circle class="builtin-glow" cx="${X(29)}" cy="${Y(11.8)}" r="2.6" fill="#ffd166" opacity="0"/>
+    </g>
+    ${boardLed(X(31.4), Y(11.8), '#7ef29d', '', { r: 2.2 })}
+    ${silk('TX RX L ON', X(27.8), Y(9.6), { size: 3, opacity: 0.75 })}
+
+    <!-- шелкография -->
+    ${silk('ARDUINO NANO', X(30.4), Y(7.4), { size: 4.4, weight: 700, spacing: .4, fill: '#f2fbfb' })}`;
+}
+
+// ------------------------------------------------------------ Pro Mini ----
+function paintProMini(spec) {
+  const { w, h } = spec;
+  const X = (mm) => mm * PX_PER_MM - w / 2;
+  const Y = (mm) => mm * PX_PER_MM - h / 2;
+  const ftdi = [16.51, 13.97, 11.43, 8.89, 6.35, 3.81];
+  return `
+    ${pcbBody(w, h, '#0d7f86', '#065e63', { radius: 3 })}
+    ${header(spec.pins, { dir: 'up', w, band: 9 })}
+    ${header(spec.pins, { dir: 'down', w, band: 9 })}
+
+    <!-- FTDI-гребёнка слева -->
+    <rect x="${X(0.4)}" y="${Y(2.4)}" width="9" height="58" rx="1.2" fill="#101519" stroke="#20272e" stroke-width=".7"/>
+    ${ftdi.map((y) => `<circle cx="${X(1.6)}" cy="${Y(y)}" r="1.6" fill="#0a0f14" stroke="#d4af37" stroke-width=".9"/>`).join('')}
+    ${silk('FTDI', X(1.6), Y(1.6), { size: 3, opacity: 0.8 })}
+
+    <!-- ATmega328P и кварц -->
+    ${chip(X(12.4), Y(4.4), 28, 28, 'MEGA328P', '', { legs: 8, silkSize: 3.2 })}
+    <rect x="${X(8.6)}" y="${Y(7)}" width="11" height="6" rx="1.4" fill="#c3ccd4" stroke="#8d99a3" stroke-width=".7"/>
+    ${silk('8M', X(9.9), Y(10.1), { size: 2.8, fill: '#2f3b46' })}
+    <rect x="${X(18.4)}" y="${Y(9.8)}" width="12" height="8" rx="1" fill="#15181c" stroke="#2b3138" stroke-width=".7"/>
+    ${silk('1117', X(19.6), Y(11.7), { size: 2.8, fill: '#8d9aa6' })}
+
+    <!-- индикаторы -->
+    ${boardLed(X(23.6), Y(11.8), '#7ef29d', '', { r: 2 })}
+    <g class="led-on">
+      <circle cx="${X(26.2)}" cy="${Y(11.8)}" r="2.4" fill="#141b12" stroke="#2b3a24"/>
+      <circle class="builtin-glow" cx="${X(26.2)}" cy="${Y(11.8)}" r="2.4" fill="#ffd166" opacity="0"/>
+    </g>
+
+    ${silk('PRO MINI', X(24.6), Y(6.6), { size: 4, weight: 700, spacing: .4, fill: '#f2fbfb' })}`;
+}
+
+// -------------------------------------------------------------- Leonardo ----
+function paintLeonardo(spec) {
+  const { w, h } = spec;
+  const X = (mm) => mm * PX_PER_MM - w / 2;
+  const Y = (mm) => mm * PX_PER_MM - h / 2;
+  return `
+    ${pcbBody(w, h, '#0b8f95', '#076a70', {
+      radius: 8,
+      holes: [[X(3.4), Y(3.6)], [X(65.2), Y(7.2)], [X(3.4), Y(49.7)], [X(65.2), Y(46.2)]],
+    })}
+    ${header(spec.pins, { dir: 'up', w })}
+    ${header(spec.pins, { dir: 'down', w })}
+
+    <!-- micro-USB слева -->
+    ${usb(X(0.4) - 14, Y(20.4), 22, 26, { type: 'micro' })}
+
+    <!-- ATmega32u4 -->
+    ${chip(X(19.6), Y(19.6), 42, 30, 'MEGA32U4', '', { legs: 12, silkSize: 4 })}
+    <rect x="${X(13.4)}" y="${Y(24.6)}" width="22" height="14" rx="3" fill="#c3ccd4" stroke="#8d99a3" stroke-width=".8"/>
+    ${silk('16 MHz', X(13.6), Y(22.4), { size: 3.4, opacity: 0.7 })}
+
+    <!-- ICSP 2×3 у правого края -->
+    <rect x="${X(59.4)}" y="${Y(20.6)}" width="30" height="41" rx="1.6" fill="#101519" stroke="#20272e" stroke-width=".8"/>
+    ${[[61.9, 23.3], [64.4, 23.3], [61.9, 25.8], [64.4, 25.8], [61.9, 28.3], [64.4, 28.3]]
+    .map(([mx, my]) => `<rect x="${X(mx) - 2.6}" y="${Y(my) - 2.6}" width="5.2" height="5.2" rx=".7"
+      fill="#0a0f14" stroke="#d4af37" stroke-width=".9" opacity=".9"/>`).join('')}
+    ${silk('ICSP', X(63.2), Y(19.2), { size: 4, opacity: 0.8 })}
+
+    <!-- питание и индикаторы -->
+    <rect x="${X(11.5)}" y="${Y(37)}" width="30" height="20" rx="1.2" fill="#15181c" stroke="#2b3138" stroke-width=".8"/>
+    ${silk('1117', X(15), Y(40.6), { size: 4, fill: '#8d9aa6' })}
+    ${capElectro(X(24.5), Y(40), 8)}
+    ${tactile(X(13.4), Y(11.6), 12)}
+    ${silk('RESET', X(13.4), Y(15.6), { size: 3.8, opacity: 0.85 })}
+    ${boardLed(X(26.4), Y(14.6), '#ffd166', 'TX')}
+    ${boardLed(X(26.4), Y(17), '#ffd166', 'RX')}
+    ${boardLed(X(44.5), Y(40.2), '#7ef29d', 'ON')}
+    <g class="led-on">
+      <circle cx="${X(27.4)}" cy="${Y(10.4)}" r="4.4" fill="#141b12" stroke="#2b3a24"/>
+      <circle class="builtin-glow" cx="${X(27.4)}" cy="${Y(10.4)}" r="4.4" fill="#ffd166" opacity="0"/>
+    </g>
+    ${silk('L', X(27.4), Y(12.6), { size: 4.2, opacity: 0.85 })}
+
+    ${silk('DIGITAL (PWM~)', X(52.5), Y(11.4), { size: 4.8, opacity: 0.5 })}
+    ${silk('POWER', X(38), Y(44.6), { size: 4.2, opacity: 0.5 })}
+    ${silk('ANALOG IN', X(60.5), Y(44.6), { size: 4.2, opacity: 0.5 })}
+    ${silk('ARDUINO', X(44), Y(24.4), { size: 8, weight: 700, spacing: 1.1, fill: '#f2fbfb' })}
+    ${silk('LEONARDO', X(44), Y(31.4), { size: 7.4, weight: 700, spacing: 1.4, fill: '#f2fbfb' })}`;
+}
+
+// ------------------------------------------------------------ Mega 2560 ----
+function paintMega(spec) {
+  const { w, h } = spec;
+  const X = (mm) => mm * PX_PER_MM - w / 2;
+  const Y = (mm) => mm * PX_PER_MM - h / 2;
+  const block = spec.pins.filter((p) => p.dir === 'right');
+  const bxs = block.map((p) => p.x);
+  const bys = block.map((p) => p.y);
+  const bx1 = Math.max(Math.min(...bxs) - 9, -w / 2 + 3);
+  const bx2 = Math.min(Math.max(...bxs) + 9, w / 2 - 3);
+  const by1 = Math.min(...bys) - 8, by2 = Math.max(...bys) + 8;
+  return `
+    ${pcbBody(w, h, '#0b8f95', '#076a70', {
+      radius: 8,
+      holes: [[X(3.6), Y(3.6)], [X(97.9), Y(3.6)], [X(3.6), Y(49.7)], [X(97.9), Y(49.7)]],
+    })}
+    ${header(spec.pins, { dir: 'up', w })}
+    ${header(spec.pins, { dir: 'down', w })}
+
+    <!-- двойная гребёнка 2×18 у правого края -->
+    <rect x="${bx1}" y="${by1}" width="${bx2 - bx1}" height="${by2 - by1}" rx="1.6"
+          fill="#101519" stroke="#20272e" stroke-width=".8"/>
+    ${block.map((p) => pad(p.x, p.y)).join('')}
+
+    <!-- разъёмы: USB-B и питание -->
+    ${usb(X(0.4) - 16, Y(4.8), 26, 56, { type: 'B' })}
+    ${barrelJack(X(0.4) - 12, Y(22.5), 22, 52)}
+
+    <!-- ATmega2560 -->
+    ${chip(X(38), Y(20), 60, 52, 'MEGA2560', '', { legs: 14, silkSize: 4.6 })}
+    <rect x="${X(30)}" y="${Y(24.4)}" width="26" height="16" rx="4" fill="#c3ccd4" stroke="#8d99a3" stroke-width=".8"/>
+    ${silk('16 MHz', X(30.2), Y(22.6), { size: 3.6, opacity: 0.7 })}
+
+    <!-- ICSP -->
+    <rect x="${X(80.6)}" y="${Y(21)}" width="30" height="41" rx="1.6" fill="#101519" stroke="#20272e" stroke-width=".8"/>
+    ${[[83.1, 23.7], [85.6, 23.7], [83.1, 26.2], [85.6, 26.2], [83.1, 28.7], [85.6, 28.7]]
+    .map(([mx, my]) => `<rect x="${X(mx) - 2.6}" y="${Y(my) - 2.6}" width="5.2" height="5.2" rx=".7"
+      fill="#0a0f14" stroke="#d4af37" stroke-width=".9" opacity=".9"/>`).join('')}
+    ${silk('ICSP', X(84.4), Y(19.6), { size: 4, opacity: 0.8 })}
+
+    <!-- питание и индикаторы -->
+    <rect x="${X(12)}" y="${Y(37)}" width="34" height="20" rx="1.2" fill="#15181c" stroke="#2b3138" stroke-width=".8"/>
+    ${silk('1117', X(15.6), Y(40.6), { size: 4, fill: '#8d9aa6' })}
+    ${capElectro(X(28), Y(40), 8)}
+    ${capElectro(X(35), Y(40), 6.5)}
+    ${tactile(X(13.4), Y(11.6), 12)}
+    ${silk('RESET', X(13.4), Y(15.6), { size: 3.8, opacity: 0.85 })}
+    ${boardLed(X(24.8), Y(14.6), '#ffd166', 'TX')}
+    ${boardLed(X(24.8), Y(17), '#ffd166', 'RX')}
+    ${boardLed(X(51), Y(40.2), '#7ef29d', 'ON')}
+    <g class="led-on">
+      <circle cx="${X(33.4)}" cy="${Y(13.4)}" r="4.4" fill="#141b12" stroke="#2b3a24"/>
+      <circle class="builtin-glow" cx="${X(33.4)}" cy="${Y(13.4)}" r="4.4" fill="#ffd166" opacity="0"/>
+    </g>
+    ${silk('L', X(33.4), Y(15.8), { size: 4.2, opacity: 0.85 })}
+
+    ${silk('DIGITAL (PWM~)', X(58), Y(11.4), { size: 4.8, opacity: 0.5 })}
+    ${silk('POWER', X(41), Y(45.2), { size: 4.2, opacity: 0.5 })}
+    ${silk('ANALOG IN', X(71), Y(45.2), { size: 4.2, opacity: 0.5 })}
+    ${silk('ARDUINO', X(67), Y(25.4), { size: 8, weight: 700, spacing: 1.1, fill: '#f2fbfb' })}
+    ${silk('MEGA 2560', X(67), Y(33.4), { size: 7, weight: 700, spacing: 1.4, fill: '#f2fbfb' })}`;
+}
+
+const PAINTERS = {
+  uno: paintUno, esp32: paintEsp32, pico: paintPico,
+  nano: paintNano, promini: paintProMini, leonardo: paintLeonardo, mega: paintMega,
+};
+
 export function renderBoardArt(spec) {
-  const body = spec.id === 'uno' ? paintUno(spec)
-    : spec.id === 'esp32' ? paintEsp32(spec)
-      : spec.id === 'pico' ? paintPico(spec)
-        : paintGeneric(spec);
-  return body + pinLabels(spec);
+  const paint = PAINTERS[spec.id] || paintGeneric;
+  return paint(spec) + pinLabels(spec);
 }

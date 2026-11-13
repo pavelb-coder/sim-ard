@@ -583,6 +583,232 @@ void loop() {
 `,
     },
   },
+
+  {
+    id: 'rgb',
+    name: 'RGB-светодиод: три цвета',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -190, y: -180, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: -60, y: -180, props: { value: 220 } },
+        { id: 'r3', type: 'resistor', x: 70, y: -180, props: { value: 220 } },
+        { id: 'd1', type: 'rgbled', x: 240, y: -160, props: {} },
+      ],
+      wires: [
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'd1', 'R'),
+        wire('b1', 'D10', 'r2', '1'), wire('r2', '2', 'd1', 'G'),
+        wire('b1', 'D11', 'r3', '1'), wire('r3', '2', 'd1', 'B'),
+        wire('d1', 'K', 'b1', 'GND'),
+      ],
+    },
+    code: `// В одном корпусе три кристалла: красный, зелёный, синий.
+// У каждого свой резистор — иначе кристалл сгорит.
+// analogWrite даёт плавные переходы цвета.
+
+void setup() {
+  pinMode(9, OUTPUT); pinMode(10, OUTPUT); pinMode(11, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  analogWrite(9, 255); analogWrite(10, 0); analogWrite(11, 0);
+  delay(400);
+  analogWrite(9, 0); analogWrite(10, 255); analogWrite(11, 0);
+  delay(400);
+  analogWrite(9, 0); analogWrite(10, 0); analogWrite(11, 255);
+  delay(400);
+  // жёлтый = красный + зелёный, белый = все три
+  analogWrite(9, 255); analogWrite(10, 200); analogWrite(11, 0);
+  delay(400);
+  analogWrite(9, 255); analogWrite(10, 255); analogWrite(11, 255);
+  delay(600);
+}
+`,
+  },
+
+  {
+    id: 'relay',
+    name: 'Реле: щелчок и лампа через контакты',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'k1', type: 'relay', x: 120, y: -150, props: {} },
+        { id: 'r1', type: 'resistor', x: 200, y: 60, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: 320, y: 60, props: { color: '#ffd166' } },
+        { id: 'sw1', type: 'toggle', x: -120, y: 60, props: { on: true } },
+      ],
+      wires: [
+        wire('b1', '5V2', 'k1', 'VCC'), wire('b1', 'GND2', 'k1', 'GND'), wire('b1', 'D9', 'k1', 'IN'),
+        // силовая часть: питание → тумблер → лампа → COM…NO → земля
+        wire('b1', '5V', 'sw1', '1'), wire('sw1', '2', 'r1', '1'), wire('r1', '2', 'l1', 'A'),
+        wire('l1', 'K', 'k1', 'COM'), wire('k1', 'NO', 'b1', 'GND'),
+      ],
+    },
+    code: `// Реле — электромагнитный ключ. Катушка и контакты развязаны:
+// скетч управляет только катушкой (IN), а лампа живёт в своей цепи.
+// Пока лампа включена — слышно «щёлк» и видно, как двигается якорь.
+
+void setup() {
+  pinMode(9, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Реле: раз в секунду");
+}
+
+void loop() {
+  digitalWrite(9, HIGH);     // катушка под током → COM соединился с NO
+  Serial.println("щёлк: лампа горит");
+  delay(1000);
+  digitalWrite(9, LOW);      // катушка обесточена → COM вернулся на NC
+  Serial.println("отпустило: лампа погасла");
+  delay(1000);
+}
+`,
+  },
+
+  {
+    id: 'joystick',
+    name: 'Джойстик: X, Y и кнопка',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'rv1', type: 'joystick', x: 140, y: -170, props: { x: 0, y: 0 } },
+        { id: 'r1', type: 'resistor', x: -190, y: 80, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: -60, y: 80, props: { color: '#7ef29d' } },
+      ],
+      wires: [
+        wire('b1', '5V2', 'rv1', 'VCC'), wire('b1', 'GND2', 'rv1', 'GND'),
+        wire('rv1', 'VRx', 'b1', 'A0'), wire('rv1', 'VRy', 'b1', 'A1'),
+        wire('rv1', 'SW', 'b1', 'D2'),
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND'),
+      ],
+    },
+    code: `// Модуль джойстика — это два потенциометра и кнопка.
+// Потяните ручку на схеме: VRx и VRy поедут к 0 или 1023.
+// Нажмите на ручку — замкнётся SW (нужен INPUT_PULLUP).
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(2, INPUT_PULLUP);
+  pinMode(9, OUTPUT);
+}
+
+void loop() {
+  int x = analogRead(A0);
+  int y = analogRead(A1);
+  bool sw = digitalRead(2) == LOW;
+
+  Serial.print("X "); Serial.print(x);
+  Serial.print("  Y "); Serial.print(y);
+  Serial.print(sw ? "  кнопка" : "");
+  Serial.println();
+
+  digitalWrite(9, sw ? HIGH : LOW);
+  delay(150);
+}
+`,
+  },
+
+  {
+    id: 'seg7',
+    name: 'Индикатор 7 сегментов: цифры',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -300, y: -200, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: -200, y: -200, props: { value: 220 } },
+        { id: 'r3', type: 'resistor', x: -100, y: -200, props: { value: 220 } },
+        { id: 'r4', type: 'resistor', x: 0, y: -200, props: { value: 220 } },
+        { id: 'r5', type: 'resistor', x: 100, y: -200, props: { value: 220 } },
+        { id: 'r6', type: 'resistor', x: 200, y: -200, props: { value: 220 } },
+        { id: 'r7', type: 'resistor', x: 300, y: -200, props: { value: 220 } },
+        { id: 'hg1', type: 'seg7', x: 60, y: 250, props: {} },
+      ],
+      wires: [
+        wire('b1', 'D2', 'r1', '1'), wire('r1', '2', 'hg1', 'A'),
+        wire('b1', 'D3', 'r2', '1'), wire('r2', '2', 'hg1', 'B'),
+        wire('b1', 'D4', 'r3', '1'), wire('r3', '2', 'hg1', 'C'),
+        wire('b1', 'D5', 'r4', '1'), wire('r4', '2', 'hg1', 'D'),
+        wire('b1', 'D6', 'r5', '1'), wire('r5', '2', 'hg1', 'E'),
+        wire('b1', 'D7', 'r6', '1'), wire('r6', '2', 'hg1', 'F'),
+        wire('b1', 'D8', 'r7', '1'), wire('r7', '2', 'hg1', 'G'),
+        wire('hg1', 'COM', 'b1', 'GND'),
+      ],
+    },
+    code: `// У каждого сегмента свой вывод и свой резистор.
+// Порядок сегментов:  A B C D E F G  →  D2…D8.
+
+const int seg[7] = {2, 3, 4, 5, 6, 7, 8};
+
+// какие сегменты горят для цифры 0…9
+const byte digit[10][7] = {
+  {1,1,1,1,1,1,0}, {0,1,1,0,0,0,0}, {1,1,0,1,1,0,1}, {1,1,1,1,0,0,1},
+  {0,1,1,0,0,1,1}, {1,0,1,1,0,1,1}, {1,0,1,1,1,1,1}, {1,1,1,0,0,0,0},
+  {1,1,1,1,1,1,1}, {1,1,1,1,0,1,1},
+};
+
+void setup() {
+  for (int i = 0; i < 7; i++) pinMode(seg[i], OUTPUT);
+  Serial.begin(9600);
+}
+
+void show(int n) {
+  for (int i = 0; i < 7; i++) digitalWrite(seg[i], digit[n][i]);
+}
+
+void loop() {
+  for (int n = 0; n <= 9; n++) {
+    show(n);
+    Serial.print("цифра ");
+    Serial.println(n);
+    delay(700);
+  }
+}
+`,
+  },
+
+  {
+    id: 'stepper',
+    name: 'Шаговый 28BYJ-48 + ULN2003',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'm1', type: 'stepper28byj', x: 150, y: -160, props: { angle: 0, steps: 0, phases: [false, false, false, false] } },
+      ],
+      wires: [
+        wire('b1', '5V2', 'm1', 'VCC'), wire('b1', 'GND2', 'm1', 'GND'),
+        wire('b1', 'D8', 'm1', 'IN1'), wire('b1', 'D9', 'm1', 'IN2'),
+        wire('b1', 'D10', 'm1', 'IN3'), wire('b1', 'D11', 'm1', 'IN4'),
+      ],
+    },
+    code: `// Драйвер ULN2003 усиливает выводы платы до тока катушек.
+// Библиотека Stepper сама выдаёт последовательность фаз на IN1…IN4 —
+// на схеме по очереди загорятся четыре светодиода, а вал повернётся.
+
+#include <Stepper.h>
+
+const int stepsPerRev = 2048;          // у 28BYJ-48 редуктор 1:64
+Stepper motor(stepsPerRev, 8, 9, 10, 11);
+
+void setup() {
+  motor.setSpeed(8);                   // оборотов в минуту
+  Serial.begin(9600);
+  Serial.println("Шаговик: вперёд и назад");
+}
+
+void loop() {
+  motor.step(512);                     // четверть оборота вперёд
+  delay(400);
+  motor.step(-512);                    // и назад
+  delay(400);
+}
+`,
+  },
 ];
 
 /** Стартовый скетч для платы, добавленной из палитры. */

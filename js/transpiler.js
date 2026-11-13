@@ -37,8 +37,15 @@ const UNSUPPORTED = {
 
 /** Классы из libraries.js: их можно объявлять как в скетче — Servo myservo; */
 const LIB_CLASSES = new Set([
-  'Servo', 'DHT', 'DHT11', 'LiquidCrystal_I2C', 'Adafruit_SSD1306', 'Wire', 'TwoWire',
+  'Servo', 'DHT', 'DHT11', 'Stepper', 'LiquidCrystal_I2C', 'Adafruit_SSD1306', 'Wire', 'TwoWire',
 ]);
+
+/** new Array(m).fill(0) для последней размерности. */
+function initRest(dims, d) {
+  if (d >= dims.length - 1) return '.fill(0)';
+  return `.fill(0).map(() => new Array(${dims[d + 1]})${initRest(dims, d + 1)})`;
+}
+function mkRest(dims, d) { return initRest(dims, d); }
 
 /** Склеивает токены аргументов, вставляя пробел только между словами. */
 function joinToks(list) {
@@ -254,17 +261,27 @@ export function transpile(source) {
       // массив: int a[3]; или int a[] = {1,2,3};
       const b1 = nextMeaningful(toks, i);
       if (toks[b1] && toks[b1].t === 'op' && toks[b1].v === '[') {
-        let size = '', j = b1 + 1;
-        while (j < toks.length && !(toks[j].t === 'op' && toks[j].v === ']')) { size += toks[j].v; j++; }
-        const b2 = nextMeaningful(toks, j + 1);
+        // размерности: int a[3]; int m[2][3]; (любое число измерений)
+        const dims = [];
+        let j = b1, k = b1;
+        while (toks[j] && toks[j].t === 'op' && toks[j].v === '[') {
+          let size = '';
+          k = j + 1;
+          while (k < toks.length && !(toks[k].t === 'op' && toks[k].v === ']')) { size += toks[k].v; k++; }
+          dims.push(size.trim() || '1');
+          j = nextMeaningful(toks, k + 1);
+        }
+        const b2 = j;
         if (toks[b2] && toks[b2].t === 'op' && toks[b2].v === '=') {
           emit(' = ');
           i = b2 + 1;
           const b3 = nextMeaningful(toks, i);
           if (toks[b3] && toks[b3].v === '{') { i = b3 + 1; emit('['); braceStack.push('arr'); }
         } else {
-          emit(` = new Array(${size || 1}).fill(0)`);
-          i = j + 1;
+          // без инициализатора — нули нужной формы
+          const expr = `new Array(${dims[0]})${initRest(dims, 0)}`;
+          emit(` = ${dims.length === 1 ? `new Array(${dims[0]}).fill(0)` : expr}`);
+          i = k + 1;
         }
       }
       continue;
@@ -287,7 +304,10 @@ export function transpile(source) {
       if (tk.v === '{') {
         // литерал массива встречается после '=' или ',' — блок кода после ')' или '{'
         const p = prevMeaningful(toks, i);
-        const isLiteral = p >= 0 && toks[p].t === 'op' && (toks[p].v === '=' || toks[p].v === ',' || toks[p].v === '[');
+        // вложенные фигурные скобки внутри литерала массива — тоже массив
+        const inArray = braceStack[braceStack.length - 1] === 'arr';
+        const isLiteral = inArray
+          || (p >= 0 && toks[p].t === 'op' && (toks[p].v === '=' || toks[p].v === ',' || toks[p].v === '['));
         braceStack.push(isLiteral ? 'arr' : 'block');
         emit(isLiteral ? '[' : '{');
         i++;

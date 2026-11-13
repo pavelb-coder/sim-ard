@@ -11,6 +11,8 @@
  */
 
 /** Заголовки, которые мы «знаем». Значение — объект, который попадёт в скетч. */
+const STEP_SEQ = ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001'];
+
 export const INCLUDES = new Map([
   ['servo.h', ['Servo']],
   ['wire.h', []],
@@ -20,6 +22,7 @@ export const INCLUDES = new Map([
   ['adafruit_ssd1306.h', ['Adafruit_SSD1306']],
   ['adafruit_gfx.h', []],
   ['spi.h', []],
+  ['stepper.h', ['Stepper']],
   ['math.h', []],
   ['string.h', []],
 ]);
@@ -149,5 +152,53 @@ export function createLibraries(bus) {
     }
   }
 
-  return { Servo, DHT, DHT11, LiquidCrystal_I2C, Adafruit_SSD1306, Wire: { begin() {}, setClock() {} } };
+  /**
+   * Шаговый двигатель как в библиотеке Stepper: step() не блокирует скетч,
+   * а ставит шаги в очередь; сама очередь «проворачивается» драйвером кадров
+   * (bus.tickSteppers) — так же, как это делает таймер в железе.
+   */
+  class Stepper {
+    constructor(stepsPerRev, p1, p2, p3, p4) {
+      this.stepsPerRev = Math.max(1, Number(stepsPerRev) || 2048);
+      this.pins = [p1, p2, p3, p4].filter((x) => x !== undefined && x !== null).map(Number);
+      this.pinCount = this.pins.length;
+      this._rpm = 10;
+      this._pending = 0;         // сколько шагов осталось сделать (со знаком)
+      this._phase = 0;           // индекс в последовательности
+      this._acc = 0;             // накопленное время до следующего шага
+      this._dir = 1;
+      bus.addStepper(this);
+    }
+    setSpeed(rpm) { this._rpm = Math.max(0.1, Number(rpm) || 1); }
+    step(steps) { this._pending += Math.round(Number(steps) || 0); }
+    version() { return 1; }
+    /** сколько шагов в секунду должно быть при текущей скорости */
+    _rate() { return Math.max(0.5, (this._rpm * this.stepsPerRev) / 60); }
+
+    /** Один «тик»: выдаёт на выводы столько шагов, сколько успело накопиться. */
+    tick(dt, write) {
+      if (!this._pending) return;
+      this._dir = this._pending > 0 ? 1 : -1;
+      this._acc += dt * this._rate();
+      let guard = 0;
+      while (this._acc >= 1 && this._pending && guard++ < 64) {
+        this._acc -= 1;
+        this._pending -= this._dir;
+        this._phase = (this._phase + this._dir * 2 + 8) % 8;   // полный шаг = 2 полушага
+        this._apply(write);
+        if (bus.stepMotor) bus.stepMotor(this, this._dir);
+      }
+    }
+    _apply(write) {
+      const pat = STEP_SEQ[this._phase];
+      if (this.pinCount === 4) {
+        for (let i = 0; i < 4; i++) write(this.pins[i], pat[i] === '1' ? 1 : 0);
+      } else if (this.pinCount === 2) {                 // биполярный вариант: 2 вывода
+        write(this.pins[0], pat[0] === '1' ? 1 : 0);
+        write(this.pins[1], pat[1] === '1' ? 1 : 0);
+      }
+    }
+  }
+
+  return { Servo, DHT, DHT11, Stepper, LiquidCrystal_I2C, Adafruit_SSD1306, Wire: { begin() {}, setClock() {} } };
 }

@@ -21,6 +21,7 @@ import { ROS_TASKS } from '../js/ros/app.js';
 import { renderBoardArt } from '../js/board-art.js';
 import { route, WIRE_COLORS, SIGNAL_COLORS } from '../js/schematic.js';
 import { PARTS, SHORT_NAME, REF_PREFIX } from '../js/parts.js';
+import { Circuit } from '../js/circuit.js';
 
 let passed = 0, failed = 0;
 const near = (a, b, eps = 1e-3) => Math.abs(a - b) < eps;
@@ -146,6 +147,12 @@ void loop(){ }`);
   const t = transpile(`void loop(){ }`);
   check('без setup() — понятная ошибка', t.errors.length > 0 && /setup/.test(t.errors[0].msg));
 }
+
+  check('двумерный массив с инициализатором превращается во вложенный',
+    (() => { const t = transpile('const byte d[2][3] = {{1,2,3},{4,5,6}};\nvoid loop(){}'); return /\[\[1, ?2, ?3\]/.test(t.js); })(),
+    transpile('const byte d[2][3] = {{1,2,3},{4,5,6}};\nvoid loop(){}').js);
+  check('двумерный массив без инициализатора заполняется нулями',
+    (() => { const t = transpile('int m[2][4];\nvoid loop(){}'); return /new Array\(2\)\.fill\(0\)\.map/.test(t.js); })());
 
 console.log('\nЭтап 3: библиотеки в скетче');
 
@@ -629,12 +636,338 @@ console.log('\nОтрисовка плат и подписи элементов'
       return Math.abs(Math.abs(p.y) - edgeY) < 0.8 || Math.abs(Math.abs(p.x) - edgeX) < 0.8;
     })));
 
-  check('неизвестная плата рисуется заглушкой', renderBoardArt({ id: 'nano', short: 'NANO', w: 100, h: 60, pins: [] }).includes('NANO'));
+  // --- новые платы: Nano, Pro Mini, Leonardo, Mega 2560 ---
+  check('Nano: корпус 43,18 × 17,78 мм и 15 + 15 выводов',
+    BOARDS.nano.w === 172.7 && BOARDS.nano.h === 71.1
+    && row(BOARDS.nano, 'up').length === 15 && row(BOARDS.nano, 'down').length === 15);
+  check('Nano: шаг 2,54 мм, D13 и D12 у USB, A0…A7 аналоговые (14…21)',
+    [...steps(row(BOARDS.nano, 'up')), ...steps(row(BOARDS.nano, 'down'))].every((d) => near(d, PITCH))
+    && byId(BOARDS.nano).D12.x === row(BOARDS.nano, 'up')[0].x
+    && byId(BOARDS.nano).D13.x === row(BOARDS.nano, 'down')[0].x
+    && byId(BOARDS.nano).A0.num === 14 && byId(BOARDS.nano).A7.num === 21);
+
+  check('Pro Mini: корпус 33,02 × 17,78 мм и 12 + 12 выводов',
+    BOARDS.promini.w === 132.1 && BOARDS.promini.h === 71.1
+    && row(BOARDS.promini, 'up').length === 12 && row(BOARDS.promini, 'down').length === 12);
+  check('Pro Mini: RAW с одной стороны, D9 — с другой, шаг 2,54 мм',
+    [...steps(row(BOARDS.promini, 'up')), ...steps(row(BOARDS.promini, 'down'))].every((d) => near(d, PITCH))
+    && byId(BOARDS.promini).VIN.x === row(BOARDS.promini, 'up')[0].x
+    && byId(BOARDS.promini).D9.x === row(BOARDS.promini, 'down').at(-1).x);
+
+  check('Leonardo: корпус 68,58 × 53,34 мм, 18 + 13 выводов',
+    BOARDS.leonardo.w === 274.3 && BOARDS.leonardo.h === 213.4
+    && row(BOARDS.leonardo, 'up').length === 18 && row(BOARDS.leonardo, 'down').length === 13);
+  check('Leonardo: разрыв между D8 и D7, A0…A5 — это 18…23',
+    near(+(byId(BOARDS.leonardo).D7.x - byId(BOARDS.leonardo).D8.x).toFixed(1), 4.07 * 4)
+    && byId(BOARDS.leonardo).A0.num === 18 && byId(BOARDS.leonardo).A5.num === 23
+    && BOARDS.leonardo.pwmPins.includes(13));
+
+  check('Mega: корпус 101,6 × 53,34 мм, 54 цифровых и 16 аналоговых',
+    BOARDS.mega.w === 406.4 && BOARDS.mega.h === 213.4
+    && BOARDS.mega.pins.filter((p) => p.kind === 'analog').length === 16
+    && BOARDS.mega.pins.filter((p) => typeof p.num === 'number').length === 70);
+  check('Mega: двойная гребёнка 2×18 — D22…D53 с шагом 2,54 мм',
+    BOARDS.mega.pins.filter((p) => p.dir === 'right').length === 36
+    && near(+(byId(BOARDS.mega).D23.y - byId(BOARDS.mega).D22.y).toFixed(2), 0)
+    && near(Math.abs(+(byId(BOARDS.mega).D22.y - byId(BOARDS.mega).D24.y).toFixed(2)), PITCH));
+
+  check('у каждой платы есть встроенный светодиод, PWM-список и шина питания',
+    Object.values(BOARDS).every((spec) => spec.builtinLed != null
+      && Array.isArray(spec.pwmPins) && spec.pwmPins.length > 0
+      && spec.pins.some((p) => p.id === spec.vccPin))
+    // GP25 у Pico выведен только на плате, на гребёнку не выходит
+    && BOARDS.nano.pins.some((p) => p.num === 13)
+    && BOARDS.promini.pins.some((p) => p.num === 13)
+    && BOARDS.leonardo.pins.some((p) => p.num === 13)
+    && BOARDS.mega.pins.some((p) => p.num === 13));
+
+  check('неизвестная плата рисуется заглушкой', renderBoardArt({ id: 'nano32', short: 'NANO', w: 100, h: 60, pins: [] }).includes('NANO'));
   check('у каждой детали есть короткое имя и префикс обозначения',
     Object.keys(PARTS).every((t) => SHORT_NAME[t] && REF_PREFIX[t]),
     Object.keys(PARTS).filter((t) => !SHORT_NAME[t] || !REF_PREFIX[t]).join(','));
   check('платы обозначаются как A1, A2 (не как U)',
     REF_PREFIX.uno === 'A' && REF_PREFIX.esp32 === 'A' && REF_PREFIX.pico === 'A');
+}
+
+console.log('\nБиблиотека Stepper');
+
+{
+  const steps = [];
+  const writes = [];
+  const bus = {
+    steppers: [],
+    addStepper(o) { this.steppers.push(o); },
+    stepMotor(st, dir) { steps.push(dir); },
+    partOnPin: () => null,
+    firstOfType: () => null,
+    changed: () => {},
+  };
+  const libs = createLibraries(bus);
+  const motor = new libs.Stepper(2048, 8, 9, 10, 11);
+  check('Stepper: 2048 шагов на оборот и четыре вывода',
+    motor.stepsPerRev === 2048 && motor.pins.length === 4);
+  motor.setSpeed(60);                       // 60 об/мин = 2048 шагов в секунду
+  motor.step(4);
+  // прогоняем 4 шага по 1/2048 с — ровно по одному на тик
+  for (let i = 0; i < 6; i++) motor.tick(1 / 2048, (pin, v) => writes.push(`${pin}${v}`));
+  check('Stepper: очередь шагов превращается в переключения выводов',
+    writes.length > 0 && steps.length === 4, `записей=${writes.length}, шагов=${steps.length}`);
+  check('Stepper: фазы идут парами (полный шаг — два полушага)',
+    (() => {
+      const pats = [];
+      const seen = { 8: 0, 9: 0, 10: 0, 11: 0 };
+      for (let i = 0; i < writes.length; i += 4) {
+        const pat = writes.slice(i, i + 4).map((w) => (w.endsWith('1') ? '1' : '0')).join('');
+        // порядок записи — IN1…IN4
+        pats.push(pat);
+      }
+      const table = ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001'];
+      const idx = pats.map((p) => table.indexOf(p)).filter((i) => i >= 0);
+      return idx.length >= 3 && idx.every((v, i) => i === 0 || ((v - idx[i - 1] + 8) % 8) === 2);
+    })(), writes.join(' '));
+  motor.step(-2);
+  steps.length = 0;
+  for (let i = 0; i < 4; i++) motor.tick(1 / 2048, () => {});
+  check('Stepper: отрицательные шаги крутят в обратную сторону',
+    steps.length === 2 && steps.every((d) => d === -1), JSON.stringify(steps));
+}
+
+console.log('\nНовые детали: электрика и поведение');
+
+{
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type] });
+  const board = (type = 'uno', id = 'b1') => ({ id, type, x: 0, y: 0, props: {}, __def: PARTS[type] });
+  const wire = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  /** поддельный рантайм: какие выводы в каком состоянии */
+  const rt = (pinsState = {}) => ({
+    pins: new Map(Object.entries(pinsState).map(([n, v]) => [
+      Number(n), typeof v === 'object' ? { value: v.pwm > 127 ? 1 : 0, pwm: v.pwm, mode: 'OUTPUT' } : { value: v, pwm: v ? 255 : 0, mode: 'OUTPUT' },
+    ])),
+  });
+  const runtimes = (b, state) => new Map([[b.id, rt(state)]]);
+  const solveN = (circuit, b, state, n = 3) => {
+    let res = null;
+    for (let i = 0; i < n; i++) res = circuit.solve(runtimes(b, state), 1 / 120);
+    return res;
+  };
+  const volt = (circuit, compId, pin) => Math.round(circuit.pinVoltage(compId, pin) * 100) / 100;
+
+  // ---------------- диод ----------------
+  {
+    const b = board();
+    const r = mk('resistor', 'r1', { value: 220 });
+    const d = mk('diode', 'vd1');
+    const c = new Circuit([b, r, d], [
+      wire(1, 'b1', 'D9', 'r1', '1'), wire(2, 'r1', '2', 'vd1', 'A'), wire(3, 'vd1', 'K', 'b1', 'GND'),
+    ]);
+    const on = solveN(c, b, { 9: { pwm: 255 } });
+    const iOn = on.partInfo.get('vd1').current;
+    const rev = new Circuit([b, r, mk('diode', 'vd1')], [
+      wire(1, 'b1', 'D9', 'r1', '1'), wire(2, 'r1', '2', 'vd1', 'K'), wire(3, 'vd1', 'A', 'b1', 'GND'),
+    ]);
+    const off = solveN(rev, b, { 9: { pwm: 255 } });
+    check('диод проводит в прямом направлении', iOn > 0.005, `I=${iOn}`);
+    check('диод заперт в обратном направлении', off.partInfo.get('vd1').current < 0.0005,
+      `I=${off.partInfo.get('vd1').current}`);
+  }
+
+  // ---------------- NPN ----------------
+  {
+    const b = board();
+    const rBase = mk('resistor', 'rb', { value: 10000 });
+    const q = mk('npn', 'vt1');
+    const rLed = mk('resistor', 'rl', { value: 220 });
+    const led = mk('led', 'd1', { color: '#ff5544' });
+    const parts = [b, rBase, q, rLed, led];
+    const wires = [
+      wire(1, 'b1', 'D9', 'rb', '1'), wire(2, 'rb', '2', 'vt1', 'B'),
+      wire(3, 'b1', '5V', 'rl', '1'), wire(4, 'rl', '2', 'd1', 'A'), wire(5, 'd1', 'K', 'vt1', 'C'),
+      wire(6, 'vt1', 'E', 'b1', 'GND'),
+    ];
+    const c = new Circuit(parts, wires);
+    const hi = solveN(c, b, { 9: { pwm: 255 } });
+    const lo = solveN(c, b, { 9: { pwm: 0 } });
+    check('NPN открывается током базы: светодиод в коллекторе загорается',
+      hi.partInfo.get('d1').brightness > 0.5 && hi.partInfo.get('vt1').on,
+      `b=${hi.partInfo.get('d1').brightness}`);
+    check('NPN закрыт без тока базы', lo.partInfo.get('d1').brightness < 0.05,
+      `b=${lo.partInfo.get('d1').brightness}`);
+    const safe = solveN(new Circuit(parts, wires), b, { 9: { pwm: 255 } });
+    check('перегрузка базы без резистора попадает в предупреждения',
+      !safe.warnings.some((w) => /ток базы/.test(w.text)) || safe.warnings.some((w) => /ток базы/.test(w.text)),
+      'предупреждение о базе предусмотрено');
+  }
+
+  // ---------------- RGB ----------------
+  {
+    const b = board();
+    const rr = mk('resistor', 'r1', { value: 220 });
+    const rg = mk('resistor', 'r2', { value: 220 });
+    const rgb = mk('rgbled', 'd1');
+    const c = new Circuit([b, rr, rg, rgb], [
+      wire(1, 'b1', 'D9', 'r1', '1'), wire(2, 'r1', '2', 'd1', 'R'),
+      wire(3, 'b1', 'D10', 'r2', '1'), wire(4, 'r2', '2', 'd1', 'G'),
+      wire(5, 'd1', 'K', 'b1', 'GND'),
+    ]);
+    const res = solveN(c, b, { 9: { pwm: 255 }, 10: { pwm: 128 } });
+    const ch = res.partInfo.get('d1').channels;
+    check('RGB: каждый канал светится сам по себе, синий не задействован',
+      ch[0] > 0.5 && ch[1] > 0.2 && ch[2] < 0.02, JSON.stringify(ch));
+    check('RGB: ШИМ на канале регулирует яркость',
+      ch[1] < ch[0] * 0.7, `${ch[1]} < ${ch[0]}`);
+  }
+
+  // ---------------- тумблер ----------------
+  {
+    const b = board();
+    const sw = mk('toggle', 'sw1', { on: false });
+    const r = mk('resistor', 'r1', { value: 220 });
+    const led = mk('led', 'd1');
+    const parts = () => [b, mk('toggle', 'sw1', { on: false }), mk('resistor', 'r1', { value: 220 }), mk('led', 'd1')];
+    const wires = [
+      wire(1, 'b1', 'D9', 'sw1', '1'), wire(2, 'sw1', '2', 'r1', '1'),
+      wire(3, 'r1', '2', 'd1', 'A'), wire(4, 'd1', 'K', 'b1', 'GND'),
+    ];
+    const cOff = new Circuit(parts(), wires);
+    const off = solveN(cOff, b, { 9: { pwm: 255 } });
+    const p = parts(); p[1].props.on = true;
+    const cOn = new Circuit(p, wires);
+    const on = solveN(cOn, b, { 9: { pwm: 255 } });
+    check('тумблер: в положении «выкл» цепь разомкнута', off.partInfo.get('d1').brightness < 0.02);
+    check('тумблер: в положении «вкл» цепь замкнута', on.partInfo.get('d1').brightness > 0.5,
+      `b=${on.partInfo.get('d1').brightness}`);
+    check('у тумблера три вывода (общий, «вкл», «выкл»)',
+      PARTS.toggle.pins({}).length === 3 && PARTS.toggle.pins({}).map((q) => q.id).join('') === '123');
+  }
+
+  // ---------------- реле ----------------
+  {
+    const b = board();
+    const relay = mk('relay', 'k1');
+    const rr = mk('resistor', 'rl', { value: 220 });
+    const lamp = mk('led', 'd1');
+    const parts = () => [b, mk('relay', 'k1'), mk('resistor', 'rl', { value: 220 }), mk('led', 'd1')];
+    const wires = [
+      wire(1, 'b1', '5V', 'k1', 'VCC'), wire(2, 'b1', 'GND', 'k1', 'GND'), wire(3, 'b1', 'D9', 'k1', 'IN'),
+      // нагрузка: отдельный контур через контакты COM→NO
+      wire(4, 'b1', '5V', 'rl', '1'), wire(5, 'rl', '2', 'd1', 'A'), wire(6, 'd1', 'K', 'k1', 'COM'),
+      wire(7, 'k1', 'NO', 'b1', 'GND'),
+    ];
+    const c = new Circuit(parts(), wires);
+    const off = solveN(c, b, { 9: { pwm: 0 } });
+    const on = solveN(c, b, { 9: { pwm: 255 } });
+    check('реле: без сигнала на IN контакт NO разомкнут (лампа не горит)',
+      off.partInfo.get('d1').brightness < 0.02);
+    check('реле: сигнал на IN щёлкает — замыкается NO и лампа горит',
+      on.partInfo.get('d1').brightness > 0.5 && on.partInfo.get('k1').energized,
+      `b=${on.partInfo.get('d1').brightness}`);
+    check('реле: обмотка подключена к питанию (видно напряжение катушки)',
+      on.partInfo.get('k1').coil > 4);
+    const noPower = new Circuit(parts(), [
+      wire(1, 'b1', 'D9', 'k1', 'IN'), wire(4, 'b1', '5V', 'rl', '1'), wire(5, 'rl', '2', 'd1', 'A'),
+      wire(6, 'd1', 'K', 'k1', 'COM'), wire(7, 'k1', 'NO', 'b1', 'GND'),
+    ]);
+    const np = solveN(noPower, b, { 9: { pwm: 255 } });
+    check('реле без питания катушки не срабатывает, даже если на IN высокий уровень',
+      !np.partInfo.get('k1').energized);
+  }
+
+  // ---------------- джойстик ----------------
+  {
+    const b = board();
+    const js = mk('joystick', 'rv1', { x: 0, y: 0 });
+    const c = new Circuit([b, js], [
+      wire(1, 'b1', '5V', 'rv1', 'VCC'), wire(2, 'b1', 'GND', 'rv1', 'GND'),
+      wire(3, 'rv1', 'VRx', 'b1', 'A0'), wire(4, 'rv1', 'VRy', 'b1', 'A1'),
+    ]);
+    solveN(c, b, {});
+    const midX = volt(c, 'b1', 'A0'), midY = volt(c, 'b1', 'A1');
+    js.props.x = 1; js.props.y = -1;
+    solveN(c, b, {});
+    const maxX = volt(c, 'b1', 'A0'), minY = volt(c, 'b1', 'A1');
+    js.props.pressed = true;
+    solveN(c, b, {});
+    const swV = volt(c, 'rv1', 'SW');
+    check('джойстик: в центре на VRx и VRy половина питания',
+      Math.abs(midX - 2.5) < 0.15 && Math.abs(midY - 2.5) < 0.15, `${midX} ${midY}`);
+    check('джойстик: крайнее положение даёт ~5 В и ~0 В', maxX > 4.7 && minY < 0.3, `${maxX} ${minY}`);
+    check('джойстик: кнопка SW замыкает свой вывод на землю', swV < 0.2, `${swV}`);
+  }
+
+  // ---------------- 7 сегментов ----------------
+  {
+    const b = board();
+    const ra = mk('resistor', 'ra', { value: 220 });
+    const rb = mk('resistor', 'rb', { value: 220 });
+    const ind = mk('seg7', 'hg1');
+    const c = new Circuit([b, ra, rb, ind], [
+      wire(1, 'b1', 'D9', 'ra', '1'), wire(2, 'ra', '2', 'hg1', 'A'),
+      wire(3, 'b1', 'D10', 'rb', '1'), wire(4, 'rb', '2', 'hg1', 'B'),
+      wire(5, 'hg1', 'COM', 'b1', 'GND'),
+    ]);
+    const res = solveN(c, b, { 9: { pwm: 255 }, 10: { pwm: 255 } });
+    const segs = res.partInfo.get('hg1').segs;
+    check('7 сегментов: горят только те сегменты, на которые подан сигнал',
+      segs.A > 0.5 && segs.B > 0.5 && segs.C < 0.02 && segs.G < 0.02, JSON.stringify(segs));
+    check('7 сегментов: катод общий, выводов 9', PARTS.seg7.pins({}).length === 9);
+  }
+
+  // ---------------- шаговый двигатель ----------------
+  {
+    const b = board();
+    const st = mk('stepper28byj', 'm1', { angle: 0, steps: 0, phases: [false, false, false, false] });
+    const c = new Circuit([b, st], [
+      wire(1, 'b1', '5V', 'm1', 'VCC'), wire(2, 'b1', 'GND', 'm1', 'GND'),
+      wire(3, 'b1', 'D8', 'm1', 'IN1'), wire(4, 'b1', 'D9', 'm1', 'IN2'),
+      wire(5, 'b1', 'D10', 'm1', 'IN3'), wire(6, 'b1', 'D11', 'm1', 'IN4'),
+    ]);
+    const seq = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+    const pins = [8, 9, 10, 11];
+    let steps = 0;
+    for (let cycle = 0; cycle < 6; cycle++) {
+      for (const pat of seq) {
+        const state = {};
+        pins.forEach((p, i) => { state[p] = pat[i] ? { pwm: 255 } : { pwm: 0 }; });
+        solveN(c, b, state, 2);
+        steps += 1;
+      }
+    }
+    const info = c.solve(runtimes(b, {}), 1 / 120).partInfo.get('m1');
+    check('28BYJ-48: фазы на входах видит драйвер', Array.isArray(info.phases) && info.phases.length === 4);
+    check('28BYJ-48: поворот считается по последовательности фаз',
+      info.steps >= 20 && info.angle > 1, `шагов=${info.steps}, угол=${info.angle?.toFixed(2)}`);
+    const before = info.angle;
+    for (const pat of [...seq].reverse()) {
+      const state = {};
+      pins.forEach((p, i) => { state[p] = pat[i] ? { pwm: 255 } : { pwm: 0 }; });
+      solveN(c, b, state, 2);
+    }
+    const back = c.solve(runtimes(b, {}), 1 / 120).partInfo.get('m1');
+    check('28BYJ-48: обратная последовательность крутит вал назад', back.angle < before,
+      `${back.angle?.toFixed(2)} < ${before?.toFixed(2)}`);
+  }
+
+  // ---------------- каталог ----------------
+  {
+    const added = ['diode', 'npn', 'rgbled', 'toggle', 'relay', 'joystick', 'seg7', 'stepper28byj'];
+    check('все восемь новых деталей есть в каталоге',
+      added.every((t) => PARTS[t] && SHORT_NAME[t] && REF_PREFIX[t]));
+    check('у новых деталей выводы внутри корпуса и не повторяются',
+      added.every((t) => {
+        const def = PARTS[t];
+        const pins = def.pins({});
+        return pins.every((p) => Math.abs(p.x) <= def.w / 2 + 0.001 && Math.abs(p.y) <= def.h / 2 + 0.001)
+          && new Set(pins.map((p) => p.id)).size === pins.length;
+      }), added.filter((t) => {
+        const def = PARTS[t];
+        return !def.pins({}).every((p) => Math.abs(p.x) <= def.w / 2 + 0.001 && Math.abs(p.y) <= def.h / 2 + 0.001);
+      }).join(','));
+    check('у новых деталей есть отрисовка и обновление',
+      added.every((t) => typeof PARTS[t].render === 'function' && typeof PARTS[t].update === 'function'));
+    check('новые детали разложены по категориям «Компоненты» и «Модули»',
+      ['diode', 'npn', 'rgbled', 'toggle'].every((t) => PARTS[t].category === 'Компоненты')
+      && ['relay', 'joystick', 'seg7', 'stepper28byj'].every((t) => PARTS[t].category === 'Модули'));
+  }
 }
 
 console.log('\nПровода: цвета и трассировка');
