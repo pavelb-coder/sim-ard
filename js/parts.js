@@ -748,16 +748,16 @@ const POWER = {
     render(comp) {
       const v = Number(comp.props?.voltage) || 6;
       const cells = [-48, -24, 0, 24].map((x, i) => `
-        <rect x="${x}" y="-24" width="18" height="42" rx="3" fill="#2a3440" stroke="#46586a"/>
-        <rect x="${x + 6}" y="-28" width="6" height="5" rx="1.5" fill="#c3ccd4"/>
-        <rect x="${x + 2}" y="-16" width="14" height="8" rx="1" fill="${i % 2 ? '#c0392b' : '#3d5a7a'}"/>
-        <text x="${x + 9}" y="10" style="font:5px ui-monospace;fill:#7d93a6;text-anchor:middle">1,5</text>`).join('');
+        <rect x="${x}" y="-30" width="18" height="38" rx="3" fill="#2a3440" stroke="#46586a"/>
+        <rect x="${x + 6}" y="-34" width="6" height="5" rx="1.5" fill="#c3ccd4"/>
+        <rect x="${x + 2}" y="-22" width="14" height="8" rx="1" fill="${i % 2 ? '#c0392b' : '#3d5a7a'}"/>
+        <text x="${x + 9}" y="2" style="font:5px ui-monospace;fill:#7d93a6;text-anchor:middle">1,5</text>`).join('');
       return partTag(comp, 132, 72, `
-        <rect x="-62" y="-32" width="124" height="56" rx="3" fill="#101820" stroke="#2b3945"/>
+        <rect x="-62" y="-40" width="124" height="70" rx="3" fill="#101820" stroke="#2b3945"/>
         ${cells}
-        <line x1="-22" y1="24" x2="-22" y2="32" stroke="#c0392b" stroke-width="1.6"/>
-        <line x1="22" y1="24" x2="22" y2="32" stroke="#8aa4b8" stroke-width="1.6"/>
-        <text x="0" y="22" style="font:6px ui-monospace;fill:#ffd166;text-anchor:middle">${v.toFixed(1)} В = 4 × 1,5 В</text>`);
+        <text x="0" y="20" style="font:6px ui-monospace;fill:#ffd166;text-anchor:middle">${v.toFixed(1)} В = 4 × 1,5 В</text>
+        <line x1="-22" y1="22" x2="-22" y2="32" stroke="#c0392b" stroke-width="1.6"/>
+        <line x1="22" y1="22" x2="22" y2="32" stroke="#8aa4b8" stroke-width="1.6"/>`);
     },
     update() {},
   },
