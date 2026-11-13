@@ -1,12 +1,13 @@
 """Прогон всех примеров в браузере: ошибки, Serial, осциллограф, скриншоты.
 
-Запуск (из любого каталога):
+Запуск: сначала сервер на 8080 (./start.sh), потом прогон.
+  ./start.sh &
   LD_LIBRARY_PATH=/tmp/libsys/usr/lib/x86_64-linux-gnu python3 tests/probe_all.py
 """
 import asyncio, json, pathlib
 from playwright.async_api import async_playwright
 
-URL = "http://127.0.0.1:8000/"
+URL = "http://127.0.0.1:8080/"
 OUT = pathlib.Path(__file__).parent / "shots"
 OUT.mkdir(exist_ok=True)
 
