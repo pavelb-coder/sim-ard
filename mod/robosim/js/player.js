@@ -181,14 +181,17 @@
                 if (!json || json.error) {
                     throw new Error((json && json.message) || 'unknown');
                 }
+                var verdict = json.passed ? STR.passed : STR.failed;
                 var parts = [];
-                if (task) {
-                    parts.push(json.passed ? STR.passed : STR.failed);
-                }
                 if (json.saved) {
+                    // Работа сохранена: «Задание пройдено. Работа сдана, результат: 100%».
+                    if (task) {
+                        parts.push(verdict);
+                    }
                     parts.push(STR.sentscore + json.score + '%');
                 } else {
-                    parts.push((json.passed ? STR.passed : STR.failed) + ' — ' + json.score + '%');
+                    // «Проверить без сдачи»: «Задание не пройдено — 0%».
+                    parts.push(verdict + ' — ' + json.score + '%');
                 }
                 if (json.grade !== null && json.grade !== undefined) {
                     parts.push('оценка: ' + json.grade);
