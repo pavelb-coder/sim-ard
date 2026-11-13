@@ -561,17 +561,64 @@ console.log('\nОтрисовка плат и подписи элементов'
 {
   const uno = renderBoardArt(BOARDS.uno);
   check('Uno: микросхема, логотип и разъёмы', uno.includes('ATmega328P') && uno.includes('ARDUINO') && uno.includes('ICSP'));
-  check('Uno: подписи выводов на шелкографии', uno.includes('>D13<') && uno.includes('>GND<') && uno.includes('>5V<'));
+  check('Uno: подписи выводов на шелкографии как в железе', uno.includes('>13<') && uno.includes('>GND<') && uno.includes('>5V<') && uno.includes('>A0<'));
   check('Uno: у каждого вывода есть золотая площадка',
     (uno.match(/d4af37/g) || []).length >= BOARDS.uno.pins.length, `площадок ${(uno.match(/d4af37/g) || []).length}`);
 
   const esp = renderBoardArt(BOARDS.esp32);
   check('ESP32: модуль WROOM-32 и кнопки EN/BOOT', esp.includes('ESP32-WROOM-32') && esp.includes('BOOT'));
-  check('ESP32: подписи GPIO на плате', esp.includes('>G26<') && esp.includes('>G32<'));
+  check('ESP32: подписи GPIO на плате как в железе', esp.includes('>26<') && esp.includes('>32<')
+    && BOARDS.esp32.pins.find((p) => p.id === 'G26').silk === '26');
 
   const pico = renderBoardArt(BOARDS.pico);
   check('Pico: RP2040, BOOTSEL и логотип', pico.includes('RP2040') && pico.includes('BOOTSEL') && pico.includes('Raspberry Pi'));
   check('Pico: подписи GP и зубчатые полуотверстия', pico.includes('>GP0<') && pico.includes('>GP28<'));
+
+  // --- реальная геометрия: размеры плат и шаг выводов 2,54 мм ---
+  const PITCH = 2.54 * 4;                       // 10,16 px
+  const byId = (spec) => Object.fromEntries(spec.pins.map((p) => [p.id, p]));
+  const row = (spec, dir) => spec.pins.filter((p) => p.dir === dir);
+  const steps = (pins) => pins.slice(1).map((p, i) => +(p.x - pins[i].x).toFixed(2));
+  const near = (v, t) => Math.abs(v - t) < 0.15;
+
+  check('Uno: корпус 68,58 × 53,34 мм', BOARDS.uno.w === 274.3 && BOARDS.uno.h === 213.4,
+    `${BOARDS.uno.w}×${BOARDS.uno.h}`);
+  check('Uno: цифровые выводы с шагом 2,54 мм',
+    steps(row(BOARDS.uno, 'up').slice(0, 7)).every((d) => near(d, PITCH)),
+    steps(row(BOARDS.uno, 'up')).join(','));
+  check('Uno: между D8 и D7 настоящий разрыв (1,6 шага, 4,07 мм)',
+    near(+(byId(BOARDS.uno).D7.x - byId(BOARDS.uno).D8.x).toFixed(1), 4.07 * 4));
+  check('Uno: D13 у левого края, D0 у правого (как на плате)',
+    Math.abs(byId(BOARDS.uno).D13.x - (28.96 * 4 - BOARDS.uno.w / 2)) < 0.2
+    && Math.abs(byId(BOARDS.uno).D0.x - (63.5 * 4 - BOARDS.uno.w / 2)) < 0.2);
+  check('Uno: аналоговые входы на нижней гребёнке справа',
+    row(BOARDS.uno, 'down').map((p) => p.id).join(',') === '3V3,5V,GND,A0,A1,A2,A3,A4,A5');
+
+  check('ESP32: корпус 51,45 × 28,33 мм и 2 × 15 выводов',
+    BOARDS.esp32.w === 205.8 && BOARDS.esp32.h === 113.3
+    && row(BOARDS.esp32, 'up').length === 15 && row(BOARDS.esp32, 'down').length === 15);
+  check('ESP32: шаг выводов 2,54 мм',
+    [...steps(row(BOARDS.esp32, 'up')), ...steps(row(BOARDS.esp32, 'down'))].every((d) => near(d, PITCH)));
+  check('ESP32: 3V3 и VIN на одном конце, IO13 и IO15 — на другом',
+    byId(BOARDS.esp32)['3V3'].x === row(BOARDS.esp32, 'up')[14].x
+    && byId(BOARDS.esp32).VIN.x === row(BOARDS.esp32, 'down')[14].x
+    && byId(BOARDS.esp32).G13.x === row(BOARDS.esp32, 'up')[0].x);
+
+  check('Pico: корпус 51 × 21 мм и 40 выводов (20 + 20)',
+    BOARDS.pico.w === 204 && BOARDS.pico.h === 84
+    && row(BOARDS.pico, 'up').length === 20 && row(BOARDS.pico, 'down').length === 20);
+  check('Pico: шаг выводов 2,54 мм',
+    [...steps(row(BOARDS.pico, 'up')), ...steps(row(BOARDS.pico, 'down'))].every((d) => near(d, PITCH)));
+  check('Pico: GP0 сверху слева, GP16 снизу справа, VBUS снизу слева',
+    byId(BOARDS.pico).GP0.x === row(BOARDS.pico, 'up')[0].x
+    && byId(BOARDS.pico).GP16.x === row(BOARDS.pico, 'down')[19].x
+    && byId(BOARDS.pico).VBUS.x === row(BOARDS.pico, 'down')[0].x);
+  check('Pico: GP26…GP28 — аналоговые, у GP25 номера вывода на гребёнке нет',
+    byId(BOARDS.pico).GP26.kind === 'analog' && !byId(BOARDS.pico).GP25);
+
+  check('у всех плат выводы стоят на краю корпуса',
+    Object.values(BOARDS).every((spec) => spec.pins.every((p) => Math.abs(Math.abs(p.y) - spec.h / 2) < 0.2
+      || Math.abs(Math.abs(p.x) - spec.w / 2) < 0.2)));
 
   check('неизвестная плата рисуется заглушкой', renderBoardArt({ id: 'nano', short: 'NANO', w: 100, h: 60, pins: [] }).includes('NANO'));
   check('у каждой детали есть короткое имя и префикс обозначения',

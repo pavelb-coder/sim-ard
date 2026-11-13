@@ -411,7 +411,7 @@ for (const spec of Object.values(BOARDS)) {
     h: spec.h,
     board: true,
     spec,
-    pins: () => spec.pins,
+    pins: () => spec.pins.filter((p) => !p.decor),   // служебные (EN, RUN) — только краска
     render: (comp) => renderBoard(comp, spec),
     update(g, comp, env) {
       const glow = g.querySelector('.builtin-glow');
