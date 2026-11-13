@@ -22,7 +22,21 @@
      data-task="{{taskid}}"
      data-external="{{#external}}1{{/external}}{{^external}}0{{/external}}"
      data-cansubmit="{{#cansubmit}}1{{/cansubmit}}{{^cansubmit}}0{{/cansubmit}}"
-     data-maxgrade="{{maxgrade}}">
+     data-maxgrade="{{maxgrade}}"
+     data-str-loading="{{#str}}status_loading, mod_robosim{{/str}}"
+     data-str-ready="{{#str}}status_ready, mod_robosim{{/str}}"
+     data-str-notask="{{#str}}status_notask, mod_robosim{{/str}}"
+     data-str-passed="{{#str}}status_passed, mod_robosim{{/str}}"
+     data-str-failed="{{#str}}status_failed, mod_robosim{{/str}}"
+     data-str-sent="{{#str}}status_sent, mod_robosim{{/str}}"
+     data-str-sentscore="{{#str}}status_sentscore, mod_robosim{{/str}}"
+     data-str-sending="{{#str}}status_sending, mod_robosim{{/str}}"
+     data-str-error="{{#str}}status_error, mod_robosim{{/str}}"
+     data-str-noframe="{{#str}}status_noframe, mod_robosim{{/str}}"
+     data-str-offline="{{#str}}status_offline, mod_robosim{{/str}}"
+     data-str-grade="{{#str}}status_grade, mod_robosim{{/str}}"
+     data-str-left="{{#str}}status_left, mod_robosim{{/str}}"
+     data-str-needrun="{{#str}}status_needrun, mod_robosim{{/str}}">
 
     {{#hasintro}}
     <div class="robosim-intro">{{{intro}}}</div>
@@ -37,7 +51,7 @@
         <strong>{{#str}}viewingsubmission, mod_robosim{{/str}}</strong>
         {{#str}}viewingsubmissionfor, mod_robosim{{/str}} {{user}} —
         {{#str}}attempt, mod_robosim{{/str}} {{attempt}}, {{score}}%,
-        {{#passed}}{{#str}}passed, mod_robosim{{/str}}{{/passed}}{{^passed}}{{#str}}failed, mod_robosim{{/str}}{{/failed}},
+        {{#passed}}{{#str}}passed, mod_robosim{{/str}}{{/passed}}{{^passed}}{{#str}}failed, mod_robosim{{/str}}{{/passed}},
         {{time}}.
         <a href="{{backurl}}" class="btn btn-sm btn-outline-secondary ms-2">{{#str}}backtostudent, mod_robosim{{/str}}</a>
     </div>

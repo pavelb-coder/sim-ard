@@ -132,13 +132,14 @@
 
 .robosim-report .robosim-gradeform {
     display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     gap: .25rem;
     white-space: nowrap;
 }
 
 .robosim-report .robosim-points {
-    width: 5.5rem;
+    width: 4.75rem;
 }
 
 @media (max-width: 720px) {

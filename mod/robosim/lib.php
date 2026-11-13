@@ -217,6 +217,8 @@ function robosim_grade_item_update($robosim, $grades = null) {
     global $CFG;
     require_once($CFG->libdir . '/gradelib.php');
 
+    $grades = robosim_key_grades($grades);
+
     $params = [
         'itemname' => $robosim->name,
         'gradetype' => GRADE_TYPE_VALUE,
@@ -229,6 +231,33 @@ function robosim_grade_item_update($robosim, $grades = null) {
     }
 
     return grade_update('mod/robosim', $robosim->course, 'mod', 'robosim', $robosim->id, 0, $grades, $params);
+}
+
+/**
+ * Приводит список оценок к виду, который требует grade_update(): ключ — id ученика.
+ *
+ * Ядро Moodle принимает только $grades[$userid], всё остальное молча игнорирует
+ * с сообщением «Incorrect grade array index, must be user id». Поэтому здесь
+ * принимаем и обычный список, и ассоциативный массив.
+ *
+ * @param array|string|null $grades оценки
+ * @return array|null
+ */
+function robosim_key_grades($grades) {
+    if (!is_array($grades)) {
+        return $grades;
+    }
+    $keyed = [];
+    foreach ($grades as $userid => $grade) {
+        if (is_object($grade)) {
+            $grade->userid = (int) ($grade->userid ?? $userid);
+            $keyed[$grade->userid] = $grade;
+        } else if (is_array($grade)) {
+            $grade['userid'] = (int) ($grade['userid'] ?? $userid);
+            $keyed[$grade['userid']] = (object) $grade;
+        }
+    }
+    return $keyed ?: null;
 }
 
 /**

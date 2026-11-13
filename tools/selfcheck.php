@@ -186,6 +186,41 @@ foreach ($provided as $name) {
     }
 }
 
+// ------------------------------------------------- баланс секций шаблона ------
+// Mustache строго следит за парностью: {{#x}}…{{/x}}, {{^x}}…{{/x}},
+// {{#str}}…{{/str}}. Ошибка в одном теге роняет всю страницу элемента курса,
+// поэтому проверяем стеком.
+$mustachefiles = array_merge(files_with($root, '.mustache'));
+foreach ($mustachefiles as $file) {
+    $lines = explode("\n", file_get_contents($file));
+    $stack = [];
+    foreach ($lines as $number => $line) {
+        if (!preg_match_all('/\{\{\s*([#^\/])\s*([a-zA-Z0-9_.-]+)/', $line, $matches, PREG_SET_ORDER)) {
+            continue;
+        }
+        foreach ($matches as $match) {
+            [$whole, $sigil, $name] = $match;
+            if ($sigil === '#' || $sigil === '^') {
+                $stack[] = ['name' => $name, 'line' => $number + 1];
+            } else {
+                $open = array_pop($stack);
+                if (!$open || $open['name'] !== $name) {
+                    fail(basename($file) . ": закрывающий тег {{/$name}} на строке " . ($number + 1)
+                        . ($open ? " не совпадает с {{#{$open['name']}}} (строка {$open['line']})" : ' без открывающего'));
+                    continue 2;
+                }
+            }
+        }
+    }
+    if ($stack) {
+        $open = end($stack);
+        fail(basename($file) . ": не закрыта секция {{#{$open['name']}}} (строка {$open['line']})");
+    }
+}
+if ($mustachefiles) {
+    ok();
+}
+
 // ------------------------------------------------------------- база -----------
 if (!function_exists('simplexml_load_file')) {
     // На сервере без php-xml (например, чистая консоль) проверку схемы пропускаем.

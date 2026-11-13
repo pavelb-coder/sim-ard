@@ -36,8 +36,8 @@ if ($action === 'grade' && $submissionid) {
     $points = unformat_float(optional_param('points', 0, PARAM_RAW));
     $points = max(0, min((float) $robosim->grade, (float) $points));
 
-    $grade = ['userid' => $submission->userid, 'rawgrade' => $points];
-    robosim_grade_item_update($robosim, [$grade]);
+    $grade = [(int) $submission->userid => (object) ['userid' => (int) $submission->userid, 'rawgrade' => $points]];
+    robosim_grade_item_update($robosim, $grade);
 
     $DB->set_field('robosim_submissions', 'status', 'graded', ['id' => $submission->id]);
     $DB->set_field('robosim_submissions', 'grade', $points, ['id' => $submission->id]);

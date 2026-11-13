@@ -13,21 +13,17 @@
 (function() {
     'use strict';
 
-    var STR = {
-        loading: 'Симулятор загружается…',
-        ready: 'Симулятор готов. Соберите схему и нажмите «Сдать работу».',
-        notask: 'В этом элементе курса нет задания для автопроверки: работу проверит учитель.',
-        passed: 'Задание пройдено',
-        failed: 'Задание не пройдено',
-        sent: 'Работа сдана',
-        sentscore: 'Работа сдана, результат: ',
-        sending: 'Отправляем…',
-        error: 'Не удалось отправить работу: ',
-        noframe: 'Симулятор ещё не загрузился — подождите пару секунд.',
-        offline: 'Страница симулятора недоступна.',
-        needrun: 'Сначала нажмите «Старт» в симуляторе и дайте схеме поработать пару секунд: ' +
-            'часть проверок смотрит на работающую схему. Нажмите кнопку ещё раз, чтобы всё равно сдать.'
-    };
+    // Тексты берём из data-str-* (их подставляет шаблон через get_string),
+    // поэтому интерфейс говорит на языке сайта, а не только по-русски.
+    var STR = {};
+
+    function ready(fn) {
+        if (document.readyState !== 'loading') {
+            fn();
+        } else {
+            document.addEventListener('DOMContentLoaded', fn);
+        }
+    }
 
     function ready(fn) {
         if (document.readyState !== 'loading') {
@@ -42,6 +38,28 @@
         if (!root) {
             return;
         }
+
+        function t(name, fallback) {
+            var value = root.getAttribute('data-str-' + name);
+            return value && value.trim() ? value : fallback;
+        }
+
+        STR = {
+            loading: t('loading', 'Симулятор загружается…'),
+            ready: t('ready', 'Симулятор готов. Соберите схему и нажмите «Сдать работу».'),
+            notask: t('notask', 'В этом элементе курса нет задания для автопроверки: работу проверит учитель.'),
+            passed: t('passed', 'Задание пройдено'),
+            failed: t('failed', 'Задание не пройдено'),
+            sent: t('sent', 'Работа сдана'),
+            sentscore: t('sentscore', 'Работа сдана, результат: '),
+            sending: t('sending', 'Отправляем…'),
+            error: t('error', 'Не удалось отправить работу: '),
+            noframe: t('noframe', 'Симулятор ещё не загрузился — подождите пару секунд.'),
+            offline: t('offline', 'Страница симулятора недоступна.'),
+            grade: t('grade', 'оценка: '),
+            left: t('left', 'Осталось попыток: '),
+            needrun: t('needrun', 'Сначала нажмите «Старт» в симуляторе и дайте схеме поработать пару секунд.')
+        };
 
         var frame = root.querySelector('[data-region="frame"]');
         var statusEl = root.querySelector('[data-region="status"]');
@@ -194,11 +212,11 @@
                     parts.push(verdict + ' — ' + json.score + '%');
                 }
                 if (json.grade !== null && json.grade !== undefined) {
-                    parts.push('оценка: ' + json.grade);
+                    parts.push(STR.grade + json.grade);
                 }
                 setStatus(parts.join('. '), json.passed ? 'ok' : 'warn');
                 if (json.saved && json.attemptsleft !== null && json.attemptsleft !== undefined) {
-                    setStatus(parts.join('. ') + '. Осталось попыток: ' + json.attemptsleft, json.passed ? 'ok' : 'warn');
+                    setStatus(parts.join('. ') + '. ' + STR.left + json.attemptsleft, json.passed ? 'ok' : 'warn');
                 }
                 return json;
             }).catch(function(error) {
