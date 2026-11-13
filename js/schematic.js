@@ -10,6 +10,10 @@
 import { PARTS, pinWorld, allPins, REF_PREFIX } from './parts.js';
 
 const snap = (v) => Math.round(v / 5) * 5;
+
+/** Цвета проводов: земля, питание и «сигнальная» палитра по кругу. */
+export const WIRE_COLORS = { gnd: '#93a4b4', vcc: '#f2555a', v33: '#f5a25d', vin: '#f5a25d' };
+export const SIGNAL_COLORS = ['#f2c94c', '#4ade80', '#5aa9e6', '#c084fc', '#2dd4bf', '#fb923c', '#f472b6', '#a3e635'];
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 export class Schematic {
@@ -28,6 +32,7 @@ export class Schematic {
     this.moved = false;
 
     this.layerWires = svg.querySelector('#wiresLayer');
+    this.layerHits = svg.querySelector('#wireHitLayer');
     this.layerParts = svg.querySelector('#partsLayer');
     this.layerPins = svg.querySelector('#pinsLayer');
     this.layerPending = svg.querySelector('#pendingLayer');
@@ -122,14 +127,34 @@ export class Schematic {
       p.ref = `${prefix}${counts[prefix]}`;
     }
 
-    // провода
-    let wsvg = '';
-    for (const w of this.wires) {
-      const d = this.wirePath(w);
-      if (!d) continue;
-      const sel = this.selected?.kind === 'wire' && this.selected.id === w.id ? ' selected' : '';
-      wsvg += `<path class="wire-hit" d="${d}"/><path class="wire${sel}" d="${d}" data-wire="${w.id}"/>`;
+    // выводы, к которым ведёт выделенный провод — обводим, чтобы было видно, куда он идёт
+    const linked = new Set();
+    if (this.selected?.kind === 'wire') {
+      const w = this.wires.find((q) => q.id === this.selected.id);
+      if (w) { linked.add(`${w.a.compId}:${w.a.pin}`); linked.add(`${w.b.compId}:${w.b.pin}`); }
     }
+
+    // провода: тёмная обводка + цветной провод + точки на концах
+    let wsvg = '';
+    let hitsvg = '';
+    let signal = 0;
+    for (const w of this.wires) {
+      const geo = this.wireGeom(w);
+      if (!geo) continue;
+      const { d, A, B } = geo;
+      const col = this.wireColor(w, this.pinKind(w.a) === 'gnd' || this.pinKind(w.b) === 'gnd' ? 0 : signal++);
+      const sel = this.selected?.kind === 'wire' && this.selected.id === w.id;
+      const extra = sel ? ' selected' : '';
+      const gap = sel ? ' hot' : '';
+      hitsvg += `<path class="wire-hit${extra}" d="${d}" data-wire="${w.id}"/>`;
+      wsvg += `<g class="wire-g${gap}" data-wire-g="${w.id}" style="--wc:${col}">
+        <path class="wire-case" d="${d}"/>
+        <path class="wire${extra}" d="${d}" data-wire="${w.id}" style="stroke:${col}"/>
+        <circle class="wire-dot" data-end="a" cx="${A.x}" cy="${A.y}" r="2.6" fill="${col}"/>
+        <circle class="wire-dot" data-end="b" cx="${B.x}" cy="${B.y}" r="2.6" fill="${col}"/>
+      </g>`;
+    }
+    this.layerHits.innerHTML = hitsvg;
     this.layerWires.innerHTML = wsvg;
 
     // детали
@@ -148,7 +173,8 @@ export class Schematic {
         const key = `${pin.compId}:${pin.pin}`;
         const active = this.pending && this.pending.compId === pin.compId && this.pending.pin === pin.pin ? ' active' : '';
         const r = p.__def.board ? 3.2 : 4.2;
-        pinsvg += `<circle class="pin${p.__def.board ? ' pin-board' : ''}${active}" data-key="${key}" data-pin="${pin.compId}|${pin.pin}" cx="${pin.x}" cy="${pin.y}" r="${r}"/>`;
+        const link = linked.has(key) ? ' linked' : '';
+        pinsvg += `<circle class="pin${p.__def.board ? ' pin-board' : ''}${active}${link}" data-key="${key}" data-pin="${pin.compId}|${pin.pin}" cx="${pin.x}" cy="${pin.y}" r="${r}"/>`;
         // у платы подписи выводов уже нарисованы на корпусе — не дублируем
         if (this.view.s > 0.75 && !p.__def.board) {
           pinsvg += `<text x="${pin.x}" y="${pin.y - 7}" style="font:6px ui-monospace;fill:#6f869a;text-anchor:middle;pointer-events:none">${pin.label}</text>`;
@@ -173,12 +199,54 @@ export class Schematic {
   }
 
   wirePath(w) {
+    const geo = this.wireGeom(w);
+    return geo ? geo.d : null;
+  }
+
+  /** Точки начала и конца провода + строка path. */
+  wireGeom(w) {
     const pa = this.part(w.a.compId), pb = this.part(w.b.compId);
     if (!pa || !pb) return null;
     const A = pinWorld(pa, w.a.pin), B = pinWorld(pb, w.b.pin);
     if (!A || !B) return null;
-    const pts = route(A, B);
-    return pts.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ');
+    const boardPart = pa.__def.board ? pa : pb.__def.board ? pb : null;
+    const pts = route(A, B, {
+      lane: this.wireLane(w),
+      aBoard: !!pa.__def.board,
+      bBoard: !!pb.__def.board,
+      box: boardPart ? {
+        x1: boardPart.x - boardPart.__def.w / 2,
+        y1: boardPart.y - boardPart.__def.h / 2,
+        x2: boardPart.x + boardPart.__def.w / 2,
+        y2: boardPart.y + boardPart.__def.h / 2,
+      } : null,
+    });
+    return { d: pts.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' '), A, B };
+  }
+
+  /** Номер «коридора»: соседние провода идут на разной высоте, а не поверх друг друга. */
+  wireLane(w) {
+    const i = this.wires.indexOf(w);
+    return ((i % 5) - 2) * 9;
+  }
+
+  /** Характер вывода: земля, питание или сигнал — от него зависит цвет провода. */
+  pinKind(end) {
+    const part = this.part(end.compId);
+    const pin = part?.__def?.pins(part).find((q) => q.id === end.pin);
+    return pin?.kind || 'digital';
+  }
+
+  /**
+   * Цвет провода как у настоящего монтажа: земля — стальная, питание — красное,
+   * сигнальные — по очереди из палитры, чтобы соседние провода различались.
+   */
+  wireColor(w, index) {
+    const ka = this.pinKind(w.a), kb = this.pinKind(w.b);
+    const kinds = [ka, kb];
+    if (kinds.includes('gnd')) return WIRE_COLORS.gnd;
+    for (const k of ['vcc', 'v33', 'vin']) if (kinds.includes(k)) return WIRE_COLORS[k];
+    return SIGNAL_COLORS[index % SIGNAL_COLORS.length];
   }
 
   drawPending(cur) {
@@ -186,7 +254,7 @@ export class Schematic {
     const part = this.part(this.pending.compId);
     if (!part) return;
     const A = pinWorld(part, this.pending.pin);
-    const pts = route(A, { x: cur.x, y: cur.y, dir: null });
+    const pts = route(A, { x: cur.x, y: cur.y, dir: null }, { aBoard: !!part.__def.board });
     const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ');
     this.layerPending.innerHTML = `<path class="pending-wire" d="${d}"/>`;
   }
@@ -319,12 +387,23 @@ export class Schematic {
         return;
       }
       if (!this.drag && this.onHoverPin) {
-        const pinEl = ev.target.closest?.('.pin');
+        // под курсором сверху может лежать прозрачная зона детали —
+        // смотрим всю стопку, чтобы провод и вывод отзывались всегда
+        const stack = document.elementsFromPoint?.(ev.clientX, ev.clientY) || [];
+        const pinEl = stack.find((el) => el.classList?.contains('pin')) || ev.target.closest?.('.pin');
+        const wireEl = stack.find((el) => el.classList?.contains('wire-hit')) || ev.target.closest?.('[data-wire]');
         if (pinEl) {
           const [cid, pin] = pinEl.dataset.pin.split('|');
           this.onHoverPin({ compId: cid, pin });
+          this.highlightWire(null);
+        } else if (wireEl) {
+          this.onHoverPin(null);
+          this.highlightWire(wireEl.dataset.wire);
+          if (this.onHoverWire) this.onHoverWire(this.wires.find((w) => w.id === wireEl.dataset.wire));
         } else {
           this.onHoverPin(null);
+          this.highlightWire(null);
+          if (this.onHoverWire) this.onHoverWire(null);
         }
       }
       if (this.drag) {
@@ -408,16 +487,29 @@ export class Schematic {
     let changed = false;
     for (const w of this.wires) {
       if (w.a.compId !== partId && w.b.compId !== partId) continue;
-      const path = this.layerWires.querySelector(`[data-wire="${w.id}"]`);
-      if (!path) continue;
-      const d = this.wirePath(w);
-      if (!d) continue;
-      path.setAttribute('d', d);
-      const hit = path.previousElementSibling;
-      if (hit && hit.classList.contains('wire-hit')) hit.setAttribute('d', d);
+      const geo = this.wireGeom(w);
+      if (!geo) continue;
+      const g = this.layerWires.querySelector(`[data-wire-g="${w.id}"]`);
+      const hit = this.layerHits.querySelector(`[data-wire="${w.id}"]`);
+      if (g) {
+        for (const path of g.querySelectorAll('path')) path.setAttribute('d', geo.d);
+        const ca = g.querySelector('[data-end="a"]');
+        const cb = g.querySelector('[data-end="b"]');
+        if (ca) { ca.setAttribute('cx', geo.A.x); ca.setAttribute('cy', geo.A.y); }
+        if (cb) { cb.setAttribute('cx', geo.B.x); cb.setAttribute('cy', geo.B.y); }
+      }
+      if (hit) hit.setAttribute('d', geo.d);
       changed = true;
     }
     return changed;
+  }
+
+  /** Подсветить один провод и приглушить остальные (наведение мышью). */
+  highlightWire(id) {
+    this.layerWires.classList.toggle('dim', !!id);
+    for (const g of this.layerWires.querySelectorAll('.wire-g')) {
+      g.classList.toggle('hot', !!id && g.dataset.wireG === id);
+    }
   }
 
   /** Вписать всю схему в окно: и плату, и модули вокруг неё. */
@@ -449,44 +541,65 @@ export class Schematic {
 }
 
 /**
- * Ортогональная трассировка: из вывода провод выходит перпендикулярно,
- * дальше идёт Z-маршрут. Если «перпендикуляр» уводит от цели — не делаем
- * лишнюю петлю, идём сразу к цели.
+ * Ортогональная трассировка провода.
+ *
+ * Правила, которые убирают кашу на схеме:
+ *  · из вывода всегда выходим перпендикулярно, на 22 px;
+ *  · дальше идём одним коридором и заходим в цель тоже перпендикулярно;
+ *  · у платы коридор идёт по её краю — провод обходит плату, а не режет насквозь;
+ *  · если цель — горизонтальный вывод, коридор смещён от её ряда на lane,
+ *    чтобы провода между одними рядами деталей не ложились друг на друга.
+ *
+ * lane — «полоса» провода (у каждого своя), aBoard/bBoard — выводы на плате.
  */
-function route(A, B) {
+export function route(A, B, { lane = 0, aBoard = false, bBoard = false, box = null } = {}) {
   const OFF = 22;
-  const step = (p, off) => {
-    if (p.dir === 'up') return { x: p.x, y: p.y - off };
-    if (p.dir === 'down') return { x: p.x, y: p.y + off };
-    if (p.dir === 'left') return { x: p.x - off, y: p.y };
-    if (p.dir === 'right') return { x: p.x + off, y: p.y };
+  const horiz = (p) => p.dir === 'left' || p.dir === 'right';
+  const vert = (p) => p.dir === 'up' || p.dir === 'down';
+
+  const out = (p) => {
+    if (p.dir === 'up') return { x: p.x, y: p.y - OFF };
+    if (p.dir === 'down') return { x: p.x, y: p.y + OFF };
+    if (p.dir === 'left') return { x: p.x - OFF, y: p.y };
+    if (p.dir === 'right') return { x: p.x + OFF, y: p.y };
     return { x: p.x, y: p.y };
   };
-  const dist = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
-  let a = step(A, OFF);
-  if (dist(a, B) > dist(A, B)) a = { x: A.x, y: A.y };
 
-  const pts = [{ x: A.x, y: A.y }, a];
-  const aVert = A.dir === 'up' || A.dir === 'down';
-
-  if (B.dir) {
-    const bVert = B.dir === 'up' || B.dir === 'down';
-    if (aVert && bVert) {
-      const my = (a.y + B.y) / 2;
-      pts.push({ x: a.x, y: my }, { x: B.x, y: my });
-    } else if (!aVert && !bVert) {
-      const mx = (a.x + B.x) / 2;
-      pts.push({ x: mx, y: a.y }, { x: mx, y: B.y });
-    } else if (aVert) {
-      pts.push({ x: a.x, y: B.y });
-    } else {
-      pts.push({ x: B.x, y: a.y });
-    }
-  } else {
-    const mx = (a.x + B.x) / 2;
-    pts.push({ x: mx, y: a.y }, { x: mx, y: B.y });
+  // выводы смотрят друг на друга по одной линии — достаточно прямого провода
+  const sameY = Math.abs(A.y - B.y) < 0.5;
+  const sameX = Math.abs(A.x - B.x) < 0.5;
+  if (B.dir && ((sameY && horiz(A) && horiz(B)) || (sameX && vert(A) && vert(B)))) {
+    return [{ x: A.x, y: A.y }, { x: B.x, y: B.y }];
   }
+
+  const a = out(A);
+  const b = B.dir ? out(B) : { x: B.x, y: B.y };
+
+  // высота коридора
+  let my;
+  if (B.dir && bBoard && vert(B)) my = b.y;              // к плате подходим по её краю
+  else if (B.dir && horiz(B)) my = Math.abs(a.x - b.x) > 40 ? b.y - 14 + lane : b.y;  // коридор рядом с рядом цели
+  else my = (a.y + b.y) / 2 + lane;
+
+  let pts = [{ x: A.x, y: A.y }, a, { x: a.x, y: my }, { x: b.x, y: my }];
+  if (B.dir) pts.push(b);
   pts.push({ x: B.x, y: B.y });
+
+  // коридор между двумя вертикальными выводами не должен резать плату насквозь —
+  // тогда обходим её сбоку, как настоящий провод в обход корпуса
+  if (box && B.dir && vert(A) && vert(B)) {
+    const crosses = my > box.y1 - 8 && my < box.y2 + 8
+      && Math.min(a.x, b.x) < box.x2 && Math.max(a.x, b.x) > box.x1;
+    if (crosses) {
+      const sx = (a.x + b.x) < 0 ? box.x1 - 22 : box.x2 + 22;
+      pts = [
+        { x: A.x, y: A.y }, a,
+        { x: a.x, y: a.y }, { x: sx, y: a.y },
+        { x: sx, y: b.y }, { x: b.x, y: b.y },
+        b, { x: B.x, y: B.y },
+      ];
+    }
+  }
 
   return pts.filter((p, i) => i === 0 || Math.abs(p.x - pts[i - 1].x) > 0.01 || Math.abs(p.y - pts[i - 1].y) > 0.01);
 }

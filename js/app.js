@@ -65,6 +65,18 @@ schematic.onHoverPin = (info) => {
   el.textContent = v === null ? `${name}.${info.pin}: нет данных` : `${name}.${info.pin} = ${v.toFixed(2)} В`;
 };
 
+// при наведении на провод — куда он идёт
+schematic.onHoverWire = (w) => {
+  const el = $('probe');
+  if (!w) { el.textContent = 'наведите на вывод — покажу напряжение'; return; }
+  const label = (end) => {
+    const part = schematic.part(end.compId);
+    const pin = part ? PARTS[part.type].pins(part).find((q) => q.id === end.pin) : null;
+    return `${part?.ref || end.compId} ${pin?.label || end.pin}`;
+  };
+  el.textContent = `провод ${label(w.a)} → ${label(w.b)} · Del — удалить`;
+};
+
 // ------------------------------------------------------------------ палитра ----
 const CATS = ['Платы', 'Компоненты', 'Датчики', 'Модули'];
 const palette = $('palette');

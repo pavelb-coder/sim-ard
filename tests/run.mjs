@@ -19,6 +19,7 @@ import { RosBus } from '../js/ros/bus.js';
 import { execute, splitArgs, parseTwist, formatMessage } from '../js/ros/terminal.js';
 import { ROS_TASKS } from '../js/ros/app.js';
 import { renderBoardArt } from '../js/board-art.js';
+import { route, WIRE_COLORS, SIGNAL_COLORS } from '../js/schematic.js';
 import { PARTS, SHORT_NAME, REF_PREFIX } from '../js/parts.js';
 
 let passed = 0, failed = 0;
@@ -626,6 +627,33 @@ console.log('\nОтрисовка плат и подписи элементов'
     Object.keys(PARTS).filter((t) => !SHORT_NAME[t] || !REF_PREFIX[t]).join(','));
   check('платы обозначаются как A1, A2 (не как U)',
     REF_PREFIX.uno === 'A' && REF_PREFIX.esp32 === 'A' && REF_PREFIX.pico === 'A');
+}
+
+console.log('\nПровода: цвета и трассировка');
+
+{
+  const A = { x: 137.2, y: -15.1, dir: 'right' };      // вывод 5V2 на правом краю платы
+  const B = { x: -94, y: -164, dir: 'left' };          // вывод A потенциометра
+  const pts = route(A, B, { aBoard: true });
+
+  const inside = (p) => Math.abs(p.x) < 135 && Math.abs(p.y) < 105;
+  check('провод от вывода платы уходит наружу, а не внутрь',
+    pts[1].x > A.x && pts.slice(1).every((p) => !inside(p)), JSON.stringify(pts));
+  check('провод идёт коридором: только горизонтальные и вертикальные отрезки',
+    pts.slice(1).every((p, i) => Math.abs(p.x - pts[i].x) < 0.01 || Math.abs(p.y - pts[i].y) < 0.01));
+
+  const up = route({ x: 19.3, y: -106.7, dir: 'up' }, { x: 94, y: -200, dir: 'left' }, { aBoard: true });
+  const up2 = route({ x: 29.4, y: -106.7, dir: 'up' }, { x: 94, y: -200, dir: 'left' }, { aBoard: true, lane: 18 });
+  const mid = (pts2) => pts2.map((p) => p.y).find((y, i) => i > 1);
+  check('соседние провода идут разными коридорами', mid(up) !== mid(up2), `${mid(up)} / ${mid(up2)}`);
+
+  const straight = route({ x: 146, y: -200, dir: 'right' }, { x: 188, y: -200, dir: 'left' });
+  check('выводы напротив друг друга соединяются прямой линией', straight.length === 2);
+
+  check('земля, питание и сигналы разного цвета',
+    WIRE_COLORS.gnd !== WIRE_COLORS.vcc && WIRE_COLORS.vcc !== WIRE_COLORS.v33
+    && new Set(SIGNAL_COLORS).size >= 6
+    && !Object.values(WIRE_COLORS).includes(SIGNAL_COLORS[0]));
 }
 
 console.log(`\nИтого: ${passed} ок, ${failed} провалено\n`);
