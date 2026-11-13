@@ -1,0 +1,2823 @@
+{
+ "source": "/home/user/sim",
+ "examples": [
+  {
+   "id": "blink",
+   "name": "Blink — встроенный светодиод D13",
+   "board": "uno",
+   "code": "// Мигаем встроенным светодиодом на D13 — подключать ничего не нужно.\n// Следите за платой: рядом с выводом 13 загорится \"L\".\n\nvoid setup() {\n  pinMode(LED_BUILTIN, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Blink: поехали!\");\n}\n\nvoid loop() {\n  digitalWrite(LED_BUILTIN, HIGH);\n  delay(500);\n  digitalWrite(LED_BUILTIN, LOW);\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     }
+    ],
+    "wires": []
+   }
+  },
+  {
+   "id": "led",
+   "name": "Светодиод + резистор на D9",
+   "board": "uno",
+   "code": "// Светодиод на D9 через резистор 220 Ом.\n\nconst int LED = 9;\n\nvoid setup() {\n  pinMode(LED, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Три коротких, один длинный\");\n}\n\nvoid loop() {\n  for (int i = 0; i < 3; i++) {\n    digitalWrite(LED, HIGH);\n    delay(250);\n    digitalWrite(LED, LOW);\n    delay(250);\n  }\n  digitalWrite(LED, HIGH);\n  delay(1200);\n  digitalWrite(LED, LOW);\n  delay(1200);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 0,
+      "y": -190,
+      "props": {
+       "color": "#ff5544"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 110,
+      "y": -190,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "button",
+   "name": "Кнопка с подтяжкой → светодиод",
+   "board": "uno",
+   "code": "// Кнопка между D2 и землёй, внутри включена подтяжка к 5 В.\n// Нажмите кнопку мышью — светодиод на D9 загорится.\n\nconst int BUTTON = 2;\nconst int LED = 9;\n\nvoid setup() {\n  pinMode(BUTTON, INPUT_PULLUP);\n  pinMode(LED, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Нажмите кнопку на схеме\");\n}\n\nvoid loop() {\n  bool pressed = digitalRead(BUTTON) == LOW;\n  digitalWrite(LED, pressed ? HIGH : LOW);\n  if (pressed) {\n    Serial.println(\"нажата\");\n    delay(200);\n  }\n  delay(50);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "sw1",
+      "type": "button",
+      "x": -40,
+      "y": -160,
+      "props": {}
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 150,
+      "y": -190,
+      "props": {
+       "color": "#7ef29d"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 250,
+      "y": -190,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "sw1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "sw1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "pot",
+   "name": "Потенциометр → яркость (ШИМ)",
+   "board": "uno",
+   "code": "// Крутите ручку потенциометра — меняется яркость светодиода.\n// Включите осциллограф (кнопка в шапке схемы) и поставьте развёртку 2 мс/дел:\n// на D9 видно настоящий ШИМ.\n\nvoid setup() {\n  pinMode(9, OUTPUT);\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  int value = analogRead(A0);\n  int level = map(value, 0, 1023, 0, 255);\n  analogWrite(9, level);\n\n  Serial.print(\"A0 = \");\n  Serial.print(value);\n  Serial.print(\"  ->  ШИМ \");\n  Serial.println(level);\n\n  delay(300);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "rv1",
+      "type": "pot",
+      "x": -60,
+      "y": -170,
+      "props": {
+       "value": 0.5,
+       "ohms": 10000
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 120,
+      "y": -200,
+      "props": {
+       "color": "#ffd166"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 220,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "B"
+      }
+     },
+     {
+      "a": {
+       "compId": "rv1",
+       "pin": "W"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "A0"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "rc",
+   "name": "RC-цепь: заряд конденсатора (осциллограф)",
+   "board": "uno",
+   "code": "// Классика: R = 10 кОм, C = 100 мкФ. Постоянная времени τ = R·C = 1 с.\n// D9 заряжает конденсатор 3 секунды, потом разряжает. Смотрите осциллограф\n// на канале A0: кривая заряда — это и есть экспонента.\n\nvoid setup() {\n  pinMode(9, OUTPUT);\n  pinMode(A0, INPUT);\n  Serial.begin(9600);\n  Serial.println(\"Заряд/разряд RC-цепи\");\n}\n\nvoid loop() {\n  digitalWrite(9, HIGH);\n  Serial.print(\"заряд, напряжение: \");\n  delay(1000);\n  Serial.println(analogRead(A0));\n\n  delay(2000);\n\n  digitalWrite(9, LOW);\n  Serial.print(\"разряд, напряжение: \");\n  delay(1000);\n  Serial.println(analogRead(A0));\n\n  delay(2000);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 24,
+      "y": -150,
+      "props": {
+       "value": 10000
+      }
+     },
+     {
+      "id": "c1",
+      "type": "electrolytic",
+      "x": 140,
+      "y": -150,
+      "props": {
+       "farads": 0.0001
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "c1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "c1",
+       "pin": "1"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "A0"
+      }
+     },
+     {
+      "a": {
+       "compId": "c1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "servo",
+   "name": "Сервопривод: библиотека Servo",
+   "board": "uno",
+   "code": "// Подключение библиотеки по имени работает как в Arduino IDE.\n// Вал сервопривода на схеме будет поворачиваться.\n\n#include <Servo.h>\n\nServo myservo;\n\nvoid setup() {\n  myservo.attach(9);\n  Serial.begin(9600);\n  Serial.println(\"Серво: 0 → 180 → 0\");\n}\n\nvoid loop() {\n  for (int angle = 0; angle <= 180; angle += 10) {\n    myservo.write(angle);\n    delay(80);\n  }\n  for (int angle = 180; angle >= 0; angle -= 10) {\n    myservo.write(angle);\n    delay(80);\n  }\n  Serial.println(\"полный оборот\");\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "srv",
+      "type": "servo",
+      "x": 170,
+      "y": -190,
+      "props": {
+       "angle": 90
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "srv",
+       "pin": "PWM"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "srv",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "srv",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "lcd",
+   "name": "LCD 1602 по I2C",
+   "board": "uno",
+   "code": "// LCD 1602 через I2C-переходник: две строки по 16 символов.\n\n#include <Wire.h>\n#include <LiquidCrystal_I2C.h>\n\nLiquidCrystal_I2C lcd(0x27, 16, 2);\n\nvoid setup() {\n  lcd.init();\n  lcd.backlight();\n  lcd.setCursor(0, 0);\n  lcd.print(\"RoboSim LCD\");\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  lcd.setCursor(0, 1);\n  lcd.print(\"t = \");\n  lcd.print(millis() / 1000);\n  lcd.print(\" s    \");\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "lcd",
+      "type": "lcd1602",
+      "x": 0,
+      "y": 250,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "SCL"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "oled",
+   "name": "OLED 128×64 (SSD1306)",
+   "board": "uno",
+   "code": "// OLED на SSD1306: текстовый API Adafruit (графика — заглушки).\n\n#include <Adafruit_SSD1306.h>\n\nAdafruit_SSD1306 display(128, 64);\n\nvoid setup() {\n  display.begin();\n  display.clearDisplay();\n  display.setTextSize(1);\n  display.setCursor(0, 0);\n  display.print(\"RoboSim\");\n  display.setCursor(0, 16);\n  display.print(\"OLED работает\");\n  display.display();\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  display.setCursor(0, 40);\n  display.print(\"uptime: \");\n  display.print(millis() / 1000);\n  display.print(\" s   \");\n  display.display();\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "oled",
+      "type": "oled",
+      "x": 0,
+      "y": 260,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "oled",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "oled",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "oled",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "oled",
+       "pin": "SCL"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "dht",
+   "name": "Датчик DHT11: температура и влажность",
+   "board": "uno",
+   "code": "// DHT11: потяните датчик мышью по вертикали — меняется температура.\n// (Протокол не эмулируется побитово: библиотека берёт значения у детали.)\n\n#include <DHT.h>\nDHT dht(2);\n\nvoid setup() {\n  Serial.begin(9600);\n  dht.begin();\n  Serial.println(\"DHT11 запущен\");\n}\n\nvoid loop() {\n  float t = dht.readTemperature();\n  float h = dht.readHumidity();\n  Serial.print(\"T = \");\n  Serial.print(t);\n  Serial.print(\" C,  H = \");\n  Serial.print(h);\n  Serial.println(\" %\");\n  delay(1000);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "dht",
+      "type": "dht11",
+      "x": 140,
+      "y": -160,
+      "props": {
+       "temp": 24,
+       "hum": 45
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "dht",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "dht",
+       "pin": "DATA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "dht",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "sonar",
+   "name": "Дальномер HC-SR04 (pulseIn)",
+   "board": "uno",
+   "code": "// HC-SR04: pulseIn возвращает длительность эха (58 мкс на сантиметр).\n// Тяните дальномер по вертикали — расстояние меняется.\n\nconst int TRIG = 7;\nconst int ECHO = 8;\n\nvoid setup() {\n  pinMode(TRIG, OUTPUT);\n  pinMode(ECHO, INPUT);\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  digitalWrite(TRIG, HIGH);\n  delay(10);\n  digitalWrite(TRIG, LOW);\n\n  long us = pulseIn(ECHO, HIGH);\n  long cm = us / 58;\n\n  Serial.print(\"эхо \");\n  Serial.print(us);\n  Serial.print(\" мкс -> \");\n  Serial.print(cm);\n  Serial.println(\" см\");\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "sr",
+      "type": "hcsr04",
+      "x": 160,
+      "y": -170,
+      "props": {
+       "distance": 50
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "sr",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D7"
+      },
+      "b": {
+       "compId": "sr",
+       "pin": "TRIG"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "sr",
+       "pin": "ECHO"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "sr",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "danger",
+   "name": "Авария: светодиод без резистора",
+   "board": "uno",
+   "code": "// Так делать нельзя: светодиод подключён напрямую к выводу.\n// Симулятор посчитает реальный ток и покажет аварию внизу экрана.\n\nvoid setup() {\n  pinMode(9, OUTPUT);\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  digitalWrite(9, HIGH);\n  delay(1500);\n  digitalWrite(9, LOW);\n  delay(800);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 30,
+      "y": -190,
+      "props": {
+       "color": "#ff5544"
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "esp32",
+   "name": "ESP32: логика 3,3 В и АЦП 12 бит",
+   "board": "b1",
+   "code": "// ESP32: питание 3,3 В, АЦП от 0 до 4095, встроенный светодиод на GPIO2.\n// Порт Serial работает через USB-UART, как на плате.\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(2, OUTPUT);\n  pinMode(4, OUTPUT);\n  Serial.println(\"ESP32 запущен\");\n}\n\nvoid loop() {\n  int raw = analogRead(32);          // 0…4095, а не 0…1023\n  int level = map(raw, 0, 4095, 0, 255);\n  analogWrite(4, level);\n\n  digitalWrite(2, raw > 2048 ? HIGH : LOW);\n\n  Serial.print(\"GPIO32 = \");\n  Serial.print(raw);\n  Serial.print(\"  ->  LED \");\n  Serial.println(level);\n  delay(300);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "esp32",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "rv1",
+      "type": "pot",
+      "x": -80,
+      "y": -185,
+      "props": {
+       "value": 0.5,
+       "ohms": 10000
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 150,
+      "y": -200,
+      "props": {
+       "color": "#7ec8ff"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 250,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "3V3"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "B"
+      }
+     },
+     {
+      "a": {
+       "compId": "rv1",
+       "pin": "W"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "32"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "4"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "pico",
+   "name": "Pico + MicroPython: мигание",
+   "board": "b1",
+   "code": "# Raspberry Pi Pico, MicroPython.\n# Встроенный светодиод — GP25.\n\nfrom machine import Pin\nimport time\n\nled = Pin(25, Pin.OUT)\ncounter = 0\n\nwhile True:\n    led.value(1)\n    counter += 1\n    print(\"мигание\", counter)\n    time.sleep(0.4)\n    led.value(0)\n    time.sleep(0.4)\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "pico",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     }
+    ],
+    "wires": []
+   }
+  },
+  {
+   "id": "pico-pwm",
+   "name": "Pico + MicroPython: ШИМ и АЦП",
+   "board": "b1",
+   "code": "# MicroPython: ADC читает 0…65535, ШИМ задаётся через duty_u16.\n\nfrom machine import Pin, ADC, PWM\nimport time\n\npot = ADC(Pin(26))\nled = PWM(Pin(11))\n\nwhile True:\n    raw = pot.read_u16()\n    led.duty_u16(raw)\n    print(\"ADC\", raw, \"-> duty\", raw)\n    time.sleep(0.3)\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "pico",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "rv1",
+      "type": "pot",
+      "x": -80,
+      "y": -190,
+      "props": {
+       "value": 0.5,
+       "ohms": 10000
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 150,
+      "y": -200,
+      "props": {
+       "color": "#ffd166"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 250,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "3V3"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "B"
+      }
+     },
+     {
+      "a": {
+       "compId": "rv1",
+       "pin": "W"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "26"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "11"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "two-boards",
+   "name": "Две платы на одной схеме",
+   "board": "uno",
+   "code": "// У каждой платы свой скетч. Переключайтесь вкладками над редактором.\n// Земли плат считаются общими (в железе их всегда соединяют проводом).\n\nvoid setup() {\n  pinMode(LED_BUILTIN, OUTPUT);   // на Uno это D13\n  Serial.begin(9600);\n  Serial.println(\"Uno на связи\");\n}\n\nvoid loop() {\n  digitalWrite(LED_BUILTIN, HIGH);\n  delay(300);\n  digitalWrite(LED_BUILTIN, LOW);\n  delay(300);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": -110,
+      "props": {}
+     },
+     {
+      "id": "b2",
+      "type": "esp32",
+      "x": 0,
+      "y": 150,
+      "props": {}
+     }
+    ],
+    "wires": []
+   }
+  },
+  {
+   "id": "rgb",
+   "name": "RGB-светодиод: три цвета",
+   "board": "uno",
+   "code": "// В одном корпусе три кристалла: красный, зелёный, синий.\n// У каждого свой резистор — иначе кристалл сгорит.\n// analogWrite даёт плавные переходы цвета.\n\nvoid setup() {\n  pinMode(9, OUTPUT); pinMode(10, OUTPUT); pinMode(11, OUTPUT);\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  analogWrite(9, 255); analogWrite(10, 0); analogWrite(11, 0);\n  delay(400);\n  analogWrite(9, 0); analogWrite(10, 255); analogWrite(11, 0);\n  delay(400);\n  analogWrite(9, 0); analogWrite(10, 0); analogWrite(11, 255);\n  delay(400);\n  // жёлтый = красный + зелёный, белый = все три\n  analogWrite(9, 255); analogWrite(10, 200); analogWrite(11, 0);\n  delay(400);\n  analogWrite(9, 255); analogWrite(10, 255); analogWrite(11, 255);\n  delay(600);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -190,
+      "y": -180,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r2",
+      "type": "resistor",
+      "x": -60,
+      "y": -180,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r3",
+      "type": "resistor",
+      "x": 70,
+      "y": -180,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "d1",
+      "type": "rgbled",
+      "x": 240,
+      "y": -160,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "d1",
+       "pin": "R"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D10"
+      },
+      "b": {
+       "compId": "r2",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r2",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "d1",
+       "pin": "G"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D11"
+      },
+      "b": {
+       "compId": "r3",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r3",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "d1",
+       "pin": "B"
+      }
+     },
+     {
+      "a": {
+       "compId": "d1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "relay",
+   "name": "Реле: щелчок и лампа через контакты",
+   "board": "uno",
+   "code": "// Реле — электромагнитный ключ. Катушка и контакты развязаны:\n// скетч управляет только катушкой (IN), а лампа живёт в своей цепи.\n// Пока лампа включена — слышно «щёлк» и видно, как двигается якорь.\n\nvoid setup() {\n  pinMode(9, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Реле: раз в секунду\");\n}\n\nvoid loop() {\n  digitalWrite(9, HIGH);     // катушка под током → COM соединился с NO\n  Serial.println(\"щёлк: лампа горит\");\n  delay(1000);\n  digitalWrite(9, LOW);      // катушка обесточена → COM вернулся на NC\n  Serial.println(\"отпустило: лампа погасла\");\n  delay(1000);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "k1",
+      "type": "relay",
+      "x": 120,
+      "y": -150,
+      "props": {}
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 200,
+      "y": 60,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 320,
+      "y": 60,
+      "props": {
+       "color": "#ffd166"
+      }
+     },
+     {
+      "id": "sw1",
+      "type": "toggle",
+      "x": -120,
+      "y": 60,
+      "props": {
+       "on": true
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "k1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "k1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "k1",
+       "pin": "IN"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "sw1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "sw1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "k1",
+       "pin": "COM"
+      }
+     },
+     {
+      "a": {
+       "compId": "k1",
+       "pin": "NO"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "joystick",
+   "name": "Джойстик: X, Y и кнопка",
+   "board": "uno",
+   "code": "// Модуль джойстика — это два потенциометра и кнопка.\n// Потяните ручку на схеме: VRx и VRy поедут к 0 или 1023.\n// Нажмите на ручку — замкнётся SW (нужен INPUT_PULLUP).\n\nvoid setup() {\n  Serial.begin(9600);\n  pinMode(2, INPUT_PULLUP);\n  pinMode(9, OUTPUT);\n}\n\nvoid loop() {\n  int x = analogRead(A0);\n  int y = analogRead(A1);\n  bool sw = digitalRead(2) == LOW;\n\n  Serial.print(\"X \"); Serial.print(x);\n  Serial.print(\"  Y \"); Serial.print(y);\n  Serial.print(sw ? \"  кнопка\" : \"\");\n  Serial.println();\n\n  digitalWrite(9, sw ? HIGH : LOW);\n  delay(150);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "rv1",
+      "type": "joystick",
+      "x": 140,
+      "y": -170,
+      "props": {
+       "x": 0,
+       "y": 0
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -190,
+      "y": 80,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": -60,
+      "y": 80,
+      "props": {
+       "color": "#7ef29d"
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "rv1",
+       "pin": "VRx"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "A0"
+      }
+     },
+     {
+      "a": {
+       "compId": "rv1",
+       "pin": "VRy"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "A1"
+      }
+     },
+     {
+      "a": {
+       "compId": "rv1",
+       "pin": "SW"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "D2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "seg7",
+   "name": "Индикатор 7 сегментов: цифры",
+   "board": "uno",
+   "code": "// У каждого сегмента свой вывод и свой резистор.\n// Порядок сегментов:  A B C D E F G  →  D2…D8.\n\nconst int seg[7] = {2, 3, 4, 5, 6, 7, 8};\n\n// какие сегменты горят для цифры 0…9\nconst byte digit[10][7] = {\n  {1,1,1,1,1,1,0}, {0,1,1,0,0,0,0}, {1,1,0,1,1,0,1}, {1,1,1,1,0,0,1},\n  {0,1,1,0,0,1,1}, {1,0,1,1,0,1,1}, {1,0,1,1,1,1,1}, {1,1,1,0,0,0,0},\n  {1,1,1,1,1,1,1}, {1,1,1,1,0,1,1},\n};\n\nvoid setup() {\n  for (int i = 0; i < 7; i++) pinMode(seg[i], OUTPUT);\n  Serial.begin(9600);\n}\n\nvoid show(int n) {\n  for (int i = 0; i < 7; i++) digitalWrite(seg[i], digit[n][i]);\n}\n\nvoid loop() {\n  for (int n = 0; n <= 9; n++) {\n    show(n);\n    Serial.print(\"цифра \");\n    Serial.println(n);\n    delay(700);\n  }\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -300,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r2",
+      "type": "resistor",
+      "x": -200,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r3",
+      "type": "resistor",
+      "x": -100,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r4",
+      "type": "resistor",
+      "x": 0,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r5",
+      "type": "resistor",
+      "x": 100,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r6",
+      "type": "resistor",
+      "x": 200,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r7",
+      "type": "resistor",
+      "x": 300,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "hg1",
+      "type": "seg7",
+      "x": 60,
+      "y": 250,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "hg1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D3"
+      },
+      "b": {
+       "compId": "r2",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r2",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "hg1",
+       "pin": "B"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D4"
+      },
+      "b": {
+       "compId": "r3",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r3",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "hg1",
+       "pin": "C"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D5"
+      },
+      "b": {
+       "compId": "r4",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r4",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "hg1",
+       "pin": "D"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D6"
+      },
+      "b": {
+       "compId": "r5",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r5",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "hg1",
+       "pin": "E"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D7"
+      },
+      "b": {
+       "compId": "r6",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r6",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "hg1",
+       "pin": "F"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "r7",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r7",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "hg1",
+       "pin": "G"
+      }
+     },
+     {
+      "a": {
+       "compId": "hg1",
+       "pin": "COM"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "stepper",
+   "name": "Шаговый 28BYJ-48 + ULN2003",
+   "board": "uno",
+   "code": "// Драйвер ULN2003 усиливает выводы платы до тока катушек.\n// Библиотека Stepper сама выдаёт последовательность фаз на IN1…IN4 —\n// на схеме по очереди загорятся четыре светодиода, а вал повернётся.\n\n#include <Stepper.h>\n\nconst int stepsPerRev = 2048;          // у 28BYJ-48 редуктор 1:64\nStepper motor(stepsPerRev, 8, 9, 10, 11);\n\nvoid setup() {\n  motor.setSpeed(8);                   // оборотов в минуту\n  Serial.begin(9600);\n  Serial.println(\"Шаговик: вперёд и назад\");\n}\n\nvoid loop() {\n  motor.step(512);                     // четверть оборота вперёд\n  delay(400);\n  motor.step(-512);                    // и назад\n  delay(400);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "m1",
+      "type": "stepper28byj",
+      "x": 150,
+      "y": -160,
+      "props": {
+       "angle": 0,
+       "steps": 0,
+       "phases": [
+        false,
+        false,
+        false,
+        false
+       ]
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "m1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "m1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "m1",
+       "pin": "IN1"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "m1",
+       "pin": "IN2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D10"
+      },
+      "b": {
+       "compId": "m1",
+       "pin": "IN3"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D11"
+      },
+      "b": {
+       "compId": "m1",
+       "pin": "IN4"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "power",
+   "name": "Питание без платы: батарейка, резистор, светодиод",
+   "board": "battery9",
+   "code": "// Схема вообще без платы: только источник питания и детали.\n// Щупы осциллографа стоят на выводе резистора и на «минусе» батарейки —\n// на его экране видно около 2 В: 9 В минус падение на резисторе.\n//\n// Плату сюда можно и не ставить: нажмите «Запустить» — цепь посчитается.\n\nvoid setup() {}\nvoid loop() {}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "g1",
+      "type": "battery9",
+      "x": -120,
+      "y": 20,
+      "props": {
+       "voltage": 9
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 30,
+      "y": -80,
+      "props": {
+       "value": 470
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 170,
+      "y": -80,
+      "props": {
+       "color": "#7ef29d"
+      }
+     },
+     {
+      "id": "o1",
+      "type": "scope",
+      "x": 60,
+      "y": 140,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "g1",
+       "pin": "+"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "g1",
+       "pin": "−"
+      }
+     },
+     {
+      "a": {
+       "compId": "o1",
+       "pin": "CH1"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "2"
+      }
+     },
+     {
+      "a": {
+       "compId": "o1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "g1",
+       "pin": "−"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "scope-pwm",
+   "name": "Осциллограф: ШИМ на D9 и щупы",
+   "board": "uno",
+   "code": "// Осциллограф — такая же деталь, как резистор: у него два щупа и земля.\n// CH1 стоит прямо на выводе D9, CH2 — после резистора, на аноде светодиода.\n// На экране прибора видно прямоугольник, а плата плавно меняет яркость.\n\nvoid setup() {\n  pinMode(9, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Осциллограф на D9\");\n}\n\nvoid loop() {\n  for (int v = 0; v <= 255; v += 5) {\n    analogWrite(9, v);\n    delay(30);\n  }\n  for (int v = 255; v >= 0; v -= 5) {\n    analogWrite(9, v);\n    delay(30);\n  }\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 0,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 130,
+      "y": -200,
+      "props": {
+       "color": "#ff5544"
+      }
+     },
+     {
+      "id": "o1",
+      "type": "scope",
+      "x": 40,
+      "y": 250,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "o1",
+       "pin": "CH1"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "D9"
+      }
+     },
+     {
+      "a": {
+       "compId": "o1",
+       "pin": "CH2"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "o1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "multimeter",
+   "name": "Мультиметр: вольтметр, амперметр, омметр",
+   "board": "battery9",
+   "code": "// Мультиметр — настоящий прибор, а не картинка: у него три гнезда.\n// Щупы стоят на середине делителя (1000 + 1000 Ом от 9 В), поэтому\n// на экране 4.50 В — ровно половина питания.\n//\n// Клик по диску переключает режим:\n//   V DC — вольтметр (вход 1 МОм);\n//   A DC — амперметр, включается в разрыв (шунт 0,1 Ом);\n//   Ω   — омметр, сам подаёт испытательный ток 20 мкА;\n//   ПИК — прозвонка: пикает, если сопротивление меньше 30 Ом.\n//\n// Рядом логический пробник: он смотрит уровень на том же проводе.\n// Он умеет различать HIGH, LOW и импульсы (ШИМ) — и не нагружает цепь.\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "g1",
+      "type": "battery9",
+      "x": -210,
+      "y": 10,
+      "props": {
+       "voltage": 9
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -30,
+      "y": -130,
+      "props": {
+       "value": 1000
+      }
+     },
+     {
+      "id": "r2",
+      "type": "resistor",
+      "x": 140,
+      "y": -130,
+      "props": {
+       "value": 1000
+      }
+     },
+     {
+      "id": "pa1",
+      "type": "multimeter",
+      "x": -40,
+      "y": 190,
+      "props": {
+       "mode": "V"
+      }
+     },
+     {
+      "id": "pl1",
+      "type": "logicprobe",
+      "x": 210,
+      "y": 190,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "g1",
+       "pin": "+"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "r2",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r2",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "g1",
+       "pin": "−"
+      }
+     },
+     {
+      "a": {
+       "compId": "pa1",
+       "pin": "COM"
+      },
+      "b": {
+       "compId": "g1",
+       "pin": "−"
+      }
+     },
+     {
+      "a": {
+       "compId": "pa1",
+       "pin": "VΩ"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "2"
+      }
+     },
+     {
+      "a": {
+       "compId": "pl1",
+       "pin": "SIG"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "2"
+      }
+     },
+     {
+      "a": {
+       "compId": "pl1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "g1",
+       "pin": "−"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "probe",
+   "name": "Пробник и мультиметр на выводах платы",
+   "board": "uno",
+   "code": "// Плата плавно меняет скважность на D9.\n// Пробник на выводе D9 показывает «ИМП» и частоту, а мультиметр после\n// резистора — среднее напряжение на аноде светодиода (оно ползёт вверх\n// и вниз вместе с яркостью). Так и в железе: стрелочный прибор врёт,\n// цифровой показывает среднее, а пробник ловит импульсы.\n\nvoid setup() {\n  pinMode(9, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Пробник на D9\");\n}\n\nvoid loop() {\n  for (int v = 0; v <= 255; v += 5) {\n    analogWrite(9, v);\n    delay(40);\n  }\n  for (int v = 255; v >= 0; v -= 5) {\n    analogWrite(9, v);\n    delay(40);\n  }\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 0,
+      "y": -200,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 130,
+      "y": -200,
+      "props": {
+       "color": "#ff5544"
+      }
+     },
+     {
+      "id": "pl1",
+      "type": "logicprobe",
+      "x": 320,
+      "y": -190,
+      "props": {}
+     },
+     {
+      "id": "pa1",
+      "type": "multimeter",
+      "x": 140,
+      "y": 210,
+      "props": {
+       "mode": "V"
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "pl1",
+       "pin": "SIG"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "D9"
+      }
+     },
+     {
+      "a": {
+       "compId": "pl1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "pa1",
+       "pin": "COM"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "pa1",
+       "pin": "VΩ"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "shift595",
+   "name": "74HC595: бегущий огонь на четырёх светодиодах",
+   "board": "uno",
+   "code": "// Один сдвиговый регистр вместо четырёх выводов: три провода\n// (данные, такт, защёлка) зажигают сколько угодно светодиодов.\n// Бит, выведенный первым, за восемь тактов доберётся до QH,\n// поэтому старший бит отправляем первым — как shiftOut(MSBFIRST).\n\nconst int DS = 8;      // данные\nconst int SH = 9;      // такт сдвига\nconst int ST = 10;     // защёлка\n\nvoid sendByte(byte value) {\n  for (int i = 7; i >= 0; i--) {\n    digitalWrite(DS, (value >> i) & 1);    // старший бит — первым\n    digitalWrite(SH, HIGH);\n    digitalWrite(SH, LOW);\n  }\n  digitalWrite(ST, HIGH);                  // переписали защёлку\n  digitalWrite(ST, LOW);\n}\n\nvoid setup() {\n  pinMode(DS, OUTPUT);\n  pinMode(SH, OUTPUT);\n  pinMode(ST, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"74HC595: бегущий огонь\");\n}\n\nvoid loop() {\n  for (int i = 0; i < 4; i++) {\n    sendByte(1 << i);\n    delay(180);\n  }\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "dd1",
+      "type": "sr595",
+      "x": -30,
+      "y": 205,
+      "props": {}
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 150,
+      "y": -215,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r2",
+      "type": "resistor",
+      "x": 150,
+      "y": -165,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r3",
+      "type": "resistor",
+      "x": 150,
+      "y": -115,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "r4",
+      "type": "resistor",
+      "x": 150,
+      "y": -65,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": 260,
+      "y": -215,
+      "props": {
+       "color": "#ff5544"
+      }
+     },
+     {
+      "id": "l2",
+      "type": "led",
+      "x": 260,
+      "y": -165,
+      "props": {
+       "color": "#ffd166"
+      }
+     },
+     {
+      "id": "l3",
+      "type": "led",
+      "x": 260,
+      "y": -115,
+      "props": {
+       "color": "#3fd07a"
+      }
+     },
+     {
+      "id": "l4",
+      "type": "led",
+      "x": 260,
+      "y": -65,
+      "props": {
+       "color": "#5ad2ff"
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "dd1",
+       "pin": "MR"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "dd1",
+       "pin": "OE"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "dd1",
+       "pin": "DS"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "dd1",
+       "pin": "SHCP"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D10"
+      },
+      "b": {
+       "compId": "dd1",
+       "pin": "STCP"
+      }
+     },
+     {
+      "a": {
+       "compId": "dd1",
+       "pin": "QA"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "dd1",
+       "pin": "QB"
+      },
+      "b": {
+       "compId": "r2",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r2",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l2",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l2",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "dd1",
+       "pin": "QC"
+      },
+      "b": {
+       "compId": "r3",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r3",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l3",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l3",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "dd1",
+       "pin": "QD"
+      },
+      "b": {
+       "compId": "r4",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r4",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "l4",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l4",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "motor",
+   "name": "L298N и мотор: вперёд, назад, стоп",
+   "board": "uno",
+   "code": "// L298N — это H-мост: два входа задают полярность на выходе,\n// ENA — разрешение. Внутри моста падает около 1,8 В, поэтому\n// мотор получает не все 5 В, и обороты чуть ниже.\n//\n// Смотрите на мотор: он не «переключается», а честно раскручивается\n// и выбегает — у него есть инерция, как у настоящего.\n\nconst int IN1 = 9;\nconst int IN2 = 8;\n\nvoid setup() {\n  pinMode(IN1, OUTPUT);\n  pinMode(IN2, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"L298N: вперёд-назад\");\n}\n\nvoid loop() {\n  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);    // вперёд\n  delay(2500);\n  digitalWrite(IN1, LOW);  digitalWrite(IN2, LOW);    // выбег\n  delay(1200);\n  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH);   // назад\n  delay(2500);\n  digitalWrite(IN1, LOW);  digitalWrite(IN2, LOW);\n  delay(1200);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "da1",
+      "type": "l298n",
+      "x": -60,
+      "y": 185,
+      "props": {}
+     },
+     {
+      "id": "m1",
+      "type": "dcmotor",
+      "x": 205,
+      "y": 190,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN1"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "ENA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT1"
+      },
+      "b": {
+       "compId": "m1",
+       "pin": "M+"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT2"
+      },
+      "b": {
+       "compId": "m1",
+       "pin": "M-"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "keypad",
+   "name": "Клавиатура 4×4 и светофор",
+   "board": "uno",
+   "code": "// Клавиатура — это матрица 4×4: чтобы узнать, какая клавиша нажата,\n// строки по очереди «прижимаем» к земле и читаем столбцы.\n// Нажмите на клавишу мышью — скетч напечатает её в мониторе порта.\n// Цифры зажигают красный, * и # — жёлтый, A…D — зелёный.\n\nconst int rows[4] = {2, 3, 4, 5};\nconst int cols[4] = {6, 7, 10, 11};\nconst char keys[4][4] = {\n  {'1', '2', '3', 'A'},\n  {'4', '5', '6', 'B'},\n  {'7', '8', '9', 'C'},\n  {'*', '0', '#', 'D'}\n};\nchar lastKey = 0;\n\nvoid setup() {\n  for (int i = 0; i < 4; i++) {\n    pinMode(rows[i], OUTPUT);\n    digitalWrite(rows[i], HIGH);\n    pinMode(cols[i], INPUT_PULLUP);\n  }\n  pinMode(12, OUTPUT);\n  pinMode(13, OUTPUT);\n  pinMode(A0, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Нажмите клавишу на схеме\");\n}\n\nchar scan() {\n  char found = 0;\n  for (int r = 0; r < 4; r++) {\n    digitalWrite(rows[r], LOW);\n    for (int c = 0; c < 4; c++) {\n      if (digitalRead(cols[c]) == LOW) found = keys[r][c];\n    }\n    digitalWrite(rows[r], HIGH);\n  }\n  return found;\n}\n\nvoid loop() {\n  char k = scan();\n  if (k != lastKey) {\n    digitalWrite(12, LOW);\n    digitalWrite(13, LOW);\n    digitalWrite(A0, LOW);\n    if (k) {\n      Serial.print(\"Клавиша: \");\n      Serial.println(k);\n      bool digit = (k >= '0' && k <= '9');\n      digitalWrite(12, digit ? HIGH : LOW);\n      digitalWrite(13, (k == '*' || k == '#') ? HIGH : LOW);\n      digitalWrite(A0, (k >= 'A' && k <= 'D') ? HIGH : LOW);\n    }\n    lastKey = k;\n  }\n  delay(30);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "sb1",
+      "type": "keypad",
+      "x": 300,
+      "y": 20,
+      "props": {
+       "pressed": null
+      }
+     },
+     {
+      "id": "hl1",
+      "type": "traffic",
+      "x": -260,
+      "y": 240,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "sb1",
+       "pin": "R1"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D3"
+      },
+      "b": {
+       "compId": "sb1",
+       "pin": "R2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D4"
+      },
+      "b": {
+       "compId": "sb1",
+       "pin": "R3"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D5"
+      },
+      "b": {
+       "compId": "sb1",
+       "pin": "R4"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D6"
+      },
+      "b": {
+       "compId": "sb1",
+       "pin": "C1"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D7"
+      },
+      "b": {
+       "compId": "sb1",
+       "pin": "C2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D10"
+      },
+      "b": {
+       "compId": "sb1",
+       "pin": "C3"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D11"
+      },
+      "b": {
+       "compId": "sb1",
+       "pin": "C4"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D12"
+      },
+      "b": {
+       "compId": "hl1",
+       "pin": "R"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D13"
+      },
+      "b": {
+       "compId": "hl1",
+       "pin": "Y"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A0"
+      },
+      "b": {
+       "compId": "hl1",
+       "pin": "G"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "hl1",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "overvolt",
+   "name": "Перегрузка: 9 В на модуль, рассчитанный на 5 В",
+   "board": "battery9",
+   "code": "// Напряжение выше паспортного — деталь сгорает.\n// У DHT11 предел 5,5 В, а мы подали 9 В от батарейки.\n// Смотрите монитор порта: симулятор посчитает, когда деталь перегреется,\n// и заменит её кнопкой «Сброс».\n\nvoid setup() {\n  Serial.begin(9600);\n  Serial.println(\"9 В на модуль 5 В — так делать нельзя\");\n}\n\nvoid loop() {\n  delay(1000);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "g1",
+      "type": "battery9",
+      "x": -140,
+      "y": 40,
+      "props": {
+       "voltage": 9
+      }
+     },
+     {
+      "id": "d1",
+      "type": "dht11",
+      "x": 60,
+      "y": -30,
+      "props": {}
+     },
+     {
+      "id": "o1",
+      "type": "multimeter",
+      "x": 60,
+      "y": 110,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "g1",
+       "pin": "+"
+      },
+      "b": {
+       "compId": "d1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "d1",
+       "pin": "GND"
+      },
+      "b": {
+       "compId": "g1",
+       "pin": "−"
+      }
+     },
+     {
+      "a": {
+       "compId": "o1",
+       "pin": "VΩ"
+      },
+      "b": {
+       "compId": "d1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "o1",
+       "pin": "COM"
+      },
+      "b": {
+       "compId": "g1",
+       "pin": "−"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "rpi5-led",
+   "name": "Raspberry Pi 5: светодиод на GPIO14",
+   "board": "rpi5",
+   "code": "# Raspberry Pi 5: мигаем светодиодом на GPIO14 — это 8-й контакт гребёнки (TXD).\n# Логика у Pi 3,3 В, с вывода можно взять не больше 16 мА, поэтому резистор 220 Ом.\n# Всё как на настоящей плате: MicroPython, модуль machine, time.sleep.\n\nfrom machine import Pin\nimport time\n\nled = Pin(14, Pin.OUT)\ncount = 0\n\nwhile True:\n    led.value(1)\n    time.sleep(0.4)\n    led.value(0)\n    time.sleep(0.4)\n    count += 1\n    if count % 5 == 0:\n        print(\"миганий:\", count)\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "rpi5",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -10,
+      "y": 190,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "d1",
+      "type": "led",
+      "x": 130,
+      "y": 190,
+      "props": {
+       "color": "#3fd07a"
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GPIO14"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "d1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "d1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

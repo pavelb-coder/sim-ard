@@ -1,0 +1,145 @@
+/**
+ * Оформление страницы элемента курса RoboSim.
+ *
+ * Симулятор живёт в iframe и стилизуется сам; здесь — только рамка,
+ * панель кнопок и список проверок.
+ *
+ * @package    mod_robosim
+ * @copyright  2026 RoboSim
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+.mod-robosim {
+    --robosim-border: #d6dde5;
+    --robosim-ok: #1e7b45;
+    --robosim-fail: #b3352c;
+}
+
+.mod-robosim .robosim-intro {
+    margin-bottom: 1rem;
+}
+
+.mod-robosim .robosim-prompt {
+    border-left: 4px solid #4a7fa5;
+    margin-bottom: 1rem;
+}
+
+.mod-robosim .robosim-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-bottom: .75rem;
+}
+
+.mod-robosim .robosim-chip {
+    font-size: .85rem;
+    padding: .15rem .6rem;
+    border: 1px solid var(--robosim-border);
+    border-radius: 999px;
+    background: #f8fafc;
+}
+
+.mod-robosim .robosim-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    align-items: center;
+    margin-bottom: .5rem;
+}
+
+.mod-robosim .robosim-status {
+    min-height: 1.6rem;
+    font-size: .9rem;
+    margin-bottom: .5rem;
+    color: #495a68;
+}
+
+.mod-robosim .robosim-status-ok {
+    color: var(--robosim-ok);
+}
+
+.mod-robosim .robosim-status-warn {
+    color: #9a6b00;
+}
+
+.mod-robosim .robosim-status-fail {
+    color: var(--robosim-fail);
+}
+
+.mod-robosim .robosim-checklist {
+    list-style: none;
+    margin: 0 0 .75rem;
+    padding: 0;
+    font-size: .9rem;
+}
+
+.mod-robosim .robosim-check {
+    padding: .15rem 0;
+}
+
+.mod-robosim .robosim-check.ok {
+    color: var(--robosim-ok);
+}
+
+.mod-robosim .robosim-check.fail {
+    color: var(--robosim-fail);
+}
+
+.mod-robosim .robosim-check-hint {
+    color: #6b7b89;
+}
+
+.mod-robosim .robosim-note {
+    font-size: .9rem;
+    color: #6b7b89;
+    margin-bottom: .5rem;
+}
+
+.mod-robosim .robosim-frame-wrap {
+    position: relative;
+    width: 100%;
+    border: 1px solid var(--robosim-border);
+    border-radius: .5rem;
+    overflow: hidden;
+    background: #0f151b;
+}
+
+.mod-robosim .robosim-frame {
+    display: block;
+    width: 100%;
+    height: min(78vh, 900px);
+    min-height: 520px;
+    border: 0;
+}
+
+.mod-robosim .robosim-help {
+    margin-top: .5rem;
+}
+
+.robosim-report .robosim-attempt {
+    font-size: .85rem;
+    line-height: 1.5;
+}
+
+.robosim-report .robosim-badge {
+    font-size: .75rem;
+    padding: .1rem .4rem;
+}
+
+.robosim-report .robosim-gradeform {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    white-space: nowrap;
+}
+
+.robosim-report .robosim-points {
+    width: 5.5rem;
+}
+
+@media (max-width: 720px) {
+    .mod-robosim .robosim-frame {
+        height: 70vh;
+        min-height: 420px;
+    }
+}

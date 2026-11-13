@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/robosim/db" VERSION="20261112" COMMENT="Таблицы плагина RoboSim"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd">
+  <TABLES>
+    <TABLE NAME="robosim" COMMENT="Элемент курса: симулятор со схемой и скетчем">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="course" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Курс"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Название элемента курса"/>
+        <FIELD NAME="intro" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Описание"/>
+        <FIELD NAME="introformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="preset" TYPE="char" LENGTH="100" NOTNULL="true" DEFAULT="custom" SEQUENCE="false"
+               COMMENT="С чего начинать: example:ID, task:ID или custom"/>
+        <FIELD NAME="customproject" TYPE="text" NOTNULL="false" SEQUENCE="false"
+               COMMENT="Своя схема: ссылка-токен или JSON проекта"/>
+        <FIELD NAME="prompt" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Инструкция ученику"/>
+        <FIELD NAME="promptformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="autograde" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"
+               COMMENT="1 — ставить оценку, когда автопроверка задания пройдена"/>
+        <FIELD NAME="maxattempts" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"
+               COMMENT="Сколько попыток разрешено, 0 — без ограничений"/>
+        <FIELD NAME="grade" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="100" SEQUENCE="false"
+               COMMENT="Максимальная оценка"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="course" TYPE="foreign" FIELDS="course" REFTABLE="course" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="course_name" UNIQUE="false" FIELDS="course, name"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="robosim_submissions" COMMENT="Сданные работы: схема, скетч и результат автопроверки">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="robosimid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="attempt" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="schematic" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Схема в JSON"/>
+        <FIELD NAME="code" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Скетч"/>
+        <FIELD NAME="score" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"
+               COMMENT="Результат автопроверки, проценты"/>
+        <FIELD NAME="passed" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="checks" TYPE="text" NOTNULL="false" SEQUENCE="false"
+               COMMENT="Подробности проверки, JSON"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="submitted" SEQUENCE="false"
+               COMMENT="submitted | graded"/>
+        <FIELD NAME="grade" TYPE="number" LENGTH="10" DECIMALS="5" NOTNULL="false" SEQUENCE="false"
+               COMMENT="Оценка в журнале на момент проверки"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="robosimid" TYPE="foreign" FIELDS="robosimid" REFTABLE="robosim" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="robosimid-userid" UNIQUE="false" FIELDS="robosimid, userid"/>
+        <INDEX NAME="status" UNIQUE="false" FIELDS="status"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

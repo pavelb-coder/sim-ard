@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Симулятор Arduino в браузере — RoboSim</title>
+<meta name="description" content="Собственный симулятор Arduino: схемный редактор, решатель цепей MNA, транспайлер скетчей C++ в JavaScript, монитор порта."/>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2.5 12h3.5l1.75-4.5 3 9 3-9 3 9 1.75-4.5h2.5"/>
+      </svg>
+      <span>RoboSim<small>симулятор Arduino</small></span>
+    </div>
+
+    <div class="mode-switch" role="tablist" aria-label="Режим симулятора">
+      <button class="mode-btn active" id="modeSimBtn" role="tab" aria-selected="true">Плата</button>
+      <button class="mode-btn" id="modeRosBtn" role="tab" aria-selected="false">ROS 2 · Квартира</button>
+    </div>
+
+    <div class="tools">
+      <button id="runBtn" class="btn btn-run" title="Собрать и запустить (Ctrl+Enter)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5Z"/></svg>
+        Старт
+      </button>
+      <button id="stopBtn" class="btn btn-stop" disabled title="Стоп">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></svg>
+        Стоп
+      </button>
+      <button id="resetBtn" class="btn" title="Сброс">Сброс</button>
+      <button id="wipeBtn" class="btn btn-wipe" title="Очистить рабочее пространство: схема, провода, код, монитор">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16"/><path d="M9 6V4h6v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 11v5M14 11v5"/></svg>
+        Очистить
+      </button>
+      <span class="timer" id="timer">00:00.0</span>
+    </div>
+
+    <div class="tools tools-right">
+      <button id="tasksBtn" class="btn btn-tasks" title="Учебные задания с автопроверкой (T)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 12h10M4 18h7"/><path d="M16.5 15.5l2 2 3.5-4"/></svg>
+        Задания <span class="pill" id="tasksBadge">0/0</span>
+      </button>
+      <select id="exampleSelect" class="select" aria-label="Примеры">
+        <option value="">Примеры…</option>
+      </select>
+      <button id="saveBtn" class="btn" title="Скачать схему и код в файл">Сохранить</button>
+      <button id="openBtn" class="btn" title="Открыть файл .robosim">Открыть</button>
+      <input type="file" id="fileInput" accept=".json,.robosim" hidden/>
+    </div>
+  </header>
+
+  <main class="workspace">
+
+    <!-- ------------------------------------------------ код -->
+    <section class="panel panel-code">
+      <header class="panel-head">
+        <span class="dot dot-red"></span>
+        <h2>Код</h2>
+        <span class="badge" id="langBadge">Arduino C++</span>
+        <button class="icon-btn" id="clearConsoleBtn" title="Очистить консоль" aria-label="Очистить консоль">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="sketch-tabs" id="sketchTabs"></div>
+
+      <div class="editor" id="editorWrap">
+        <div class="gutter" id="gutter">1</div>
+        <pre class="highlight" id="highlight" aria-hidden="true"></pre>
+        <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Код скетча"></textarea>
+      </div>
+
+      <div class="console-head">
+        <button class="tab tab-active" id="tabSerial">Монитор порта</button>
+        <button class="tab" id="tabProblems">Проблемы <span class="pill" id="problemsCount">0</span></button>
+        <button class="tab" id="tabHints">Подсказки <span class="pill" id="hintsCount">0</span></button>
+        <span class="spacer"></span>
+        <label class="baud">9600 бод</label>
+      </div>
+      <div class="console-body" id="serialOut" role="log" aria-live="polite"></div>
+      <div class="console-body problems hidden" id="problemsOut"></div>
+      <div class="console-body hints hidden" id="hintsOut"></div>
+      <div class="console-input">
+        <input id="serialInput" placeholder="Текст в Serial (Enter — отправить)" disabled/>
+        <button id="sendBtn" class="btn btn-small" disabled>Отправить</button>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------ схема -->
+    <section class="panel panel-canvas">
+      <header class="panel-head">
+        <h2>Схема</h2>
+        <span class="hint" id="canvasHint">Вывод → вывод = провод. Тяните деталь мышью.</span>
+        <span class="spacer"></span>
+        <button class="icon-btn active" id="labelsBtn" title="Подписи элементов (R1, D2, A1…)" aria-label="Подписи элементов">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18 9 6l5 12M6.2 14h5.6"/><path d="M16 18V6h3.2a3.4 3.4 0 0 1 0 6.8H16"/></svg>
+        </button>
+        <button class="icon-btn" id="scopeBtn" title="Осциллограф" aria-label="Осциллограф">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 14h4l2-8 3 14 3-10 3 6h5"/></svg>
+        </button>
+        <button class="icon-btn" id="deleteBtn" title="Удалить выделенное (Del)" aria-label="Удалить выделенное">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6.5 7l.8 12.2A1.8 1.8 0 0 0 9.1 21h5.8a1.8 1.8 0 0 0 1.8-1.8L17.5 7"/><path d="M10.5 11v6M13.5 11v6"/></svg>
+        </button>
+        <button class="icon-btn" id="clearBtn" title="Очистить схему" aria-label="Очистить схему">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>
+        </button>
+      </header>
+      <div class="stage" id="stage">
+        <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="unoBody" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#1276b0"/><stop offset="1" stop-color="#0a5786"/>
+            </linearGradient>
+            <!-- ===== «реалистичная» палитра деталей: объявлена один раз ===== -->
+            <linearGradient id="sim-metal" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#e2e8ee"/><stop offset=".35" stop-color="#b3bfc9"/>
+              <stop offset=".62" stop-color="#8b98a4"/><stop offset="1" stop-color="#cdd6de"/>
+            </linearGradient>
+            <linearGradient id="sim-metal-h" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#8b98a4"/><stop offset=".35" stop-color="#eaf0f5"/>
+              <stop offset=".7" stop-color="#a7b3bd"/><stop offset="1" stop-color="#72808c"/>
+            </linearGradient>
+            <linearGradient id="sim-metal-v" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#cfd8e0"/><stop offset=".12" stop-color="#f2f6fa"/>
+              <stop offset=".55" stop-color="#a9b5bf"/><stop offset="1" stop-color="#7b8894"/>
+            </linearGradient>
+            <linearGradient id="sim-plastic" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#3b4753"/><stop offset=".5" stop-color="#232d37"/>
+              <stop offset="1" stop-color="#151c23"/>
+            </linearGradient>
+            <linearGradient id="sim-dip" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#2a3036"/><stop offset=".45" stop-color="#171b20"/>
+              <stop offset="1" stop-color="#0d1014"/>
+            </linearGradient>
+            <linearGradient id="sim-can" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#9fb0be"/><stop offset=".4" stop-color="#dfe8ef"/>
+              <stop offset=".62" stop-color="#8d9ba8"/><stop offset="1" stop-color="#b9c5cf"/>
+            </linearGradient>
+            <linearGradient id="sim-beige" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#f0dfb8"/><stop offset=".45" stop-color="#dcc79a"/>
+              <stop offset="1" stop-color="#bda878"/>
+            </linearGradient>
+            <linearGradient id="sim-glass" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="rgba(255,255,255,.55)"/>
+              <stop offset=".45" stop-color="rgba(255,255,255,.12)"/>
+              <stop offset="1" stop-color="rgba(255,255,255,.04)"/>
+            </linearGradient>
+            <linearGradient id="sim-glass-d" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#d9e3ea" stop-opacity=".85"/>
+              <stop offset=".5" stop-color="#7f919f" stop-opacity=".55"/>
+              <stop offset="1" stop-color="#4a5a67" stop-opacity=".8"/>
+            </linearGradient>
+            <radialGradient id="sim-lens" cx=".35" cy=".3" r=".85">
+              <stop offset="0" stop-color="#ffffff" stop-opacity=".55"/>
+              <stop offset=".55" stop-color="#ffffff" stop-opacity=".06"/>
+              <stop offset="1" stop-color="#000000" stop-opacity=".22"/>
+            </radialGradient>
+            <radialGradient id="sim-lens-red" cx=".35" cy=".3" r=".8">
+              <stop offset="0" stop-color="#ffd0c8"/><stop offset=".6" stop-color="#e04a3a"/>
+              <stop offset="1" stop-color="#8c2418"/>
+            </radialGradient>
+            <linearGradient id="sim-dark-cell" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#2b3641"/><stop offset=".45" stop-color="#18202a"/>
+              <stop offset="1" stop-color="#0d131a"/>
+            </linearGradient>
+            <linearGradient id="sim-servo" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#2f7fbe"/><stop offset=".5" stop-color="#1c5a8c"/>
+              <stop offset="1" stop-color="#123c60"/>
+            </linearGradient>
+            <linearGradient id="sim-heatsink" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#d24b3c"/><stop offset=".4" stop-color="#a8342a"/>
+              <stop offset="1" stop-color="#7a221a"/>
+            </linearGradient>
+            <linearGradient id="sim-pcb-soft" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#1d6b45"/><stop offset=".5" stop-color="#14563a"/>
+              <stop offset="1" stop-color="#0d3f2a"/>
+            </linearGradient>
+            <linearGradient id="sim-pcb-dark" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#1b2430"/><stop offset="1" stop-color="#111a23"/>
+            </linearGradient>
+            <filter id="sim-soft" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="1.4" stdDeviation="1.6" flood-color="#000" flood-opacity=".45"/>
+            </filter>
+            <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+              <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#1b2530" stroke-width="1"/>
+            </pattern>
+          </defs>
+          <rect class="grid-bg" x="-4000" y="-4000" width="8000" height="8000" fill="url(#grid)"/>
+          <g id="world">
+            <g id="wireHitLayer"></g>
+            <g id="boardsLayer"></g>
+            <g id="wiresLayer"></g>
+            <g id="partsLayer"></g>
+            <g id="pinsLayer"></g>
+            <g id="pendingLayer"></g>
+          </g>
+        </svg>
+      </div>
+      <div class="scope hidden" id="scopeWrap">
+        <div class="scope-head">
+          <span class="scope-title">Осциллограф</span>
+          <label>Развёртка <select id="timeDiv" class="mini-select"></select></label>
+          <label>Масштаб <select id="voltDiv" class="mini-select"></select></label>
+          <button class="btn btn-small" id="scopePause">Пауза</button>
+          <button class="btn btn-small" id="scopeClear">Сброс</button>
+          <span class="scope-hint">240 отсчётов/с · ШИМ рисуется аналитически при развёртке ≤ 5 мс</span>
+        </div>
+        <div class="scope-body">
+          <canvas id="scopeCanvas"></canvas>
+          <div class="scope-channels" id="scopeChannels"></div>
+        </div>
+      </div>
+
+      <div class="canvas-foot">
+        <span class="stat" id="statParts">0 деталей</span>
+        <span class="stat" id="statWires">0 проводов</span>
+        <span class="stat" id="statIter">—</span>
+        <span class="stat probe" id="probe">наведите на вывод — покажу напряжение</span>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------ палитра -->
+    <aside class="panel panel-palette">
+      <header class="panel-head"><h2>Компоненты</h2></header>
+      <div class="palette" id="palette"></div>
+      <div class="palette-note">
+        <b>Как собрать</b>
+        <ol>
+          <li>Кликните деталь — она появится на схеме.</li>
+          <li>Тяните её мышью, чтобы двигать.</li>
+          <li>Клик по выводу, затем по другому — провод.</li>
+          <li>Светодиод — обязательно с резистором 220 Ом.</li>
+          <li>Превысили номинал — деталь сгорит. Вернуть целые: кнопка «Сброс».</li>
+        </ol>
+      </div>
+    </aside>
+  </main>
+
+
+  <!-- ------------------------------------------------ ROS 2: квартира -->
+  <main class="ros-layout hidden" id="rosLayout">
+    <section class="ros-main">
+      <header class="panel-head">
+        <h2>ROS 2 · Квартира</h2>
+        <span class="hint">Узел /robot_driver, лидар 240 лучей, SLAM 5 см</span>
+        <span class="spacer"></span>
+        <div class="ros-hud">
+          <span class="ros-stat"><b id="rosCoverage">0 %</b>карта</span>
+          <span class="ros-stat"><b id="rosTrash">0 / 6</b>мусор</span>
+          <span class="ros-stat"><b id="rosBattery">100 %</b>батарея</span>
+          <span class="ros-stat ros-poses"><b id="rosPose">x=0.00 y=0.00 θ=0°</b><span id="rosRoom">Коридор</span></span>
+        </div>
+      </header>
+
+      <div class="ros-stage">
+        <canvas id="rosCanvas"></canvas>
+        <div class="ros-overlay">
+          <div class="seg">
+            <button class="seg-btn active" id="rosModeSlam">Карта SLAM</button>
+            <button class="seg-btn" id="rosModeTruth">Квартира</button>
+          </div>
+          <button class="btn btn-small active" id="rosRays">Лучи</button>
+          <button class="btn btn-small active" id="rosPath">След</button>
+        </div>
+        <div class="ros-pad" aria-label="Пульт управления">
+          <button id="rosPadL" class="pad-btn pad-left" aria-label="Поворот влево">↺</button>
+          <button id="rosPadF" class="pad-btn pad-up" aria-label="Вперёд">↑</button>
+          <button id="rosPadR" class="pad-btn pad-right" aria-label="Поворот вправо">↻</button>
+          <button id="rosPadB" class="pad-btn pad-down" aria-label="Назад">↓</button>
+        </div>
+        <div class="ros-hintline" id="rosState">ищите мусор: он отмечен оранжевым</div>
+      </div>
+
+      <footer class="ros-foot">
+        <button id="rosCollect" class="btn btn-small btn-run">Собрать (E)</button>
+        <button id="rosReset" class="btn btn-small">На док</button>
+        <button id="rosHelp" class="btn btn-small">help</button>
+        <span class="spacer"></span>
+        <span class="ros-keys">WASD / стрелки — движение · E — собрать · Tab — автодополнение в терминале</span>
+      </footer>
+    </section>
+
+    <aside class="ros-side">
+      <section class="ros-tasks-box">
+        <header class="panel-head"><h2>Задания ROS</h2><span class="pill" id="rosTaskCount">0/3</span></header>
+        <div class="ros-tasks" id="rosTasks"></div>
+      </section>
+
+      <section class="ros-term">
+        <header class="panel-head">
+          <h2>Терминал</h2>
+          <span class="spacer"></span>
+          <button class="btn btn-small" id="rosTermClear">Очистить</button>
+        </header>
+        <div class="term-out" id="rosTermOut" role="log" aria-live="polite"></div>
+        <div class="term-input">
+          <span class="term-prompt">student@robosim:~$</span>
+          <input id="rosTermIn" spellcheck="false" autocomplete="off" placeholder="help" aria-label="Команда терминала"/>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- ------------------------------------------------ задания -->
+  <aside class="drawer hidden" id="taskDrawer" aria-hidden="true" aria-label="Учебные задания"></aside>
+
+  <footer class="statusbar">
+    <span id="statusText">Готово</span>
+    <span class="spacer"></span>
+    <span class="warn" id="warnText"></span>
+  </footer>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

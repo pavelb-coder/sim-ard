@@ -1,0 +1,112 @@
+{{!
+    Шаблон страницы элемента курса RoboSim.
+
+    Симулятор открывается в iframe с той же схемы, с которой начинает ученик:
+    ссылка уже содержит проект в коде `#p=…`, поэтому отдельный API не нужен.
+
+    @package    mod_robosim
+    @copyright  2026 RoboSim
+    @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+
+    Context variables required for this template:
+    * cmid, name, intro, hasintro, prompt, hasprompt
+    * playerurl, playerurlplain, external, task, hastask, source
+    * sesskey, wwwroot, cansubmit, cangrade, isstaff, autograde, maxgrade, hasgrade
+    * reporturl, attempts, maxattempts, attemptsleft, limited, maxreached
+    * best, hasbest, lasttime, lastscore, lastpassed, viewingsubmission
+}}
+<div class="mod-robosim" data-region="robosim"
+     data-cmid="{{cmid}}"
+     data-sesskey="{{sesskey}}"
+     data-wwwroot="{{wwwroot}}"
+     data-task="{{task}}"
+     data-external="{{#external}}1{{/external}}{{^external}}0{{/external}}"
+     data-cansubmit="{{#cansubmit}}1{{/cansubmit}}{{^cansubmit}}0{{/cansubmit}}"
+     data-maxgrade="{{maxgrade}}">
+
+    {{#hasintro}}
+    <div class="robosim-intro">{{{intro}}}</div>
+    {{/hasintro}}
+
+    {{#hasprompt}}
+    <div class="robosim-prompt card card-body bg-light">{{{prompt}}}</div>
+    {{/hasprompt}}
+
+    {{#viewingsubmission}}
+    <div class="alert alert-info robosim-viewing">
+        <strong>{{#str}}viewingsubmission, mod_robosim{{/str}}</strong>
+        {{#str}}viewingsubmissionfor, mod_robosim{{/str}} {{user}} —
+        {{#str}}attempt, mod_robosim{{/str}} {{attempt}}, {{score}}%,
+        {{#passed}}{{#str}}passed, mod_robosim{{/str}}{{/passed}}{{^passed}}{{#str}}failed, mod_robosim{{/str}}{{/failed}},
+        {{time}}.
+        <a href="{{backurl}}" class="btn btn-sm btn-outline-secondary ms-2">{{#str}}backtostudent, mod_robosim{{/str}}</a>
+    </div>
+    {{/viewingsubmission}}
+
+    <div class="robosim-meta">
+        <span class="robosim-chip">{{#str}}startsfrom, mod_robosim{{/str}}: <b>{{source}}</b></span>
+        {{#hastask}}
+        <span class="robosim-chip">{{#str}}task, mod_robosim{{/str}}: <b>{{task}}</b></span>
+        {{/hastask}}
+        {{#limited}}
+        <span class="robosim-chip">{{#str}}attempts, mod_robosim{{/str}}: <b>{{attempts}} / {{maxattempts}}</b></span>
+        {{/limited}}
+        {{^limited}}
+        <span class="robosim-chip">{{#str}}attempts, mod_robosim{{/str}}: <b>{{attempts}}</b></span>
+        {{/limited}}
+        {{#hasbest}}
+        <span class="robosim-chip">{{#str}}bestresult, mod_robosim{{/str}}: <b>{{best}}%</b></span>
+        {{/hasbest}}
+        {{#hasgrade}}
+        <span class="robosim-chip">{{#str}}maxgrade, mod_robosim{{/str}}: <b>{{maxgrade}}</b></span>
+        {{/hasgrade}}
+        {{#lasttime}}
+        <span class="robosim-chip">{{#str}}lastattempt, mod_robosim{{/str}}: <b>{{lasttime}}</b>
+            ({{lastscore}}%{{#lastpassed}}, {{#str}}passed, mod_robosim{{/str}}{{/lastpassed}}{{^lastpassed}}, {{#str}}failed, mod_robosim{{/str}}{{/lastpassed}})</span>
+        {{/lasttime}}
+    </div>
+
+    {{#external}}
+    <div class="alert alert-warning">
+        {{#str}}externalsimulator, mod_robosim{{/str}}
+    </div>
+    {{/external}}
+
+    {{#maxreached}}
+    <div class="alert alert-warning">{{#str}}attemptsused, mod_robosim{{/str}}</div>
+    {{/maxreached}}
+
+    <div class="robosim-toolbar">
+        {{#cansubmit}}
+        <button type="button" class="btn btn-primary" data-action="submit">
+            {{#str}}submitwork, mod_robosim{{/str}}
+        </button>
+        <button type="button" class="btn btn-outline-primary" data-action="check">
+            {{#str}}checkwork, mod_robosim{{/str}}
+        </button>
+        {{/cansubmit}}
+        <a class="btn btn-link" href="{{playerurl}}" target="_blank" rel="noopener">
+            {{#str}}openfullscreen, mod_robosim{{/str}}
+        </a>
+        {{#isstaff}}
+        <a class="btn btn-outline-secondary ms-auto" href="{{reporturl}}">
+            {{#str}}report, mod_robosim{{/str}}
+        </a>
+        {{/isstaff}}
+    </div>
+
+    <div class="robosim-status" data-region="status" role="status" aria-live="polite"></div>
+
+    <div class="robosim-checks" data-region="checks"></div>
+
+    <div class="robosim-frame-wrap">
+        <iframe class="robosim-frame"
+                data-region="frame"
+                src="{{playerurl}}"
+                title="{{name}}"
+                allow="fullscreen"
+                referrerpolicy="no-referrer"></iframe>
+    </div>
+
+    <p class="robosim-help text-muted small">{{#str}}howto, mod_robosim{{/str}}</p>
+</div>
