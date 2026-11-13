@@ -951,6 +951,193 @@ void loop() {
 }
 `,
   },
+  {
+    id: 'shift595',
+    name: '74HC595: бегущий огонь на четырёх светодиодах',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'dd1', type: 'sr595', x: -30, y: 205, props: {} },
+        { id: 'r1', type: 'resistor', x: 150, y: -215, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: 150, y: -165, props: { value: 220 } },
+        { id: 'r3', type: 'resistor', x: 150, y: -115, props: { value: 220 } },
+        { id: 'r4', type: 'resistor', x: 150, y: -65, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: 260, y: -215, props: { color: '#ff5544' } },
+        { id: 'l2', type: 'led', x: 260, y: -165, props: { color: '#ffd166' } },
+        { id: 'l3', type: 'led', x: 260, y: -115, props: { color: '#3fd07a' } },
+        { id: 'l4', type: 'led', x: 260, y: -65, props: { color: '#5ad2ff' } },
+      ],
+      wires: [
+        wire('b1', '5V', 'dd1', 'MR'), wire('b1', 'GND', 'dd1', 'OE'),
+        wire('b1', 'D8', 'dd1', 'DS'), wire('b1', 'D9', 'dd1', 'SHCP'), wire('b1', 'D10', 'dd1', 'STCP'),
+        wire('dd1', 'QA', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2'),
+        wire('dd1', 'QB', 'r2', '1'), wire('r2', '2', 'l2', 'A'), wire('l2', 'K', 'b1', 'GND2'),
+        wire('dd1', 'QC', 'r3', '1'), wire('r3', '2', 'l3', 'A'), wire('l3', 'K', 'b1', 'GND2'),
+        wire('dd1', 'QD', 'r4', '1'), wire('r4', '2', 'l4', 'A'), wire('l4', 'K', 'b1', 'GND2'),
+      ],
+    },
+    code: `// Один сдвиговый регистр вместо четырёх выводов: три провода
+// (данные, такт, защёлка) зажигают сколько угодно светодиодов.
+// Бит, выведенный первым, за восемь тактов доберётся до QH,
+// поэтому старший бит отправляем первым — как shiftOut(MSBFIRST).
+
+const int DS = 8;      // данные
+const int SH = 9;      // такт сдвига
+const int ST = 10;     // защёлка
+
+void sendByte(byte value) {
+  for (int i = 7; i >= 0; i--) {
+    digitalWrite(DS, (value >> i) & 1);    // старший бит — первым
+    digitalWrite(SH, HIGH);
+    digitalWrite(SH, LOW);
+  }
+  digitalWrite(ST, HIGH);                  // переписали защёлку
+  digitalWrite(ST, LOW);
+}
+
+void setup() {
+  pinMode(DS, OUTPUT);
+  pinMode(SH, OUTPUT);
+  pinMode(ST, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("74HC595: бегущий огонь");
+}
+
+void loop() {
+  for (int i = 0; i < 4; i++) {
+    sendByte(1 << i);
+    delay(180);
+  }
+}
+`,
+  },
+
+  {
+    id: 'motor',
+    name: 'L298N и мотор: вперёд, назад, стоп',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'da1', type: 'l298n', x: -60, y: 185, props: {} },
+        { id: 'm1', type: 'dcmotor', x: 205, y: 190, props: {} },
+      ],
+      wires: [
+        wire('b1', 'D9', 'da1', 'IN1'), wire('b1', 'D8', 'da1', 'IN2'),
+        wire('b1', '5V', 'da1', 'ENA'), wire('b1', '5V', 'da1', 'VCC'), wire('b1', 'GND2', 'da1', 'GND'),
+        wire('da1', 'OUT1', 'm1', 'M+'), wire('da1', 'OUT2', 'm1', 'M-'),
+      ],
+    },
+    code: `// L298N — это H-мост: два входа задают полярность на выходе,
+// ENA — разрешение. Внутри моста падает около 1,8 В, поэтому
+// мотор получает не все 5 В, и обороты чуть ниже.
+//
+// Смотрите на мотор: он не «переключается», а честно раскручивается
+// и выбегает — у него есть инерция, как у настоящего.
+
+const int IN1 = 9;
+const int IN2 = 8;
+
+void setup() {
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("L298N: вперёд-назад");
+}
+
+void loop() {
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);    // вперёд
+  delay(2500);
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, LOW);    // выбег
+  delay(1200);
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH);   // назад
+  delay(2500);
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, LOW);
+  delay(1200);
+}
+`,
+  },
+
+  {
+    id: 'keypad',
+    name: 'Клавиатура 4×4 и светофор',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'sb1', type: 'keypad', x: 300, y: 20, props: { pressed: null } },
+        { id: 'hl1', type: 'traffic', x: -260, y: 240, props: {} },
+      ],
+      wires: [
+        wire('b1', 'D2', 'sb1', 'R1'), wire('b1', 'D3', 'sb1', 'R2'),
+        wire('b1', 'D4', 'sb1', 'R3'), wire('b1', 'D5', 'sb1', 'R4'),
+        wire('b1', 'D6', 'sb1', 'C1'), wire('b1', 'D7', 'sb1', 'C2'),
+        wire('b1', 'D10', 'sb1', 'C3'), wire('b1', 'D11', 'sb1', 'C4'),
+        wire('b1', 'D12', 'hl1', 'R'), wire('b1', 'D13', 'hl1', 'Y'),
+        wire('b1', 'A0', 'hl1', 'G'), wire('b1', 'GND', 'hl1', 'GND'),
+      ],
+    },
+    code: `// Клавиатура — это матрица 4×4: чтобы узнать, какая клавиша нажата,
+// строки по очереди «прижимаем» к земле и читаем столбцы.
+// Нажмите на клавишу мышью — скетч напечатает её в мониторе порта.
+// Цифры зажигают красный, * и # — жёлтый, A…D — зелёный.
+
+const int rows[4] = {2, 3, 4, 5};
+const int cols[4] = {6, 7, 10, 11};
+const char keys[4][4] = {
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
+};
+char lastKey = 0;
+
+void setup() {
+  for (int i = 0; i < 4; i++) {
+    pinMode(rows[i], OUTPUT);
+    digitalWrite(rows[i], HIGH);
+    pinMode(cols[i], INPUT_PULLUP);
+  }
+  pinMode(12, OUTPUT);
+  pinMode(13, OUTPUT);
+  pinMode(A0, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Нажмите клавишу на схеме");
+}
+
+char scan() {
+  char found = 0;
+  for (int r = 0; r < 4; r++) {
+    digitalWrite(rows[r], LOW);
+    for (int c = 0; c < 4; c++) {
+      if (digitalRead(cols[c]) == LOW) found = keys[r][c];
+    }
+    digitalWrite(rows[r], HIGH);
+  }
+  return found;
+}
+
+void loop() {
+  char k = scan();
+  if (k != lastKey) {
+    digitalWrite(12, LOW);
+    digitalWrite(13, LOW);
+    digitalWrite(A0, LOW);
+    if (k) {
+      Serial.print("Клавиша: ");
+      Serial.println(k);
+      bool digit = (k >= '0' && k <= '9');
+      digitalWrite(12, digit ? HIGH : LOW);
+      digitalWrite(13, (k == '*' || k == '#') ? HIGH : LOW);
+      digitalWrite(A0, (k >= 'A' && k <= 'D') ? HIGH : LOW);
+    }
+    lastKey = k;
+  }
+  delay(30);
+}
+`
+  },
 ];
 
 /** Стартовый скетч для платы, добавленной из палитры. */

@@ -25,6 +25,10 @@ export const SHORT_NAME = {
   diode: 'диод', npn: 'транзистор', rgbled: 'светодиод RGB', toggle: 'тумблер',
   battery9: 'батарейка 9 В', batteryAA: 'отсек 4×AA', psu: 'источник питания', scope: 'осциллограф',
   multimeter: 'мультиметр', logicprobe: 'логический пробник',
+  ledBicolor: 'двухцветный светодиод', ledBar: 'линейка светодиодов', traffic: 'светофор',
+  pnp: 'транзистор PNP', mosfet: 'MOSFET', tip120: 'Дарлингтон TIP120',
+  l298n: 'драйвер L298N', dcmotor: 'мотор постоянного тока', keypad: 'клавиатура 4×4',
+  sr595: 'сдвиговый регистр 74HC595', sr165: 'сдвиговый регистр 74HC165',
   seg7: 'индикатор', relay: 'реле', joystick: 'джойстик', stepper28byj: 'шаговый двигатель',
   uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico',
   nano: 'Arduino Nano', promini: 'Arduino Pro Mini', leonardo: 'Arduino Leonardo', mega: 'Arduino Mega 2560',
@@ -36,6 +40,8 @@ export const REF_PREFIX = {
   dht11: 'DHT', hcsr04: 'SR', uno: 'A', esp32: 'A', pico: 'A',
   diode: 'VD', npn: 'VT', rgbled: 'D', toggle: 'S', seg7: 'HG', relay: 'K', joystick: 'RV', stepper28byj: 'M',
   battery9: 'GB', batteryAA: 'GB', psu: 'G', scope: 'OS', multimeter: 'PA', logicprobe: 'PL',
+  ledBicolor: 'D', ledBar: 'HL', traffic: 'HL', pnp: 'VT', mosfet: 'VT', tip120: 'VT',
+  l298n: 'DA', dcmotor: 'M', keypad: 'SB', sr595: 'DD', sr165: 'DD',
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
 
@@ -972,7 +978,332 @@ const POWER = {
 function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
 // ------------------------------------------------------------- сборка ----
-export const PARTS = { ...DISCRETE, ...MODULES, ...POWER };
+
+// ---------------------------------------------------------------- ещё детали ----
+// Светодиоды разных видов, транзисторы, модули Arduino и сдвиговые регистры.
+const EXTRA = {
+  ledBicolor: {
+    name: 'Двухцветный светодиод', category: 'Компоненты', w: 70, h: 56,
+    pins: () => [
+      { id: 'A1', label: 'A1', x: -30, y: -8, dir: 'left' },
+      { id: 'A2', label: 'A2', x: -30, y: 8, dir: 'left' },
+      { id: 'K', label: 'K', x: 30, y: 0, dir: 'right' },
+    ],
+    render(comp) {
+      return partTag(comp, 70, 56, `
+        <line x1="-30" y1="-8" x2="-14" y2="-8" stroke="#8aa4b8" stroke-width="1.3"/>
+        <line x1="-30" y1="8" x2="-14" y2="8" stroke="#8aa4b8" stroke-width="1.3"/>
+        <line x1="14" y1="0" x2="30" y2="0" stroke="#8aa4b8" stroke-width="1.3"/>
+        <circle class="halo1" cx="0" cy="0" r="20" fill="#ff5544" opacity="0"/>
+        <circle class="halo2" cx="0" cy="0" r="20" fill="#3fd07a" opacity="0"/>
+        <circle cx="0" cy="0" r="12" fill="#e9eef3" fill-opacity=".2" stroke="#9fb0bf" stroke-width="1.1"/>
+        <circle class="core" cx="0" cy="0" r="7" fill="#dfe8ef" opacity=".85"/>
+        <path d="M -12 -8 L -12 -8 M -12 -8 L -4 -8" stroke="#8aa4b8" stroke-width="1"/>
+        <text x="0" y="24" style="font:5.5px ui-monospace;fill:#7d93a6;text-anchor:middle">2 кристалла</text>`);
+    },
+    update(g, comp, env) {
+      const ch = env.info?.channels || [0, 0];
+      const set = (sel, b) => { const el = g.querySelector(sel); if (el) el.setAttribute('opacity', String(Math.min(1, b) * 0.85)); };
+      set('.halo1', ch[0]); set('.halo2', ch[1]);
+      const core = g.querySelector('.core');
+      if (core) {
+        const m = Math.max(ch[0] || 0, ch[1] || 0);
+        core.setAttribute('fill', m > 0.05
+          ? `rgb(${Math.round(120 + 135 * Math.min(1, ch[0] || 0))},${Math.round(120 + 135 * Math.min(1, ch[1] || 0))},110)`
+          : '#dfe8ef');
+      }
+    },
+  },
+
+  ledBar: {
+    name: 'Линейка светодиодов (10)', category: 'Компоненты', w: 196, h: 52,
+    pins: () => {
+      const out = [];
+      for (let i = 0; i < 10; i++) out.push({ id: String(i + 1), label: String(i + 1), x: -81 + i * 18, y: 28, dir: 'down' });
+      out.push({ id: 'K', label: 'K', x: 104, y: 0, dir: 'right' });
+      return out;
+    },
+    render(comp) {
+      const leds = Array.from({ length: 10 }, (_, i) => `
+        <circle class="halo" data-i="${i}" cx="${-81 + i * 18}" cy="0" r="11" fill="#7ef29d" opacity="0"/>
+        <circle cx="${-81 + i * 18}" cy="0" r="6" fill="#2a3440" stroke="#46586a"/>`).join('');
+      return partTag(comp, 196, 52, `
+        <rect x="-92" y="-12" width="184" height="24" rx="3" fill="#141c25" stroke="#33465a"/>
+        ${leds}
+        <line x1="104" y1="0" x2="92" y2="0" stroke="#8aa4b8" stroke-width="1.3"/>`);
+    },
+    update(g, comp, env) {
+      const ch = env.info?.channels || [];
+      for (let i = 0; i < 10; i++) {
+        const el = g.querySelector(`.halo[data-i="${i}"]`);
+        if (el) el.setAttribute('opacity', String(Math.min(1, ch[i] || 0) * 0.8));
+      }
+    },
+  },
+
+  traffic: {
+    name: 'Светофорный модуль', category: 'Компоненты', w: 82, h: 136,
+    pins: () => [
+      { id: 'R', label: 'R', x: -27, y: 68, dir: 'down' },
+      { id: 'Y', label: 'Y', x: -9, y: 68, dir: 'down' },
+      { id: 'G', label: 'G', x: 9, y: 68, dir: 'down' },
+      { id: 'GND', label: '−', x: 27, y: 68, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 82, 136, `
+        <rect x="-34" y="-62" width="68" height="124" rx="7" fill="#151d26" stroke="#33465a"/>
+        <circle class="lamp r" cx="0" cy="-38" r="15" fill="#4a1f1c" stroke="#6b2f29"/>
+        <circle class="lamp y" cx="0" cy="0" r="15" fill="#4a3d1c" stroke="#6b5b29"/>
+        <circle class="lamp g" cx="0" cy="38" r="15" fill="#1c4a2b" stroke="#296b3d"/>
+        ${['-27', '-9', '9', '27'].map((x) => `<line x1="${x}" y1="62" x2="${x}" y2="68" stroke="#8aa4b8" stroke-width="1.3"/>`).join('')}`);
+    },
+    update(g, comp, env) {
+      const ch = env.info?.channels || [0, 0, 0];
+      const colors = ['#ff5a4d', '#ffd166', '#3fd07a'];
+      const dim = ['#4a1f1c', '#4a3d1c', '#1c4a2b'];
+      ['r', 'y', 'g'].forEach((k, i) => {
+        const el = g.querySelector(`.lamp.${k}`);
+        if (!el) return;
+        const b = Math.min(1, ch[i] || 0);
+        el.setAttribute('fill', b > 0.05 ? colors[i] : dim[i]);
+        el.setAttribute('opacity', b > 0.05 ? String(0.7 + b * 0.3) : '1');
+      });
+    },
+  },
+
+  pnp: {
+    name: 'Транзистор PNP (BC557)', category: 'Компоненты', w: 78, h: 76,
+    pins: () => [
+      { id: 'B', label: 'B', x: -30, y: 6, dir: 'left' },
+      { id: 'C', label: 'C', x: 22, y: -26, dir: 'up' },
+      { id: 'E', label: 'E', x: 22, y: 32, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 78, 76, `
+        <line x1="-30" y1="6" x2="-12" y2="6" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="22" y1="-26" x2="22" y2="-2" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="22" y1="14" x2="22" y2="32" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="-12" y1="-8" x2="-12" y2="20" stroke="#8aa4b8" stroke-width="2"/>
+        <line x1="-12" y1="0" x2="22" y2="-2" stroke="#8aa4b8" stroke-width="1.6"/>
+        <line x1="-12" y1="12" x2="22" y2="14" stroke="#8aa4b8" stroke-width="1.6"/>
+        <path class="arrow" d="M 4 10 L 12 12 L 6 18 Z" fill="#8aa4b8"/>
+        <circle cx="10" cy="6" r="20" fill="none" stroke="#3a4b5c"/>
+        <text class="hint" x="30" y="52" style="font:5.4px ui-monospace;fill:#7d93a6;text-anchor:middle">BC557 hFE≈100</text>`);
+    },
+    update(g, comp, env) {
+      const on = !!env.info?.on;
+      const arrow = g.querySelector('.arrow');
+      if (arrow) arrow.setAttribute('fill', on ? '#7ef29d' : '#8aa4b8');
+    },
+  },
+
+  mosfet: {
+    name: 'MOSFET IRF540N', category: 'Компоненты', w: 86, h: 80,
+    pins: () => [
+      { id: 'G', label: 'G', x: -34, y: 6, dir: 'left' },
+      { id: 'D', label: 'D', x: 24, y: -28, dir: 'up' },
+      { id: 'S', label: 'S', x: 24, y: 34, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 86, 80, `
+        <rect x="-20" y="-24" width="44" height="52" rx="3" fill="#1a222c" stroke="#33465a"/>
+        <line x1="-34" y1="6" x2="-20" y2="6" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="-20" y1="-6" x2="-20" y2="18" stroke="#c3ccd4" stroke-width="2"/>
+        <line x1="-14" y1="-6" x2="-14" y2="18" stroke="#c3ccd4" stroke-width="2"/>
+        <line x1="24" y1="-28" x2="24" y2="-6" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="-14" y1="-6" x2="24" y2="-6" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="24" y1="18" x2="24" y2="34" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="-14" y1="18" x2="24" y2="18" stroke="#8aa4b8" stroke-width="1.4"/>
+        <path class="chan" d="M 0 -6 L 8 -6 L 8 18 L 0 18" fill="none" stroke="#8aa4b8" stroke-width="1.6"/>
+        <text class="hint" x="0" y="40" style="font:5.4px ui-monospace;fill:#7d93a6;text-anchor:middle">n-канал, Rds≈0,05 Ом</text>`);
+    },
+    update(g, comp, env) {
+      const on = !!env.info?.on;
+      const ch = g.querySelector('.chan');
+      if (ch) ch.setAttribute('stroke', on ? '#7ef29d' : '#8aa4b8');
+      const hint = g.querySelector('.hint');
+      if (hint) {
+        const r = env.info?.rds;
+        hint.textContent = on ? `открыт · ${(Math.max(0.05, r || 0.05)).toFixed(2)} Ом` : 'n-канал, закрыт';
+      }
+    },
+  },
+
+  tip120: {
+    name: 'Транзистор Дарлингтон TIP120', category: 'Компоненты', w: 84, h: 84,
+    pins: () => [
+      { id: 'B', label: 'B', x: -32, y: 8, dir: 'left' },
+      { id: 'C', label: 'C', x: 24, y: -30, dir: 'up' },
+      { id: 'E', label: 'E', x: 24, y: 36, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 84, 84, `
+        <line x1="-32" y1="8" x2="-14" y2="8" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="24" y1="-30" x2="24" y2="-4" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="24" y1="16" x2="24" y2="36" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="-14" y1="-6" x2="-14" y2="22" stroke="#8aa4b8" stroke-width="2"/>
+        <line x1="-14" y1="0" x2="24" y2="-4" stroke="#8aa4b8" stroke-width="1.6"/>
+        <line x1="-14" y1="14" x2="24" y2="16" stroke="#8aa4b8" stroke-width="1.6"/>
+        <circle cx="16" cy="6" r="22" fill="none" stroke="#3a4b5c"/>
+        <line x1="14" y1="-6" x2="14" y2="-24" stroke="#3a4b5c" stroke-width="2.4"/>
+        <text class="hint" x="16" y="56" style="font:5.4px ui-monospace;fill:#7d93a6;text-anchor:middle">hFE≈1000, 5 А</text>`);
+    },
+    update(g, comp, env) {
+      const hint = g.querySelector('.hint');
+      if (hint) {
+        const ic = env.info?.ic;
+        hint.textContent = env.info?.on ? `открыт · ${(ic || 0).toFixed(2)} А` : 'hFE≈1000, 5 А';
+      }
+    },
+  },
+
+  l298n: {
+    name: 'Драйвер двигателя L298N', category: 'Модули', w: 148, h: 116,
+    pins: () => [
+      { id: 'IN1', label: 'IN1', x: -80, y: -30, dir: 'left' },
+      { id: 'IN2', label: 'IN2', x: -80, y: -6, dir: 'left' },
+      { id: 'ENA', label: 'ENA', x: -80, y: 18, dir: 'left' },
+      { id: 'OUT1', label: 'OUT1', x: 80, y: -30, dir: 'right' },
+      { id: 'OUT2', label: 'OUT2', x: 80, y: -6, dir: 'right' },
+      { id: 'VCC', label: '5V', x: -26, y: 60, dir: 'down' },
+      { id: 'GND', label: '−', x: 26, y: 60, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 148, 116, `
+        <rect x="-72" y="-52" width="144" height="100" rx="4" fill="#1a222c" stroke="#3a5a7a"/>
+        <rect x="-40" y="-40" width="80" height="46" rx="2" fill="#2a3440" stroke="#46586a"/>
+        <path d="M -40 8 L -40 40 M 0 6 L 0 40 M 40 8 L 40 40" stroke="#4a5f72" stroke-width="2.4"/>
+        <rect x="-30" y="-34" width="60" height="10" rx="2" fill="#5a6d7d" opacity=".55"/>
+        <text x="0" y="-16" style="font:6.5px ui-monospace;fill:#8fbde3;text-anchor:middle">L298N BRIDGE</text>
+        <text x="0" y="-6" style="font:5.4px ui-monospace;fill:#5f8ba8;text-anchor:middle">A · 2 A · 5…35 В</text>
+        <circle class="led" cx="56" cy="24" r="3.4" fill="#3a4b5c"/>
+        <text x="56" y="36" style="font:4.6px ui-monospace;fill:#7d93a6;text-anchor:middle">ON</text>
+        ${[[-80, -30], [-80, -6], [-80, 18], [80, -30], [80, -6]].map(([x, y]) => `<line x1="${x}" y1="${y}" x2="${x > 0 ? 72 : -72}" y2="${y}" stroke="#8aa4b8" stroke-width="1.3"/>`).join('')}
+        <line x1="-26" y1="48" x2="-26" y2="60" stroke="#c0392b" stroke-width="1.4"/>
+        <line x1="26" y1="48" x2="26" y2="60" stroke="#8aa4b8" stroke-width="1.4"/>`);
+    },
+    update(g, comp, env) {
+      const led = g.querySelector('.led');
+      if (led) led.setAttribute('fill', env.info?.enabled ? '#3fd07a' : '#3a4b5c');
+    },
+  },
+
+  dcmotor: {
+    name: 'Мотор постоянного тока', category: 'Модули', w: 108, h: 96,
+    pins: () => [
+      { id: 'M+', label: '+', x: -38, y: 0, dir: 'left' },
+      { id: 'M-', label: '−', x: 20, y: 46, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 108, 96, `
+        <line x1="-38" y1="0" x2="-28" y2="0" stroke="#c0392b" stroke-width="1.4"/>
+        <line x1="20" y1="34" x2="20" y2="46" stroke="#8aa4b8" stroke-width="1.4"/>
+        <rect x="-28" y="-24" width="56" height="58" rx="5" fill="#2a3440" stroke="#46586a"/>
+        <circle cx="0" cy="0" r="18" fill="#1a222c" stroke="#3a4b5c"/>
+        <g class="rotor">
+          <path d="M 0 -14 L 6 0 L 0 14 L -6 0 Z" fill="#8fbde3"/>
+        </g>
+        <text x="0" y="26" style="font:5.4px ui-monospace;fill:#7d93a6;text-anchor:middle">DC 3…6 В</text>`);
+    },
+    update(g, comp, env) {
+      const rotor = g.querySelector('.rotor');
+      const a = Number(env.info?.angle) || 0;
+      if (rotor) rotor.setAttribute('transform', `rotate(${a.toFixed(1)})`);
+      const hint = g.querySelector('.hint');
+      if (hint) hint.textContent = `${Math.round(env.info?.rpm || 0)} об/мин`;
+    },
+  },
+
+  keypad: {
+    name: 'Клавиатура 4×4', category: 'Модули', w: 128, h: 148,
+    pins: () => {
+      const out = [];
+      for (let i = 0; i < 4; i++) out.push({ id: `R${i + 1}`, label: `R${i + 1}`, x: -54, y: -42 + i * 15, dir: 'left' });
+      for (let i = 0; i < 4; i++) out.push({ id: `C${i + 1}`, label: `C${i + 1}`, x: 54, y: -42 + i * 15, dir: 'right' });
+      return out;
+    },
+    render(comp) {
+      const keys = ['1', '2', '3', 'A', '4', '5', '6', 'B', '7', '8', '9', 'C', '*', '0', '#', 'D'];
+      const cells = keys.map((k, i) => {
+        const r = Math.floor(i / 4), c = i % 4;
+        const x = -34 + c * 23, y = -42 + r * 23;
+        return `<rect data-role="key" data-key="${i}" x="${x - 9}" y="${y - 9}" width="18" height="18" rx="3"
+                      fill="#22303c" stroke="#3d5566" style="cursor:pointer"/>
+                <text x="${x}" y="${y + 2.4}" style="font:6.5px ui-monospace;fill:#c9d7e3;text-anchor:middle;pointer-events:none">${k}</text>`;
+      }).join('');
+      return partTag(comp, 128, 148, `
+        <rect x="-46" y="-54" width="92" height="106" rx="5" fill="#171f28" stroke="#33465a"/>
+        ${cells}
+        ${[[-46, -42], [-46, -27], [-46, -12], [-46, 3], [46, -42], [46, -27], [46, -12], [46, 3]]
+          .map(([x, y]) => `<line x1="${x}" y1="${y}" x2="${x > 0 ? 40 : -40}" y2="${y}" stroke="#8aa4b8" stroke-width="1.1"/>`).join('')}`);
+    },
+    update(g, comp, env) {
+      const pressed = comp.props?.pressed;
+      g.querySelectorAll('[data-role="key"]').forEach((el) => {
+        const on = pressed !== null && pressed !== undefined && Number(pressed) === Number(el.dataset.key);
+        el.setAttribute('fill', on ? '#3fd07a' : '#22303c');
+      });
+    },
+  },
+
+  sr595: {
+    name: 'Сдвиговый регистр 74HC595', category: 'Модули', w: 156, h: 158,
+    pins: () => {
+      const left = [['DS', 'DS'], ['SHCP', 'SH'], ['STCP', 'ST'], ['OE', 'OE'], ['MR', 'MR']];
+      const out = left.map(([id, label], i) => ({ id, label, x: -84, y: -54 + i * 22, dir: 'left' }));
+      for (let i = 0; i < 8; i++) out.push({ id: `Q${'ABCDEFGH'[i]}`, label: `Q${'ABCDEFGH'[i]}`, x: 84, y: -54 + i * 15, dir: 'right' });
+      return out;
+    },
+    render(comp) {
+      const outs = 'ABCDEFGH'.split('').map((n, i) => `
+        <line x1="70" y1="${-54 + i * 15}" x2="84" y2="${-54 + i * 15}" stroke="#8aa4b8" stroke-width="1.1"/>
+        <circle class="bit" data-i="${i}" cx="72" cy="${-54 + i * 15}" r="2.6" fill="#2a3440" stroke="#46586a"/>`).join('');
+      const ins = ['DS', 'SH', 'ST', 'OE', 'MR'].map((n, i) => `
+        <line x1="-84" y1="${-54 + i * 22}" x2="-58" y2="${-54 + i * 22}" stroke="#8aa4b8" stroke-width="1.1"/>`).join('');
+      return partTag(comp, 156, 158, `
+        <rect x="-60" y="-62" width="132" height="124" rx="3" fill="#1a222c" stroke="#3a4b5c"/>
+        <text x="6" y="-44" style="font:7px ui-monospace;fill:#8fbde3;text-anchor:middle">74HC595</text>
+        <text x="6" y="-33" style="font:5px ui-monospace;fill:#5f8ba8;text-anchor:middle">8-bit shift register</text>
+        <rect x="-52" y="-26" width="42" height="10" rx="2" fill="#0b1a14" stroke="#2c5c46"/>
+        <text class="bind" x="-31" y="-18" style="font:5.5px ui-monospace;fill:#7ef29d;text-anchor:middle">00000000</text>
+        ${ins}${outs}`);
+    },
+    update(g, comp, env) {
+      const bits = env.info?.bits || [0, 0, 0, 0, 0, 0, 0, 0];
+      g.querySelectorAll('.bit').forEach((el) => {
+        el.setAttribute('fill', bits[Number(el.dataset.i)] ? '#3fd07a' : '#2a3440');
+      });
+      const b = g.querySelector('.bind');
+      if (b) b.textContent = bits.join('');
+    },
+  },
+
+  sr165: {
+    name: 'Сдвиговый регистр 74HC165', category: 'Модули', w: 156, h: 150,
+    pins: () => {
+      const out = [];
+      for (let i = 0; i < 8; i++) out.push({ id: `D${i}`, label: `D${i}`, x: -84, y: -56 + i * 15, dir: 'left' });
+      [['PL', -56], ['CP', -38], ['CE', -20], ['Q7', -2]].forEach(([id, y]) => out.push({ id, label: id, x: 84, y, dir: 'right' }));
+      return out;
+    },
+    render(comp) {
+      const ins = Array.from({ length: 8 }, (_, i) => `<line x1="-84" y1="${-56 + i * 15}" x2="-58" y2="${-56 + i * 15}" stroke="#8aa4b8" stroke-width="1.1"/>`).join('');
+      const outs = [['PL', -56], ['CP', -38], ['CE', -20], ['Q7', -2]].map(([n, y]) => `<line x1="70" y1="${y}" x2="84" y2="${y}" stroke="#8aa4b8" stroke-width="1.1"/>`).join('');
+      return partTag(comp, 156, 150, `
+        <rect x="-60" y="-64" width="132" height="78" rx="3" fill="#1a222c" stroke="#3a4b5c"/>
+        <text x="6" y="-46" style="font:7px ui-monospace;fill:#8fbde3;text-anchor:middle">74HC165</text>
+        <text x="6" y="-35" style="font:5px ui-monospace;fill:#5f8ba8;text-anchor:middle">parallel-in / serial-out</text>
+        <circle class="q" cx="72" cy="-2" r="3" fill="#2a3440" stroke="#46586a"/>
+        ${ins}${outs}`);
+    },
+    update(g, comp, env) {
+      const q = g.querySelector('.q');
+      if (q) q.setAttribute('fill', env.info?.q7 ? '#3fd07a' : '#2a3440');
+    },
+  },
+};
+
+export const PARTS = { ...DISCRETE, ...MODULES, ...POWER, ...EXTRA };
 
 for (const spec of Object.values(BOARDS)) {
   PARTS[spec.id] = {

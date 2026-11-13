@@ -153,6 +153,17 @@ function iconFor(type) {
     case 'scope': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#04121f" stroke="#24405c"/><path d="M5 10l3-4 3 8 3-8 3 4h4" stroke="#ffd166" stroke-width="1.2"/></svg>`;
     case 'multimeter': return `<svg ${c} aria-hidden="true"><rect x="3" y="2" width="20" height="14" rx="2"/><rect x="5" y="4" width="10" height="6" rx="1" fill="#0b1a14" stroke="#2c5c46"/><circle cx="19" cy="7" r="3"/><path d="M8 16v2M13 16v2M18 16v2"/></svg>`;
     case 'logicprobe': return `<svg ${c} aria-hidden="true"><path d="M2 9h5"/><rect x="7" y="2" width="11" height="14" rx="3"/><circle cx="12.5" cy="7" r="2.4" fill="#3fd07a" stroke="#3fd07a"/><circle cx="12.5" cy="12" r="1.4"/><path d="M12.5 16v2"/></svg>`;
+    case 'ledBicolor': return `<svg ${c} aria-hidden="true"><path d="M2 6h4M2 12h4M18 9h6"/><circle cx="11" cy="9" r="6" fill="#ff5544" stroke="#ff5544"/><circle cx="20" cy="9" r="0"/></svg>`;
+    case 'ledBar': return `<svg ${c} aria-hidden="true"><rect x="1" y="6" width="24" height="6" rx="2"/><path d="M5 7.5v3M9 7.5v3M13 7.5v3M17 7.5v3M21 7.5v3" stroke="#7ef29d"/></svg>`;
+    case 'traffic': return `<svg ${c} aria-hidden="true"><rect x="8" y="1" width="10" height="16" rx="3"/><circle cx="13" cy="5" r="2" fill="#ff5a4d" stroke="#ff5a4d"/><circle cx="13" cy="9" r="2" fill="#ffd166" stroke="#ffd166"/><circle cx="13" cy="13" r="2" fill="#3fd07a" stroke="#3fd07a"/></svg>`;
+    case 'pnp': return `<svg ${c} aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M2 9h4M6 4v10"/><path d="M6 6l6-2M6 12l6 2"/><path d="M12 5l-3-2 4-1"/></svg>`;
+    case 'mosfet': return `<svg ${c} aria-hidden="true"><rect x="7" y="3" width="7" height="12" rx="1"/><path d="M2 9h5M9 3v12"/><path d="M14 5h6M14 13h6M20 5v8"/></svg>`;
+    case 'tip120': return `<svg ${c} aria-hidden="true"><circle cx="13" cy="9" r="7"/><path d="M2 9h4M6 4v10"/><path d="M6 6l6-2M6 12l6 2"/><path d="M6 3v12"/></svg>`;
+    case 'l298n': return `<svg ${c} aria-hidden="true"><rect x="2" y="3" width="22" height="12" rx="2"/><rect x="6" y="5" width="10" height="6" rx="1" fill="#4a5b6b"/><path d="M6 17v2M13 17v2M20 17v2"/></svg>`;
+    case 'dcmotor': return `<svg ${c} aria-hidden="true"><rect x="4" y="4" width="14" height="10" rx="2"/><circle cx="11" cy="9" r="3.4"/><path d="M18 9h5"/></svg>`;
+    case 'keypad': return `<svg ${c} aria-hidden="true"><rect x="4" y="2" width="18" height="14" rx="2"/><path d="M8 6h2M12 6h2M16 6h2M8 10h2M12 10h2M16 10h2"/></svg>`;
+    case 'sr595': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="1.5"/><path d="M10 4v-2M13 4v-2M16 4v-2M10 16v2M13 16v2M16 16v2" /><path d="M9 8h8M9 11h5" stroke="#3fd07a"/></svg>`;
+    case 'sr165': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="1.5"/><path d="M10 4v-2M13 4v-2M16 4v-2"/><path d="M20 6h4M20 12h4"/><path d="M9 9h8"/></svg>`;
     case 'stepper28byj': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="10" height="9" rx="1"/><circle cx="18" cy="9" r="5"/><circle cx="18" cy="9" r="1.6"/><path d="M18 4v2"/></svg>`;
     default: return `<svg ${c} aria-hidden="true"><rect x="4" y="4" width="18" height="10" rx="2"/></svg>`;
   }
@@ -397,6 +408,25 @@ function exactAttack(err, lineMap, offset = 0) {
   return line;
 }
 
+/**
+ * Скетч исполняется синхронно между кадрами: пока он идёт, цепь ещё «не знает»
+ * о свежих digitalWrite. Если внутри скетча читают вывод, пересчитываем цепь
+ * сразу — иначе сканирование матрицы клавиатуры видит уровни прошлого кадра.
+ * Не больше FORCE_SOLVES за кадр, чтобы не уронить FPS.
+ */
+let forcedSolves = 0;
+let forcedFrame = -1;
+function syncCircuitForRead() {
+  // лимит считается на кадр драйвера: сбрасываем при смене кадра
+  if (forcedFrame !== frameCount) { forcedFrame = frameCount; forcedSolves = 0; }
+  if (forcedSolves > 24) return;
+  let dirty = false;
+  for (const rt of runtimes.values()) if (rt.events?.length) { dirty = true; break; }
+  if (!dirty) return;
+  forcedSolves++;
+  circuit.solve(runtimes, 1 / 60);
+}
+
 function prepareBoard(part) {
   const spec = BOARDS[part.type];
   const lang = part.props.lang === 'mpy' ? 'mpy' : 'cpp';
@@ -417,6 +447,7 @@ function prepareBoard(part) {
     onFrame: () => {},
     onPinChange: (n) => recordFlip(part.id, n),
     readPin: (n) => {
+      syncCircuitForRead();
       const v = circuit.voltageOf(part.id, n);
       recordAnalog(part.id, n, v, spec);
       return v;
@@ -871,6 +902,34 @@ $('labelsBtn').addEventListener('click', () => {
 });
 $('deleteBtn').addEventListener('click', () => schematic.removeSelected());
 $('clearBtn').addEventListener('click', () => { if (confirm('Очистить схему?')) schematic.clear(); });
+$('wipeBtn').addEventListener('click', () => {
+  if (confirm('Очистить рабочее пространство? Схема, провода, код и монитор порта будут стёрты.')) clearWorkspace();
+});
+
+/** Полная очистка: схема, провода, скетчи, монитор, проблемы, осциллограф, счётчики. */
+async function clearWorkspace() {
+  await stopAll();
+  schematic.clear();
+  serialEl.innerHTML = '';
+  setProblems([]);
+  $('hintsOut').innerHTML = '';
+  $('problemsCount').textContent = '0';
+  if ($('hintsCount')) $('hintsCount').textContent = '0';
+  codeEl.value = '';
+  refreshEditor();
+  activeBoardId = null;
+  syncTabs();
+  scope.clear();
+  scopeOn = false;
+  $('scopeWrap').classList.add('hidden');
+  resetTrace();
+  $('timer').textContent = '00:00.0';
+  updateStats();
+  buildScopeChannels();
+  refreshHints();
+  setStatus('Рабочее пространство очищено');
+  scheduleAutosave();
+}
 
 window.addEventListener('keydown', (e) => {
   if (appMode === 'ros') return;                       // у ROS-режима свои клавиши

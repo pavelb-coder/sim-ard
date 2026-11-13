@@ -94,6 +94,9 @@ export class Schematic {
     if (type === 'scope') return {};
     if (type === 'multimeter') return { mode: 'V' };
     if (type === 'logicprobe') return {};
+    if (type === 'keypad') return { pressed: null };
+    if (type === 'dcmotor') return { angle: 0 };
+    if (type === 'sr595' || type === 'sr165') return {};
     if (type === 'seg7') return {};
     return {};
   }
@@ -420,6 +423,14 @@ export class Schematic {
           part.props.pressed = true;
           this.refreshPart(part);
         }
+        const keyEl = ev.target.closest('[data-role="key"]');
+        if (part.type === 'keypad' && keyEl) {
+          part.props.pressed = Number(keyEl.dataset.key);
+          this.refreshPart(part);
+          this.onChange();
+          this.drag = { ...this.drag, keypadKey: true };
+          return;
+        }
         if (part.type === 'multimeter' && knob) {
           const modes = ['V', 'A', 'OHM', 'CONT'];
           const cur = modes.indexOf(part.props.mode || 'V');
@@ -524,6 +535,11 @@ export class Schematic {
       if (this.drag) {
         const part = this.part(this.drag.id);
         if (part?.type === 'button') { part.props.pressed = false; this.refreshPart(part); }
+        if (part?.type === 'keypad' && part.props.pressed !== null && part.props.pressed !== undefined) {
+          part.props.pressed = null;
+          this.refreshPart(part);
+          this.onChange();
+        }
         if (part?.type === 'joystick' && part.props.pressed) { part.props.pressed = false; this.refreshPart(part); }
         if (this.moved) this.onChange();
         this.drag = null;

@@ -35,6 +35,8 @@ body{
 .btn-run:hover{background:linear-gradient(180deg,#35b14c,#22823a)}
 .btn-stop{background:#3a1f22;border-color:#6c2b30;color:#ffb3ae}
 .btn-stop:not(:disabled):hover{background:#4a2529}
+.btn-wipe{display:inline-flex;align-items:center;gap:6px}
+.btn-wipe:hover{background:#3a2529;border-color:#7a3b41;color:#ffc9c4}
 .btn-small{padding:5px 10px;font-size:12px}
 .timer{font:600 13px var(--mono);color:var(--muted);min-width:70px}
 .select{

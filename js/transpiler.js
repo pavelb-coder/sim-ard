@@ -126,6 +126,29 @@ export function transpile(source) {
   let declConst = false;     // было const — не печатать let
   const braceStack = [];     // 'block' | 'arr' — чтобы закрыть литерал скобкой ]
 
+  // Свои функции компилируются в async, поэтому и вызовы надо ждать:
+  // иначе «char k = scan();» получит промис вместо символа.
+  // Имена собираем заранее — функция может вызываться до объявления.
+  const userFns = new Set();
+  for (let a = 0; a < toks.length; a++) {
+    const t = toks[a];
+    if (!(t.t === 'id' && TYPES.has(t.v))) continue;
+    const j = nextMeaningful(toks, a + 1);
+    const nameTok = toks[j];
+    if (!nameTok || nameTok.t !== 'id' || TYPES.has(nameTok.v)) continue;
+    const k = nextMeaningful(toks, j + 1);
+    if (!(toks[k] && toks[k].t === 'op' && toks[k].v === '(')) continue;
+    let depth = 0, m = k;
+    for (; m < toks.length; m++) {
+      const q = toks[m];
+      if (q.t === 'nl') continue;
+      if (q.t === 'op' && q.v === '(') depth++;
+      if (q.t === 'op' && q.v === ')') { depth--; if (!depth) break; }
+    }
+    const after = toks[nextMeaningful(toks, m + 1)];
+    if (after && after.t === 'op' && (after.v === '{' || after.v === ';')) userFns.add(nameTok.v);
+  }
+
   const emit = (s) => out.push(s);
   const error = (line, msg) => errors.push({ line, msg });
   const warn = (line, msg) => warnings.push({ line, msg });
@@ -321,6 +344,18 @@ export function transpile(source) {
 
     if (tk.t === 'str') { emit(tk.v); i++; continue; }
     if (tk.t === 'num') { emit(tk.v); i++; continue; }
+
+    // ---------- вызов своей функции ----------
+    if (tk.t === 'id' && userFns.has(tk.v)) {
+      const p = prevMeaningful(toks, i);
+      const isMember = p >= 0 && toks[p].t === 'op' && toks[p].v === '.';
+      const nx = toks[nextMeaningful(toks, i + 1)];
+      if (!isMember && nx && nx.t === 'op' && nx.v === '(') {
+        emit(`await ${tk.v}`);
+        i++;
+        continue;
+      }
+    }
 
     // ---------- всё остальное ----------
     emit(tk.v);

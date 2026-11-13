@@ -34,6 +34,11 @@ export class ArduinoRuntime {
     const nums = this.spec.pins.filter((p) => typeof p.num === 'number').map((p) => p.num);
     for (const n of new Set(nums)) this.pins.set(n, { mode: 'INPUT', value: 0, pwm: 0 });
 
+    // Скетч может дёрнуть вывод несколько раз между двумя кадрами расчёта
+    // (например, весь байт в сдвиговый регистр). Цепь эти переключения
+    // должна увидеть по порядку, поэтому складываем их в очередь.
+    this.events = [];
+
     this.stopped = false;
     this.startTime = performance.now();
 
@@ -88,9 +93,12 @@ export class ArduinoRuntime {
   }
   digitalWrite(n, v) {
     const p = this.pin(n);
-    p.value = v ? 1 : 0;
+    const level = v ? 1 : 0;
+    const changed = p.value !== level || p.mode !== 'OUTPUT';
+    p.value = level;
     p.pwm = v ? 255 : 0;
     p.mode = 'OUTPUT';
+    if (changed && this.events.length < 512) this.events.push({ pin: n, value: level });
     this.onPinChange(n);
   }
   digitalRead(n) {

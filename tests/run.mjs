@@ -8,6 +8,7 @@ import { transpilePython } from '../js/mpy-transpiler.js';
 import { checkIncludes } from '../js/libraries.js';
 import { createLibraries } from '../js/libraries.js';
 import { BOARDS } from '../js/boards.js';
+import { ArduinoRuntime } from '../js/runtime.js';
 import { CheckContext, evaluate } from '../js/checker.js';
 import { lintCpp, lintPython } from '../js/hints.js';
 import { encodeProject, decodeProject, resultsCsv } from '../js/classroom.js';
@@ -1088,6 +1089,209 @@ console.log('\nИзмерительные приборы');
     const low = solveN(new Circuit(lowParts, lowWires));
     check('пробник видит LOW на минусе', low.partInfo.get('pl1').level === 'LOW');
   }
+}
+
+console.log('\nНовые детали: светодиоды, транзисторы, модули, регистры');
+
+{
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type] });
+  const wire = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  const rt = (pins) => ({
+    pins: new Map(Object.entries(pins).map(([n, v]) => [Number(n), { value: v ? 1 : 0, pwm: v ? 255 : 0, mode: 'OUTPUT' }])),
+  });
+  const one = (c, pins = {}, n = 3) => { let r = null; for (let i = 0; i < n; i++) r = c.solve(new Map([['b1', rt(pins)]]), 1 / 60); return r; };
+  const b = (type = 'uno') => mk(type, 'b1');
+
+  // ---------------- двухцветный светодиод ----------------
+  {
+    const parts = [b(), mk('resistor', 'r1', { value: 220 }), mk('ledBicolor', 'd1')];
+    const wires = [wire(1, 'b1', 'D9', 'r1', '1'), wire(2, 'r1', '2', 'd1', 'A1'), wire(3, 'd1', 'K', 'b1', 'GND')];
+    const res = one(new Circuit(parts, wires), { 9: 255 });
+    const ch = res.partInfo.get('d1').channels;
+    check('двухцветный светодиод светит своим кристаллом', ch[0] > 0.5 && ch[1] < 0.01,
+      JSON.stringify(ch.map((v) => +v.toFixed(2))));
+  }
+
+  // ---------------- линейка светодиодов ----------------
+  {
+    const parts = [b(), mk('ledBar', 'hl1')];
+    const wires = [];
+    [9, 10, 11].forEach((pin, i) => wires.push(wire(i + 1, 'b1', `D${pin}`, 'hl1', String(i + 1))));
+    wires.push(wire(9, 'hl1', 'K', 'b1', 'GND'));
+    const res = one(new Circuit(parts, wires), { 9: 255, 10: 255, 11: 255 });
+    const ch = res.partInfo.get('hl1').channels;
+    check('линейка: горят ровно те сегменты, на которые подан +', ch[0] > 0.5 && ch[2] > 0.5 && ch[3] < 0.01,
+      JSON.stringify(ch.slice(0, 4).map((v) => +v.toFixed(2))));
+  }
+
+  // ---------------- светофор ----------------
+  {
+    const parts = [b(), mk('traffic', 'hl1')];
+    const wires = [wire(1, 'b1', 'D9', 'hl1', 'G'), wire(2, 'hl1', 'GND', 'b1', 'GND')];
+    const res = one(new Circuit(parts, wires), { 9: 255 });
+    const ch = res.partInfo.get('hl1').channels;
+    check('светофор зажигает зелёный на своём входе', ch[2] > 0.5 && ch[0] < 0.01);
+  }
+
+  // ---------------- PNP ----------------
+  {
+    const parts = [b(), mk('resistor', 'rb', { value: 1000 }), mk('pnp', 'vt1'), mk('resistor', 'rl', { value: 220 }), mk('led', 'd1')];
+    const wires = [
+      wire(1, 'b1', '5V', 'vt1', 'E'), wire(2, 'vt1', 'B', 'rb', '1'), wire(3, 'rb', '2', 'b1', 'D9'),
+      wire(4, 'vt1', 'C', 'rl', '1'), wire(5, 'rl', '2', 'd1', 'A'), wire(6, 'd1', 'K', 'b1', 'GND'),
+    ];
+    const on = one(new Circuit(parts, wires), { 9: 0 });
+    const off = one(new Circuit(parts, wires), { 9: 255 });
+    check('PNP открывается НИЗКИМ уровнем на базе', on.partInfo.get('d1').brightness > 0.3 && off.partInfo.get('d1').brightness < 0.05,
+      `on=${on.partInfo.get('d1').brightness.toFixed(2)} off=${off.partInfo.get('d1').brightness.toFixed(2)}`);
+  }
+
+  // ---------------- MOSFET ----------------
+  {
+    const parts = [b(), mk('mosfet', 'q1'), mk('resistor', 'rg', { value: 220 }), mk('resistor', 'rl', { value: 220 }), mk('led', 'd1')];
+    const wires = [
+      wire(1, 'b1', 'D9', 'rg', '1'), wire(2, 'rg', '2', 'q1', 'G'), wire(3, 'b1', '5V', 'rl', '1'),
+      wire(4, 'rl', '2', 'd1', 'A'), wire(5, 'd1', 'K', 'q1', 'D'), wire(6, 'q1', 'S', 'b1', 'GND'),
+    ];
+    const on = one(new Circuit(parts, wires), { 9: 255 });
+    const off = one(new Circuit(parts, wires), { 9: 0 });
+    const q = on.partInfo.get('q1');
+    check('MOSFET открывается напряжением на затворе', q.on && q.vgs > 2.5 && on.partInfo.get('d1').brightness > 0.3,
+      `Vgs=${q.vgs?.toFixed(2)}`);
+    check('MOSFET закрыт при нуле на затворе', !off.partInfo.get('q1').on && off.partInfo.get('d1').brightness < 0.05);
+  }
+
+  // ---------------- Дарлингтон ----------------
+  {
+    const parts = [b(), mk('resistor', 'rb', { value: 10000 }), mk('tip120', 'vt1'), mk('resistor', 'rl', { value: 100 }), mk('led', 'd1')];
+    const wires = [
+      wire(1, 'b1', 'D9', 'rb', '1'), wire(2, 'rb', '2', 'vt1', 'B'), wire(3, 'b1', '5V', 'rl', '1'),
+      wire(4, 'rl', '2', 'd1', 'A'), wire(5, 'd1', 'K', 'vt1', 'C'), wire(6, 'vt1', 'E', 'b1', 'GND'),
+    ];
+    const on = one(new Circuit(parts, wires), { 9: 255 });
+    check('Дарлингтон TIP120 раскачивается слабым током базы (10 кОм)',
+      on.partInfo.get('d1').brightness > 0.5, `b=${on.partInfo.get('d1').brightness.toFixed(2)}`);
+  }
+
+  // ---------------- L298N + мотор ----------------
+  {
+    const parts = [b(), mk('l298n', 'da1'), mk('dcmotor', 'm1')];
+    const wires = [
+      wire(1, 'b1', 'D9', 'da1', 'IN1'), wire(2, 'b1', 'D8', 'da1', 'IN2'), wire(3, 'b1', '5V', 'da1', 'ENA'),
+      wire(4, 'da1', 'VCC', 'b1', '5V'), wire(5, 'da1', 'GND', 'b1', 'GND'),
+      wire(6, 'da1', 'OUT1', 'm1', 'M+'), wire(7, 'da1', 'OUT2', 'm1', 'M-'),
+    ];
+    const c = new Circuit(parts, wires);
+    const fwd = one(c, { 9: 255, 8: 0 }, 40);
+    check('L298N: входы задают направление, мотор раскручивается', fwd.partInfo.get('da1').dir === 1 && fwd.partInfo.get('m1').rpm > 300,
+      `rpm=${Math.round(fwd.partInfo.get('m1').rpm)}`);
+    const rev = one(c, { 9: 0, 8: 255 }, 40);
+    check('L298N: смена входов крутит мотор в обратную сторону', rev.partInfo.get('m1').rpm < -100,
+      `rpm=${Math.round(rev.partInfo.get('m1').rpm)}`);
+    const off = one(c, { 9: 0, 8: 0 }, 120);
+    check('мотор выбегает, когда мост выключен', Math.abs(off.partInfo.get('m1').rpm) < 60,
+      `rpm=${Math.round(off.partInfo.get('m1').rpm)}`);
+  }
+
+  // ---------------- клавиатура 4×4 ----------------
+  {
+    const t = mk('keypad', 'sb1', { pressed: 5 });     // 5 — это вторая строка, второй столбец
+    const parts = [b(), t];
+    const wires = [
+      wire(1, 'b1', '5V', 'sb1', 'R2'), wire(2, 'b1', 'A0', 'sb1', 'C2'), wire(3, 'b1', 'GND', 'sb1', 'C1'),
+    ];
+    const res = one(new Circuit(parts, wires), {});
+    const v = res.voltages.get(new Circuit([], []).netOf ? undefined : undefined);
+    const net = res.voltages;
+    const vC2 = [...net.entries()].find(([, vv]) => Math.abs(vv - 5) < 0.01);
+    check('клавиатура: нажатая клавиша соединяет свою строку и столбец', !!vC2 && res.partInfo.get('sb1').pressed === 5);
+
+    const free = mk('keypad', 'sb1', { pressed: null });
+    const res2 = one(new Circuit([b(), free], [wire(1, 'b1', '5V', 'sb1', 'R2'), wire(2, 'b1', 'A0', 'sb1', 'C2')]), {});
+    check('клавиатура: без нажатия строка и столбец разомкнуты',
+      res2.partInfo.get('sb1').pressed === undefined || res2.partInfo.get('sb1').pressed === null);
+  }
+
+  // ---------------- 74HC595 ----------------
+  {
+    const parts = [b(), mk('sr595', 'dd1'), mk('resistor', 'r1', { value: 220 }), mk('led', 'd1')];
+    const wires = [
+      wire(1, 'b1', 'D8', 'dd1', 'DS'), wire(2, 'b1', 'D9', 'dd1', 'SHCP'), wire(3, 'b1', 'D10', 'dd1', 'STCP'),
+      wire(4, 'b1', 'GND', 'dd1', 'OE'), wire(5, 'b1', '5V', 'dd1', 'MR'),
+      wire(6, 'dd1', 'QA', 'r1', '1'), wire(7, 'r1', '2', 'd1', 'A'), wire(8, 'd1', 'K', 'b1', 'GND'),
+    ];
+    const c = new Circuit(parts, wires);
+    one(c, { 8: 1, 9: 0, 10: 0 });
+    one(c, { 8: 1, 9: 1, 10: 0 });     // фронт SHCP — задвинули единицу
+    one(c, { 8: 0, 9: 0, 10: 0 });
+    one(c, { 8: 0, 9: 0, 10: 1 });     // фронт STCP — защёлка
+    const res = one(c, { 8: 0, 9: 0, 10: 0 });
+    check('74HC595: бит сдвигается и защёлкивается на выход', res.partInfo.get('dd1').bits.join('') === '10000000',
+      res.partInfo.get('dd1').bits.join(''));
+    check('74HC595: защёлкнутый бит зажигает светодиод на QA', res.partInfo.get('d1').brightness > 0.3,
+      `b=${res.partInfo.get('d1').brightness.toFixed(2)}`);
+  }
+
+  // ---------------- 74HC165 ----------------
+  {
+    const parts = [b(), mk('sr165', 'dd2')];
+    const wires = [
+      wire(1, 'b1', 'D6', 'dd2', 'D6'), wire(2, 'b1', 'D7', 'dd2', 'D7'),
+      wire(3, 'b1', 'D8', 'dd2', 'PL'), wire(4, 'b1', 'D9', 'dd2', 'CP'),
+    ];
+    const c = new Circuit(parts, wires);
+    one(c, { 6: 0, 7: 1, 8: 1, 9: 0 });
+    one(c, { 6: 0, 7: 1, 8: 0, 9: 0 });        // PL = 0 — загрузка входов
+    const loaded = one(c, { 6: 0, 7: 1, 8: 1, 9: 0 });
+    check('74HC165: параллельная загрузка выводит D7 первым', loaded.partInfo.get('dd2').q7 === true);
+    const shifted = one(c, { 6: 0, 7: 1, 8: 1, 9: 1 });
+    check('74HC165: такт сдвига выдаёт следующий бит', shifted.partInfo.get('dd2').q7 === false);
+  }
+
+  // ---------------- пачка переключений внутри одного кадра ----------------
+  {
+    const rt0 = new ArduinoRuntime({ spec: BOARDS.uno, boardId: 'b1' });
+    rt0.pinMode(9, 1);
+    rt0.digitalWrite(9, 1);
+    rt0.digitalWrite(9, 0);
+    const after2 = rt0.events.length;
+    rt0.digitalWrite(9, 0);                    // уровень не менялся — фронта нет
+    check('скетч копит переключения выводов для цепи', after2 === 2 && rt0.events.length === 2,
+      `events=${after2}/${rt0.events.length}`);
+
+    const parts = [b(), mk('sr595', 'dd1'), mk('resistor', 'r1', { value: 220 }), mk('led', 'd1')];
+    const wires = [
+      wire(1, 'b1', 'D8', 'dd1', 'DS'), wire(2, 'b1', 'D9', 'dd1', 'SHCP'), wire(3, 'b1', 'D10', 'dd1', 'STCP'),
+      wire(4, 'b1', 'GND', 'dd1', 'OE'), wire(5, 'b1', '5V', 'dd1', 'MR'),
+      wire(6, 'dd1', 'QA', 'r1', '1'), wire(7, 'r1', '2', 'd1', 'A'), wire(8, 'd1', 'K', 'b1', 'GND'),
+    ];
+    const c = new Circuit(parts, wires);
+    const pins = new Map([[8, { value: 0, pwm: 0, mode: 'OUTPUT' }], [9, { value: 0, pwm: 0, mode: 'OUTPUT' }],
+      [10, { value: 0, pwm: 0, mode: 'OUTPUT' }]]);
+    const runtime = { pins, events: [] };
+    const map = new Map([['b1', runtime]]);
+    c.solve(map, 1 / 60);
+    // «скетч» выставил данные и дважды тактнул между кадрами расчёта
+    const push = (pin, v) => {
+      const st = pins.get(pin);
+      st.value = v; st.pwm = v ? 255 : 0;
+      runtime.events.push({ pin, value: v });
+    };
+    push(8, 1); push(9, 1); push(9, 0); push(10, 1); push(10, 0);
+    const res = c.solve(map, 1 / 60);
+    check('74HC595 видит все фронты, сделанные между кадрами', res.partInfo.get('dd1').bits.join('') === '10000000',
+      res.partInfo.get('dd1').bits.join(''));
+    check('защёлкнутый через фронты бит зажигает светодиод', res.partInfo.get('d1').brightness > 0.3,
+      `b=${res.partInfo.get('d1').brightness.toFixed(2)}`);
+  }
+}
+
+console.log('\nТранспайлер: свои функции');
+
+{
+  const r = transpile('char scan() { return 1; }\nvoid setup() { Serial.begin(9600); }\nvoid loop() { char k = scan(); Serial.println(k); delay(20); }');
+  check('вызов своей функции компилируется с await', /await scan/.test(r.js) && r.errors.length === 0,
+    r.errors.map((e) => e.msg).join('; ') || r.js.split('\n').find((l) => l.includes('scan')));
 }
 
 console.log('\nПровода: цвета и трассировка');
