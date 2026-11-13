@@ -970,6 +970,126 @@ console.log('\nНовые детали: электрика и поведение
   }
 }
 
+console.log('\nИзмерительные приборы');
+
+{
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type] });
+  const wire = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  const solveN = (circuit, n = 3) => {
+    let res = null;
+    for (let i = 0; i < n; i++) res = circuit.solve(new Map(), 1 / 120);
+    return res;
+  };
+
+  // ---------------- вольтметр на делителе ----------------
+  {
+    const parts = [
+      mk('battery9', 'g1', { voltage: 9 }),
+      mk('resistor', 'r1', { value: 1000 }),
+      mk('resistor', 'r2', { value: 1000 }),
+      mk('multimeter', 'pa1', { mode: 'V' }),
+    ];
+    const wires = [
+      wire(1, 'g1', '+', 'r1', '1'), wire(2, 'r1', '2', 'r2', '1'), wire(3, 'r2', '2', 'g1', '−'),
+      wire(4, 'pa1', 'COM', 'g1', '−'), wire(5, 'pa1', 'VΩ', 'r1', '2'),
+    ];
+    const res = solveN(new Circuit(parts, wires));
+    const v = res.partInfo.get('pa1').reading;
+    check('мультиметр в режиме V показывает половину питания на делителе', near(v, 4.5, 0.1), `U=${v}`);
+    check('вольтметр почти не нагружает цепь (1 МОм)',
+      Math.abs(res.partInfo.get('g1').current - 9 / 2000) < 0.0002,
+      `I=${res.partInfo.get('g1').current}`);
+  }
+
+  // ---------------- амперметр последовательно ----------------
+  {
+    const parts = [
+      mk('battery9', 'g1', { voltage: 9 }),
+      mk('resistor', 'r1', { value: 1000 }),
+      mk('multimeter', 'pa1', { mode: 'A' }),
+    ];
+    const wires = [
+      wire(1, 'g1', '+', 'r1', '1'), wire(2, 'r1', '2', 'pa1', 'mA'), wire(3, 'pa1', 'COM', 'g1', '−'),
+    ];
+    const res = solveN(new Circuit(parts, wires));
+    const i = res.partInfo.get('pa1').reading;
+    check('амперметр показывает ток через свой шунт', near(i, 0.009, 0.0005), `I=${i}`);
+    check('шунт амперметра (0,1 Ом) не мешает цепи: ток чуть меньше 9 мА', i < 0.0091, `I=${i}`);
+  }
+
+  // ---------------- омметр ----------------
+  {
+    const parts = [
+      mk('resistor', 'r1', { value: 470 }),
+      mk('resistor', 'r2', { value: 4700 }),
+      mk('multimeter', 'pa1', { mode: 'OHM' }),
+    ];
+    const wires = [
+      wire(1, 'pa1', 'COM', 'r1', '1'), wire(2, 'r1', '2', 'r2', '1'), wire(3, 'r2', '2', 'pa1', 'VΩ'),
+    ];
+    const res = solveN(new Circuit(parts, wires));
+    const info = res.partInfo.get('pa1');
+    check('омметр измеряет последовательное соединение 470 + 4,7 кОм', near(info.resistance, 5170, 60),
+      `R=${info.resistance}`);
+    check('омметр без питания в цепи не ругается', info.busy === false);
+
+    const open = solveN(new Circuit([mk('multimeter', 'pa1', { mode: 'OHM' })], []));
+    check('омметр с разомкнутыми щупами показывает перегруз', open.partInfo.get('pa1').resistance > 1e6,
+      `R=${open.partInfo.get('pa1').resistance}`);
+  }
+
+  // ---------------- прозвонка ----------------
+  {
+    const parts = [
+      mk('resistor', 'r1', { value: 10 }),
+      mk('multimeter', 'pa1', { mode: 'CONT' }),
+    ];
+    const wires = [wire(1, 'pa1', 'COM', 'r1', '1'), wire(2, 'r1', '2', 'pa1', 'VΩ')];
+    const res = solveN(new Circuit(parts, wires));
+    check('прозвонка пикает на 10 Ом и молчит на разрыве', res.partInfo.get('pa1').continuity === true);
+  }
+
+  // ---------------- омметр под напряжением ----------------
+  {
+    const parts = [
+      mk('battery9', 'g1', { voltage: 9 }),
+      mk('resistor', 'r1', { value: 1000 }),
+      mk('multimeter', 'pa1', { mode: 'OHM' }),
+    ];
+    const wires = [
+      wire(1, 'g1', '+', 'r1', '1'), wire(2, 'r1', '2', 'g1', '−'),
+      wire(3, 'pa1', 'COM', 'g1', '−'), wire(4, 'pa1', 'VΩ', 'r1', '1'),
+    ];
+    const res = solveN(new Circuit(parts, wires));
+    check('омметр под напряжением предупреждает, а не врёт молча',
+      res.partInfo.get('pa1').busy === true && res.warnings.some((w) => /под напряжением/.test(w.text)));
+  }
+
+  // ---------------- логический пробник ----------------
+  {
+    const parts = [
+      mk('battery9', 'g1', { voltage: 9 }),
+      mk('resistor', 'r1', { value: 1000 }),
+      mk('resistor', 'r2', { value: 1000 }),
+      mk('logicprobe', 'pl1'),
+    ];
+    const wires = [
+      wire(1, 'g1', '+', 'r1', '1'), wire(2, 'r1', '2', 'r2', '1'), wire(3, 'r2', '2', 'g1', '−'),
+      wire(4, 'pl1', 'SIG', 'r1', '1'), wire(5, 'pl1', 'GND', 'g1', '−'),
+    ];
+    const hi = solveN(new Circuit(parts, wires));
+    check('пробник видит HIGH на плюсе питания', hi.partInfo.get('pl1').level === 'HIGH');
+
+    const lowParts = [mk('battery9', 'g1', { voltage: 9 }), mk('resistor', 'r1', { value: 1000 }), mk('logicprobe', 'pl1')];
+    const lowWires = [
+      wire(1, 'g1', '+', 'r1', '1'), wire(2, 'r1', '2', 'g1', '−'),
+      wire(3, 'pl1', 'SIG', 'r1', '2'), wire(4, 'pl1', 'GND', 'g1', '−'),
+    ];
+    const low = solveN(new Circuit(lowParts, lowWires));
+    check('пробник видит LOW на минусе', low.partInfo.get('pl1').level === 'LOW');
+  }
+}
+
 console.log('\nПровода: цвета и трассировка');
 
 {

@@ -79,8 +79,9 @@ schematic.onHoverWire = (w) => {
 };
 
 // ------------------------------------------------------------------ палитра ----
-const CATS = ['Платы', 'Питание', 'Компоненты', 'Датчики', 'Модули'];
+const CATS = ['Платы', 'Питание', 'Приборы', 'Компоненты', 'Датчики', 'Модули'];
 const SOURCE_TYPES = new Set(['battery9', 'batteryAA', 'psu']);
+const INSTRUMENTS = new Set(['scope', 'multimeter', 'logicprobe']);
 const palette = $('palette');
 for (const cat of CATS) {
   const head = document.createElement('div');
@@ -150,6 +151,8 @@ function iconFor(type) {
     case 'batteryAA': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="22" height="10" rx="2"/><rect x="5" y="7" width="4" height="6" rx="1" fill="#3d5a7a" stroke="#3d5a7a"/><rect x="10" y="7" width="4" height="6" rx="1" fill="#c0392b" stroke="#c0392b"/><rect x="15" y="7" width="4" height="6" rx="1" fill="#3d5a7a" stroke="#3d5a7a"/></svg>`;
     case 'psu': return `<svg ${c} aria-hidden="true"><rect x="3" y="4" width="20" height="12" rx="2"/><rect x="5" y="6" width="9" height="5" rx="1" fill="#04121f" stroke="#24405c"/><circle cx="19" cy="9" r="2.5"/><path d="M8 16v2M14 16v2"/></svg>`;
     case 'scope': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#04121f" stroke="#24405c"/><path d="M5 10l3-4 3 8 3-8 3 4h4" stroke="#ffd166" stroke-width="1.2"/></svg>`;
+    case 'multimeter': return `<svg ${c} aria-hidden="true"><rect x="3" y="2" width="20" height="14" rx="2"/><rect x="5" y="4" width="10" height="6" rx="1" fill="#0b1a14" stroke="#2c5c46"/><circle cx="19" cy="7" r="3"/><path d="M8 16v2M13 16v2M18 16v2"/></svg>`;
+    case 'logicprobe': return `<svg ${c} aria-hidden="true"><path d="M2 9h5"/><rect x="7" y="2" width="11" height="14" rx="3"/><circle cx="12.5" cy="7" r="2.4" fill="#3fd07a" stroke="#3fd07a"/><circle cx="12.5" cy="12" r="1.4"/><path d="M12.5 16v2"/></svg>`;
     case 'stepper28byj': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="10" height="9" rx="1"/><circle cx="18" cy="9" r="5"/><circle cx="18" cy="9" r="1.6"/><path d="M18 4v2"/></svg>`;
     default: return `<svg ${c} aria-hidden="true"><rect x="4" y="4" width="18" height="10" rx="2"/></svg>`;
   }
@@ -468,7 +471,10 @@ async function run() {
     // Схема без платы: источник питания + детали. Скетча нет, но цепь
     // считается по-настоящему — диоды горят, осциллограф рисует сигнал.
     const hasSource = schematic.parts.some((p) => SOURCE_TYPES.has(p.type));
-    if (!hasSource) {
+    // приборы (мультиметр, пробник, осциллограф) работают и без питания:
+    // омметр сам подаёт испытательный ток, пробник просто смотрит уровни
+    const hasMeter = schematic.parts.some((p) => INSTRUMENTS.has(p.type));
+    if (!hasSource && !hasMeter) {
       setProblems([{ msg: 'На схеме нет платы. Перетащите Arduino Uno, ESP32 или Pico — или поставьте источник питания (раздел «Питание»), чтобы собрать схему без платы', line: 0, level: 'danger' }]);
       showProblemsTab();
       return;
@@ -479,7 +485,7 @@ async function run() {
     resetTrace();
     running = true;
     $('stopBtn').disabled = false;
-    setStatus('Схема под питанием', 'ok');
+    setStatus(hasSource ? 'Схема под питанием' : 'Приборы включены', 'ok');
     startTimer();
     startDriver();
     return;
@@ -595,6 +601,14 @@ function solveOnce(dt) {
   const res = circuit.solve(runtimes, dt);
   lastSolve = res;
   schematic.applySim(res.partInfo, runtimes);
+  // прозвонка мультиметра пищит, пока щупы замкнуты (если зуммер молчит)
+  {
+    const buzzing = schematic.parts.some((p) => res.partInfo.get(p.id)?.sounding);
+    const cont = !buzzing && schematic.parts.some((p) => p.type === 'multimeter'
+      && (p.props?.mode || 'V') === 'CONT' && res.partInfo.get(p.id)?.continuity);
+    if (cont) beep(2400, true);
+    else if (!buzzing) beep(0, false);
+  }
   updateWarnings(res.warnings);
   $('statIter').textContent = res.ok ? `MNA: ${res.iterations ?? '—'} итер.` : 'цепь не решается';
   return res;

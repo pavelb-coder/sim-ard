@@ -24,6 +24,7 @@ export const SHORT_NAME = {
   pir: 'PIR', dht11: 'DHT11', hcsr04: 'HC-SR04',
   diode: 'диод', npn: 'транзистор', rgbled: 'светодиод RGB', toggle: 'тумблер',
   battery9: 'батарейка 9 В', batteryAA: 'отсек 4×AA', psu: 'источник питания', scope: 'осциллограф',
+  multimeter: 'мультиметр', logicprobe: 'логический пробник',
   seg7: 'индикатор', relay: 'реле', joystick: 'джойстик', stepper28byj: 'шаговый двигатель',
   uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico',
   nano: 'Arduino Nano', promini: 'Arduino Pro Mini', leonardo: 'Arduino Leonardo', mega: 'Arduino Mega 2560',
@@ -34,7 +35,7 @@ export const REF_PREFIX = {
   pot: 'RV', servo: 'M', lcd1602: 'LCD', oled: 'DS', buzzer: 'BZ', ldr: 'R', pir: 'PIR',
   dht11: 'DHT', hcsr04: 'SR', uno: 'A', esp32: 'A', pico: 'A',
   diode: 'VD', npn: 'VT', rgbled: 'D', toggle: 'S', seg7: 'HG', relay: 'K', joystick: 'RV', stepper28byj: 'M',
-  battery9: 'GB', batteryAA: 'GB', psu: 'G', scope: 'OS',
+  battery9: 'GB', batteryAA: 'GB', psu: 'G', scope: 'OS', multimeter: 'PA', logicprobe: 'PL',
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
 
@@ -797,7 +798,7 @@ const POWER = {
   },
 
   scope: {
-    name: 'Осциллограф', category: 'Модули', w: 156, h: 112,
+    name: 'Осциллограф', category: 'Приборы', w: 156, h: 112,
     pins: () => [
       { id: 'CH1', label: '1', x: -74, y: -18, dir: 'left' },
       { id: 'CH2', label: '2', x: -74, y: 8, dir: 'left' },
@@ -850,6 +851,119 @@ const POWER = {
           const fmt = (v) => (Math.abs(v) < 0.005 ? '0.00' : v.toFixed(2));
           read.textContent = `${a === null ? '—' : fmt(a)} / ${b === null ? '—' : fmt(b)} В`;
         }
+      }
+    },
+  },
+
+  multimeter: {
+    name: 'Мультиметр', category: 'Приборы', w: 152, h: 122,
+    pins: () => [
+      { id: 'COM', label: 'COM', x: -46, y: 60, dir: 'down' },
+      { id: 'VΩ', label: 'VΩ', x: -10, y: 60, dir: 'down' },
+      { id: 'mA', label: 'mA', x: 26, y: 60, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 152, 122, `
+        <rect x="-74" y="-56" width="148" height="108" rx="7" fill="#161f29" stroke="#33465a"/>
+        <rect x="-74" y="-56" width="148" height="19" rx="7" fill="#1d2833" stroke="#33465a"/>
+        <text x="-62" y="-43" style="font:6px ui-monospace;fill:#8fbde3;text-anchor:start">DIGITAL MULTIMETER</text>
+        <text x="60" y="-43" style="font:5.5px ui-monospace;fill:#4f7799;text-anchor:end">DT-830</text>
+        <rect x="-66" y="-32" width="88" height="46" rx="3" fill="#0b1a14" stroke="#2c5c46"/>
+        <text class="mm-value" x="-22" y="-9" style="font:15px ui-monospace;fill:#7ef29d;text-anchor:middle">0.00</text>
+        <text class="mm-sub" x="-22" y="4" style="font:5.5px ui-monospace;fill:#57a884;text-anchor:middle">В · DC</text>
+        <circle cx="46" cy="-18" r="16" fill="#232f3a" stroke="#46586a"/>
+        <circle cx="46" cy="-18" r="11" fill="#1a232c" stroke="#2f3f4d"/>
+        <line class="mm-dial" x1="46" y1="-18" x2="46" y2="-29" stroke="#e6eef5" stroke-width="2"/>
+        <circle data-role="knob" cx="46" cy="-18" r="17" fill="transparent" style="cursor:pointer"/>
+        <text class="mm-mode" x="46" y="6" style="font:6px ui-monospace;fill:#ffd166;text-anchor:middle">V DC</text>
+        <text x="46" y="14" style="font:4.6px ui-monospace;fill:#5f8ba8;text-anchor:middle">режим</text>
+        <circle cx="-46" cy="44" r="4.5" fill="#0d141b" stroke="#8aa4b8"/>
+        <circle cx="-10" cy="44" r="4.5" fill="#0d141b" stroke="#c0392b"/>
+        <circle cx="26" cy="44" r="4.5" fill="#0d141b" stroke="#c0392b"/>
+        <line x1="-46" y1="48" x2="-46" y2="60" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="-10" y1="48" x2="-10" y2="60" stroke="#c0392b" stroke-width="1.4"/>
+        <line x1="26" y1="48" x2="26" y2="60" stroke="#c0392b" stroke-width="1.4"/>
+        <text x="-74" y="52" style="font:4.4px ui-monospace;fill:#4f7799;text-anchor:start">CAT II 600V</text>`);
+    },
+    update(g, comp, env) {
+      const info = env?.info || {};
+      const mode = comp.props?.mode || 'V';
+      const val = g.querySelector('.mm-value');
+      const sub = g.querySelector('.mm-sub');
+      const dial = g.querySelector('.mm-dial');
+      const mlab = g.querySelector('.mm-mode');
+      let main = '—';
+      let subText = '';
+      let warn = false;
+      if (mode === 'A') {
+        const i = Number(info.reading) || 0;
+        if (info.overload) { main = '1L.'; subText = 'А · перегруз'; warn = true; }
+        else if (i < 0.001) { main = (i * 1e6).toFixed(0); subText = 'мкА · DC'; }
+        else if (i < 1) { main = (i * 1000).toFixed(1); subText = 'мА · DC'; }
+        else { main = i.toFixed(2); subText = 'А · DC'; }
+      } else if (mode === 'OHM' || mode === 'CONT') {
+        const r = Number(info.resistance);
+        if (!Number.isFinite(r) || r > 1e6) { main = '1L.'; subText = 'Ом · перегруз'; warn = true; }
+        else if (r < 1000) { main = r.toFixed(1); subText = 'Ом'; }
+        else { main = (r / 1000).toFixed(2); subText = 'кОм'; }
+        if (mode === 'CONT') subText = (info.continuity ? 'ПИК · есть контакт' : 'обрыв') + '';
+        if (info.busy) { subText += ' ⚠U'; warn = true; }
+      } else {
+        const v = Number(info.reading) || 0;
+        main = v < 10 ? v.toFixed(2) : v.toFixed(1);
+        subText = 'В · DC';
+      }
+      if (val) { val.textContent = main; val.setAttribute('fill', warn ? '#ff8a7a' : '#7ef29d'); }
+      if (sub) sub.textContent = subText;
+      if (dial) {
+        const a = { V: -2.4, A: -0.9, OHM: 0.6, CONT: 2.1 }[mode] ?? -2.4;
+        dial.setAttribute('x2', String(46 + 11 * Math.cos(a - Math.PI / 2)));
+        dial.setAttribute('y2', String(-18 + 11 * Math.sin(a - Math.PI / 2)));
+      }
+      if (mlab) mlab.textContent = { V: 'V DC', A: 'A DC', OHM: 'Ω', CONT: 'ПИК' }[mode] || 'V DC';
+    },
+  },
+
+  logicprobe: {
+    name: 'Логический пробник', category: 'Приборы', w: 96, h: 118,
+    pins: () => [
+      { id: 'SIG', label: 'SIG', x: -48, y: -12, dir: 'left' },
+      { id: 'GND', label: '⊥', x: 0, y: 52, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 96, 118, `
+        <rect x="-42" y="-46" width="84" height="92" rx="8" fill="#1b2430" stroke="#3a4b5c"/>
+        <path d="M -42 -12 L -54 -12 L -54 -10 L -42 -10 Z" fill="#8aa4b8" stroke="#8aa4b8"/>
+        <line x1="-48" y1="-12" x2="-42" y2="-12" stroke="#8aa4b8" stroke-width="1.6"/>
+        <circle class="probe-led" cx="0" cy="-22" r="11" fill="#1e2a35" stroke="#4a5f72"/>
+        <circle class="probe-core" cx="0" cy="-22" r="6" fill="#1e2a35"/>
+        <text class="probe-text" x="0" y="4" style="font:8px ui-monospace;fill:#7d93a6;text-anchor:middle">LOW</text>
+        <text class="probe-sub" x="0" y="17" style="font:5.5px ui-monospace;fill:#5f8ba8;text-anchor:middle">0.00 В</text>
+        <text class="probe-freq" x="0" y="28" style="font:5.5px ui-monospace;fill:#ffd166;text-anchor:middle"></text>
+        <line x1="0" y1="46" x2="0" y2="52" stroke="#8aa4b8" stroke-width="1.4"/>`);
+    },
+    update(g, comp, env) {
+      const info = env?.info || {};
+      const level = info.level || 'LOW';
+      const led = g.querySelector('.probe-led');
+      const core = g.querySelector('.probe-core');
+      const txt = g.querySelector('.probe-text');
+      const sub = g.querySelector('.probe-sub');
+      const frq = g.querySelector('.probe-freq');
+      const colors = { HIGH: '#ff5a4d', LOW: '#3fd07a', PULSE: '#ffd166', MID: '#ff9f43' };
+      const c = colors[level] || '#7d93a6';
+      if (led) { led.setAttribute('fill', c); led.setAttribute('opacity', '0.55'); }
+      if (core) { core.setAttribute('fill', c); core.setAttribute('opacity', '0.95'); }
+      if (txt) {
+        txt.textContent = { HIGH: 'HIGH', LOW: 'LOW', PULSE: 'ИМП', MID: '??' }[level] || '—';
+        txt.setAttribute('fill', c);
+      }
+      if (env?.level !== 'PULSE') {}
+      if (sub) sub.textContent = `${(Number(info.voltage) || 0).toFixed(2)} В`;
+      if (frq) {
+        frq.textContent = level === 'PULSE'
+          ? `≈${Math.round(info.freq || 490)} Гц · ${Math.round((info.duty || 0) * 100)} %`
+          : '';
       }
     },
   },

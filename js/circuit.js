@@ -20,6 +20,10 @@ const boardSpecOf = (type) => BOARDS[type] || BOARDS.uno;
 const R_OUT = 0.25;
 const R_PULLUP = 20000;
 const SOURCES = new Set(['battery9', 'batteryAA', 'psu']);
+/** Измерительные приборы: испытательный ток омметра и предел по току. */
+const TEST_I = 20e-6;      // 20 мкА — как у настоящего цифрового мультиметра в режиме Ω
+const OHM_PARALLEL = 10e6; // входное сопротивление прибора в режиме Ω
+const METER_MAX_A = 0.5;   // предел 0,5 А (в приборе предохранитель)
 const HFE = 100;                 // усиление BC547 — для модели ключа
 // последовательность фаз 28BYJ-48 (IN1…IN4): полушаги по кругу
 const STEP_SEQ = ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001'];
@@ -296,6 +300,38 @@ export class Circuit {
           }
           break;
         }
+        case 'multimeter': {
+          // Цифровой мультиметр как в железе:
+          //  • V — вход 1 МОм, цепь почти не нагружает;
+          //  • A — шунт 0,1 Ом между COM и mA, прибор честно влияет на цепь;
+          //  • Ω/ПИК — источник испытательного тока 20 мкА, по падению считаем R.
+          const com = n('COM');
+          const mode = p.props?.mode || 'V';
+          info.mode = mode;
+          if (com) {
+            if (mode === 'A') {
+              const a = n('mA');
+              if (a && a !== com) info.shuntIdx = push({ type: 'R', n1: a, n2: com, value: 0.1 });
+            } else if (mode === 'OHM' || mode === 'CONT') {
+              const v = n('VΩ');
+              if (v && v !== com) {
+                info.testIdx = push({ type: 'I', n1: com, n2: v, value: TEST_I });   // ток втекает в VΩ
+                push({ type: 'R', n1: v, n2: com, value: OHM_PARALLEL });
+                push({ type: 'R', n1: com, n2: gnd, value: OHM_PARALLEL });
+              }
+            } else {
+              const v = n('VΩ');
+              if (v && v !== com) push({ type: 'R', n1: v, n2: com, value: 1e6 });
+            }
+          }
+          break;
+        }
+        case 'logicprobe': {
+          // Щуп 1 МОм на землю: на цепь не влияет, только смотрит уровень
+          const sig = n('SIG'), g0 = n('GND') || gnd;
+          if (sig && g0 && sig !== g0) push({ type: 'R', n1: sig, n2: g0, value: 1e6 });
+          break;
+        }
         case 'scope': {
           // Щупы осциллографа — 1 МОм на общий провод, как у настоящего прибора
           const g0 = n('GND') || gnd;
@@ -541,6 +577,63 @@ export class Circuit {
         });
       } else if (I > 1.2 && p) {
         this.warnings.push({ text: `«${this.nameOf(partId)}»: ${I.toFixed(1)} А — многовато для источника.`, level: 'warn' });
+      }
+    }
+
+    // Показания измерительных приборов считаем по уже решённой цепи:
+    // вольтметр — разность потенциалов, амперметр — ток через свой шунт,
+    // омметр — падение от испытательного тока (и предупреждение, если под U).
+    const powered = this.boards.length > 0 || sourceIdx.size > 0;
+    for (const p of this.parts) {
+      const info = partInfo.get(p.id);
+      if (!info) continue;
+      if (p.type === 'multimeter') {
+        const mode = info.mode || 'V';
+        const com = this.netOf(p.id, 'COM');
+        const V = (net) => (net && res.v.has(net) ? res.v.get(net) : 0);
+        if (mode === 'A') {
+          const I = Math.abs(res.currents[info.shuntIdx] || 0);
+          info.reading = I;
+          info.unit = 'А';
+          info.overload = I > METER_MAX_A;
+          if (info.overload) {
+            this.warnings.push({
+              text: `«${this.nameOf(p.id)}»: ${I.toFixed(2)} А — предел 0,5 А, в приборе сгорел бы предохранитель.`,
+              level: 'danger',
+            });
+          }
+        } else if (mode === 'OHM' || mode === 'CONT') {
+          const dv = Math.abs(V(this.netOf(p.id, 'VΩ')) - V(com));   // полярность щупов не важна
+          const rMeas = dv / TEST_I;
+          // вычитаем собственные 10 МОм прибора — они включены параллельно
+          const r = rMeas > 0 ? (rMeas * OHM_PARALLEL) / (OHM_PARALLEL - rMeas) : 0;
+          info.resistance = Number.isFinite(r) && r > 0 ? r : Infinity;
+          info.reading = info.resistance;
+          info.unit = 'Ом';
+          info.busy = powered;
+          info.continuity = info.resistance < 30 && !powered;
+          if (info.busy) {
+            this.warnings.push({
+              text: `«${this.nameOf(p.id)}»: замер сопротивления под напряжением — так делать нельзя, прибор покажет ерунду.`,
+              level: 'warn',
+            });
+          }
+        } else {
+          info.reading = Math.abs(V(this.netOf(p.id, 'VΩ')) - V(com));
+          info.unit = 'В';
+        }
+      } else if (p.type === 'logicprobe') {
+        const sig = this.netOf(p.id, 'SIG');
+        const v = sig ? (res.v.get(sig) ?? 0) : 0;
+        info.voltage = v;
+        const d = sig ? dutyOf.get(sig) : null;
+        if (d && d.duty > 0.005 && d.duty < 0.995) {
+          info.level = 'PULSE';
+          info.freq = 490;
+          info.duty = d.duty;
+        } else {
+          info.level = v > 2.2 ? 'HIGH' : v < 0.8 ? 'LOW' : 'MID';
+        }
       }
     }
 

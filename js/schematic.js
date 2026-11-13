@@ -92,6 +92,8 @@ export class Schematic {
     if (type === 'batteryAA') return { voltage: 6 };
     if (type === 'psu') return { voltage: 5 };
     if (type === 'scope') return {};
+    if (type === 'multimeter') return { mode: 'V' };
+    if (type === 'logicprobe') return {};
     if (type === 'seg7') return {};
     return {};
   }
@@ -397,8 +399,9 @@ export class Schematic {
         // ловим сами: две «нажатия» по одной детали за 400 мс — это редактор
         const now = performance.now();
         const tap = this._lastTap;
-        this._lastTap = { id, t: now };
-        if (tap && tap.id === id && now - tap.t < 400 && part) {
+        const onKnob = !!ev.target.closest('[data-role="knob"],[data-role="stick"]');
+        this._lastTap = onKnob ? null : { id, t: now };
+        if (!onKnob && tap && tap.id === id && now - tap.t < 400 && part) {
           this._lastTap = null;
           this.drag = null;
           this.editPart(part);
@@ -416,6 +419,16 @@ export class Schematic {
         if (part.type === 'button' && !knob) {
           part.props.pressed = true;
           this.refreshPart(part);
+        }
+        if (part.type === 'multimeter' && knob) {
+          const modes = ['V', 'A', 'OHM', 'CONT'];
+          const cur = modes.indexOf(part.props.mode || 'V');
+          part.props.mode = modes[(cur + 1) % modes.length];
+          this.refreshPart(part);
+          this.onChange();
+          this.drag = null;
+          ev.preventDefault();
+          return;
         }
         if (part.type === 'toggle') {
           part.props.on = !part.props.on;
