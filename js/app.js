@@ -967,6 +967,12 @@ async function loadExample(ex) {
   activeBoardId = primary;
   syncTabs();
   if (activeBoard()) showBoard(activeBoard());
+  else {
+    // пример вообще без платы: в редакторе — пояснение, что тут происходит
+    codeEl.value = ex.code || '';
+    $('langBadge').textContent = 'без скетча';
+    refreshEditor();
+  }
   updateStats();
   setProblems([]);
   setStatus(`Пример: ${ex.name}`);
