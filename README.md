@@ -23,7 +23,8 @@ cd sim-ard
 ./start.sh          # macOS / Linux
 ```
 На Windows — **двойной клик по `start.bat`**: он найдёт Python (или Node.js), поднимет сервер
-и сам откроет браузер на `http://localhost:8000`. Скрипты понимают и другой порт: `./start.sh 9000`.
+в отдельном окне и сам откроет браузер на `http://localhost:8000`. Скрипты понимают и другой
+порт: `./start.sh 9000` и `start.bat 9000` (в Windows порт — первым аргументом, а не через `set`).
 
 Без git: на странице репозитория **Code → Download ZIP**, распаковать, запустить `start.bat`/`start.sh`.
 
@@ -49,6 +50,7 @@ php -S localhost:8000           # PHP
 | Пустая страница, в консоли `Cross origin requests are only supported for protocol schemes` | Открыли `index.html` двойным кликом (`file://`). Нужен сервер: `start.bat` / `start.sh` |
 | `Address already in use` / «порт занят» | Порт занят другим приложением — `./start.sh 9000` или `python3 -m http.server 9000` |
 | `python3: command not found` | Python не установлен. Windows: python.org (галочка «Add python.exe to PATH»); macOS: `brew install python`; Linux: `sudo apt install python3` |
+| Windows открывает Microsoft Store вместо сервера | `python` — заглушка из Store. `start.bat` это проверяет и берёт `py -3`; помогает также отключить «App execution aliases» в параметрах |
 | Нужно без интернета и без установки | Откройте один раз живой сайт **https://pavelb-coder.github.io/sim-ard/** — он кэшируется, но по-настоящему офлайн работает именно локальная копия |
 
 Локальная копия весит ~7 МБ, ноль внешних запросов: шрифты системные, иконки — inline SVG.
