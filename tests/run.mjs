@@ -572,7 +572,7 @@ console.log('\nОтрисовка плат и подписи элементов'
     && BOARDS.esp32.pins.find((p) => p.id === 'G26').silk === '26');
 
   const pico = renderBoardArt(BOARDS.pico);
-  check('Pico: RP2040, BOOTSEL и логотип', pico.includes('RP2040') && pico.includes('BOOTSEL') && pico.includes('Raspberry Pi'));
+  check('Pico: RP2040, BOOTSEL и DEBUG-площадки', pico.includes('RP2040') && pico.includes('BOOTSEL') && pico.includes('DEBUG'));
   check('Pico: подписи GP и зубчатые полуотверстия', pico.includes('>GP0<') && pico.includes('>GP28<'));
 
   // --- реальная геометрия: размеры плат и шаг выводов 2,54 мм ---
@@ -589,11 +589,12 @@ console.log('\nОтрисовка плат и подписи элементов'
     steps(row(BOARDS.uno, 'up')).join(','));
   check('Uno: между D8 и D7 настоящий разрыв (1,6 шага, 4,07 мм)',
     near(+(byId(BOARDS.uno).D7.x - byId(BOARDS.uno).D8.x).toFixed(1), 4.07 * 4));
-  check('Uno: D13 у левого края, D0 у правого (как на плате)',
-    Math.abs(byId(BOARDS.uno).D13.x - (28.96 * 4 - BOARDS.uno.w / 2)) < 0.2
-    && Math.abs(byId(BOARDS.uno).D0.x - (63.5 * 4 - BOARDS.uno.w / 2)) < 0.2);
-  check('Uno: аналоговые входы на нижней гребёнке справа',
-    row(BOARDS.uno, 'down').map((p) => p.id).join(',') === '3V3,5V,GND,A0,A1,A2,A3,A4,A5');
+  check('Uno: SCL у левого края гребёнки, D0 у правого (как на плате)',
+    Math.abs(byId(BOARDS.uno).SCL.x - (21.34 * 4 - BOARDS.uno.w / 2)) < 0.2
+    && Math.abs(byId(BOARDS.uno).D0.x - (66.04 * 4 - BOARDS.uno.w / 2)) < 0.2);
+  check('Uno: силовые слева, аналоговые справа, второй 5V — тот же контакт',
+    row(BOARDS.uno, 'down').map((p) => p.id).join(',')
+      === 'IOREF,RESET,3V3,5V,GND,GND3,VIN,A0,A1,A2,A3,A4,A5,5V2');
 
   check('ESP32: корпус 51,45 × 28,33 мм и 2 × 15 выводов',
     BOARDS.esp32.w === 205.8 && BOARDS.esp32.h === 113.3
@@ -617,9 +618,16 @@ console.log('\nОтрисовка плат и подписи элементов'
   check('Pico: GP26…GP28 — аналоговые, у GP25 номера вывода на гребёнке нет',
     byId(BOARDS.pico).GP26.kind === 'analog' && !byId(BOARDS.pico).GP25);
 
-  check('у всех плат выводы стоят на краю корпуса',
-    Object.values(BOARDS).every((spec) => spec.pins.every((p) => Math.abs(Math.abs(p.y) - spec.h / 2) < 0.2
-      || Math.abs(Math.abs(p.x) - spec.w / 2) < 0.2)));
+  check('выводы стоят на гребёнках (в 1,6…2,5 мм от края), а не на кромке корпуса',
+    Object.values(BOARDS).every((spec) => spec.pins.every((p) => {
+      const edgeY = spec.h / 2 - spec.padInset * 4;
+      const edgeX = spec.w / 2 - spec.padInset * 4;
+      // боковые выводы (VCC разъёма ICSP) стоят на своём разъёме внутри платы
+      if (p.dir === 'left' || p.dir === 'right') {
+        return Math.abs(p.x) < spec.w / 2 - 8 && Math.abs(p.y) < spec.h / 2 - 8;
+      }
+      return Math.abs(Math.abs(p.y) - edgeY) < 0.8 || Math.abs(Math.abs(p.x) - edgeX) < 0.8;
+    })));
 
   check('неизвестная плата рисуется заглушкой', renderBoardArt({ id: 'nano', short: 'NANO', w: 100, h: 60, pins: [] }).includes('NANO'));
   check('у каждой детали есть короткое имя и префикс обозначения',

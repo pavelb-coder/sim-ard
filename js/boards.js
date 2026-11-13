@@ -45,38 +45,46 @@ export const BOARDS = {
     defaultLang: 'cpp',
     wmm: 68.58,
     hmm: 53.34,
+    padInset: 2.54,          // гребёнки стоят в 2,54 мм от края
     w: M(68.58),
     h: M(53.34),
     chip: 'ATmega328P',
     pins: [
       // верхняя гребёнка: SCL, SDA, AREF, GND, D13…D8, затем разрыв и D7…D0
-      top(26.42, pwr('GND2', 'GND', 'gnd', 'GND')),
-      top(28.96, d(13, '13')),
-      top(31.5, d(12, '12')),
-      top(34.04, d(11, '~11')),
-      top(36.58, d(10, '~10')),
-      top(39.12, d(9, '~9')),
-      top(41.65, d(8, '8')),
-      top(45.72, d(7, '7')),
-      top(48.26, d(6, '~6')),
-      top(50.8, d(5, '~5')),
-      top(53.34, d(4, '4')),
-      top(55.88, d(3, '~3')),
-      top(58.42, d(2, '2')),
-      top(60.96, d(1, '1')),
-      top(63.5, d(0, '0')),
+      top(21.34, { id: 'SCL', label: 'SCL', silk: 'SCL', kind: 'none', decor: true }),
+      top(23.88, { id: 'SDA', label: 'SDA', silk: 'SDA', kind: 'none', decor: true }),
+      top(26.42, { id: 'AREF', label: 'AREF', silk: 'AREF', kind: 'none', decor: true }),
+      top(28.96, pwr('GND2', 'GND', 'gnd', 'GND')),
+      top(31.5, d(13, '13')),
+      top(34.04, d(12, '12')),
+      top(36.58, d(11, '~11')),
+      top(39.12, d(10, '~10')),
+      top(41.66, d(9, '~9')),
+      top(44.2, d(8, '8')),
+      top(48.26, d(7, '7')),
+      top(50.8, d(6, '~6')),
+      top(53.34, d(5, '~5')),
+      top(55.88, d(4, '4')),
+      top(58.42, d(3, '~3')),
+      top(60.96, d(2, '2')),
+      top(63.5, d(1, '1')),
+      top(66.04, d(0, '0')),
       // нижняя гребёнка: питание и аналоговые входы
+      bot(30.48, { id: 'IOREF', label: 'IOREF', silk: 'IOREF', kind: 'none', decor: true }),
+      bot(33.02, { id: 'RESET', label: 'RESET', silk: 'RESET', kind: 'none', decor: true }),
       bot(35.56, pwr('3V3', '3V3', 'v33')),
       bot(38.1, pwr('5V', '5V', 'vcc')),
       bot(40.64, pwr('GND', 'GND', 'gnd')),
-      bot(50.8, an(0, 'A0')),
-      bot(53.34, an(1, 'A1')),
-      bot(55.88, an(2, 'A2')),
-      bot(58.42, an(3, 'A3')),
-      bot(60.96, an(4, 'A4')),
-      bot(63.5, an(5, 'A5')),
-      // второй +5 В — на гребёнке ICSP у правого края, как в железе
-      side(22.9, 'right', pwr('5V2', '5V', 'vcc', '5V')),
+      bot(43.18, pwr('GND3', 'GND', 'gnd', 'GND')),
+      bot(45.72, pwr('VIN', 'VIN', 'vin')),
+      bot(53.34, an(0, 'A0')),
+      bot(55.88, an(1, 'A1')),
+      bot(58.42, an(2, 'A2')),
+      bot(60.96, an(3, 'A3')),
+      bot(63.5, an(4, 'A4')),
+      bot(66.04, an(5, 'A5')),
+      // второй +5 В — тот же вывод питания (в железе это один контакт 5V)
+      { ...pwr('5V2', '5V', 'vcc'), xmm: 38.1, dir: 'down', silk: '', aliasOf: '5V' },
     ],
   },
 
@@ -95,10 +103,11 @@ export const BOARDS = {
     defaultLang: 'cpp',
     wmm: 51.45,
     hmm: 28.33,
+    padInset: 2.735,         // два ряда по 15 выводов: 22,86 мм между рядами
     w: M(51.45),
     h: M(28.33),
     chip: 'ESP32-WROOM-32',
-    labelInset: 15,
+    labelInset: 19,
     pins: buildEsp32(),
   },
 
@@ -117,10 +126,11 @@ export const BOARDS = {
     defaultLang: 'mpy',
     wmm: 51,
     hmm: 21,
+    padInset: 1.61,          // зубчатые площадки у самого края
     w: M(51),
     h: M(21),
     chip: 'RP2040',
-    labelInset: 13,
+    labelInset: 15,
     pins: buildPico(),
   },
 };
@@ -209,12 +219,13 @@ function buildPico() {
  * Делается один раз при загрузке, чтобы дальше везде были готовые x/y.
  */
 for (const spec of Object.values(BOARDS)) {
+  const inset = spec.padInset ?? 2.54;      // мм от края до центра площадки
   spec.pins = spec.pins.map((p) => {
-    const x = p.dir === 'right' ? M(spec.wmm / 2)
-      : p.dir === 'left' ? M(-spec.wmm / 2)
-        : M(p.xmm - spec.wmm / 2);
+    const x = p.xmm != null ? M(p.xmm - spec.wmm / 2)
+      : p.dir === 'right' ? M(spec.wmm / 2 - inset)
+        : M(-spec.wmm / 2 + inset);
     const y = p.ymm != null ? M(p.ymm - spec.hmm / 2)
-      : p.dir === 'up' ? M(-spec.hmm / 2) : M(spec.hmm / 2);
+      : p.dir === 'up' ? M(-spec.hmm / 2 + inset) : M(spec.hmm / 2 - inset);
     return { ...p, x, y };
   });
 }

@@ -40,30 +40,28 @@ function pcbBody(w, h, base, edge, { radius = 9, holes = [] } = {}) {
       <circle cx="${hx}" cy="${hy}" r="${r * 0.45}" fill="#05090c"/>`).join('')}`;
 }
 
-/** Одна площадка гребёнки: чёрный пластик, золото, отверстие. */
-function pad(x, y, { dir = 'up', depth = 6.5 } = {}) {
-  const cy = dir === 'up' ? y + depth : y - depth;
+/** Одна площадка гребёнки: чёрный пластик, золото, отверстие — по центру вывода. */
+function pad(x, y) {
   const half = 4.7;
   return `
-    <rect x="${x - half}" y="${cy - 5}" width="${half * 2}" height="10" rx="1.1" fill="#0a0f14"/>
-    <rect x="${x - half + 1.2}" y="${cy - 3.6}" width="${half * 2 - 2.4}" height="7.2" rx=".8"
+    <rect x="${x - half}" y="${y - 5}" width="${half * 2}" height="10" rx="1.1" fill="#0a0f14"/>
+    <rect x="${x - half + 1.2}" y="${y - 3.6}" width="${half * 2 - 2.4}" height="7.2" rx=".8"
           fill="none" stroke="#d4af37" stroke-width="1.1" opacity=".9"/>
-    <circle cx="${x}" cy="${cy}" r="1.5" fill="#04080a"/>`;
+    <circle cx="${x}" cy="${y}" r="1.5" fill="#04080a"/>`;
 }
 
 /** Гребёнка: тёмная планка на всю длину ряда + площадки. */
-function header(pins, { dir = 'up', w, h, depth = 6.5, band = 11.5 } = {}) {
+function header(pins, { dir = 'up', w, band = 11.5 } = {}) {
   const row = pins.filter((p) => (dir === 'up' ? p.y < 0 : p.y > 0) && p.dir === dir);
   if (!row.length) return '';
   const xs = row.map((p) => p.x);
   const minX = Math.max(Math.min(...xs) - 6.5, -w / 2 + 4);
   const maxX = Math.min(Math.max(...xs) + 6.5, w / 2 - 4);
-  const yEdge = dir === 'up' ? -h / 2 : h / 2;
-  const bandY = dir === 'up' ? yEdge : yEdge - band;
+  const yc = row.reduce((sum, p) => sum + p.y, 0) / row.length;
   return `
-    <rect x="${minX}" y="${bandY}" width="${maxX - minX}" height="${band}" rx="1.6"
+    <rect x="${minX}" y="${yc - band / 2}" width="${maxX - minX}" height="${band}" rx="1.6"
           fill="#101519" stroke="#20272e" stroke-width=".8"/>
-    ${row.map((p) => pad(p.x, p.y, { dir, depth })).join('')}`;
+    ${row.map((p) => pad(p.x, p.y)).join('')}`;
 }
 
 /** Корпус микросхемы: чёрный пластик, насечка, ножки, маркировка. */
@@ -139,10 +137,10 @@ function paintUno(spec) {
   return `
     ${pcbBody(w, h, '#0b8f95', '#076a70', {
       radius: 8,
-      holes: [[X(3.4), Y(3.6)], [X(65.2), Y(3.6)], [X(3.4), Y(49.7)], [X(65.2), Y(49.7)]],
+      holes: [[X(3.4), Y(3.6)], [X(65.2), Y(7.2)], [X(3.4), Y(49.7)], [X(65.2), Y(46.2)]],
     })}
-    ${header(spec.pins, { dir: 'up', w, h })}
-    ${header(spec.pins, { dir: 'down', w, h })}
+    ${header(spec.pins, { dir: 'up', w })}
+    ${header(spec.pins, { dir: 'down', w })}
 
     <!-- разъёмы: USB-B и питание -->
     ${usb(X(0.4) - 16, Y(4.8), 26, 56, { type: 'B' })}
@@ -160,13 +158,12 @@ function paintUno(spec) {
     <rect x="${X(12.4)}" y="${Y(25.4)}" width="26" height="16" rx="4" fill="#c3ccd4" stroke="#8d99a3" stroke-width=".8"/>
     <rect x="${X(14)}" y="${Y(27.4)}" width="20" height="12" rx="3" fill="#aab6bf"/>
 
-    <!-- ICSP: 2×3 у правого края (его VCC — вывод 5V2) -->
-    <rect x="${X(60.2)}" y="${Y(21.4)}" width="26" height="26" rx="1.4" fill="#101519" stroke="#20272e" stroke-width=".8"/>
+    <!-- ICSP: 2×3 у правого края -->
+    <rect x="${X(59.4)}" y="${Y(20.6)}" width="30" height="41" rx="1.6" fill="#101519" stroke="#20272e" stroke-width=".8"/>
     ${[[61.9, 23.3], [64.4, 23.3], [61.9, 25.8], [64.4, 25.8], [61.9, 28.3], [64.4, 28.3]]
     .map(([mx, my]) => `<rect x="${X(mx) - 2.6}" y="${Y(my) - 2.6}" width="5.2" height="5.2" rx=".7"
       fill="#0a0f14" stroke="#d4af37" stroke-width=".9" opacity=".9"/>`).join('')}
-    ${silk('ICSP', X(63.2), Y(20.2), { size: 4.2, opacity: 0.8 })}
-    ${pad(w / 2 - 5, Y(22.9), { dir: 'up' })}
+    ${silk('ICSP', X(63.2), Y(19.2), { size: 4.2, opacity: 0.8 })}
 
     <!-- питание: стабилизатор и банки -->
     <rect x="${X(11.5)}" y="${Y(37)}" width="30" height="20" rx="1.2" fill="#15181c" stroke="#2b3138" stroke-width=".8"/>
@@ -210,20 +207,20 @@ function paintEsp32(spec) {
   const Y = (mm) => mm * PX_PER_MM - h / 2;
   return `
     ${pcbBody(w, h, '#1b222a', '#0c1116', { radius: 6 })}
-    ${header(spec.pins, { dir: 'up', w, h })}
-    ${header(spec.pins, { dir: 'down', w, h })}
+    ${header(spec.pins, { dir: 'up', w })}
+    ${header(spec.pins, { dir: 'down', w })}
 
     <!-- модуль ESP32-WROOM-32: экран и антенна на дальнем от USB краю -->
-    <rect x="${X(31.4)}" y="${Y(4.2)}" width="${72}" height="${80}" rx="2" fill="#0f1418" stroke="#242c34" stroke-width=".9"/>
-    <rect x="${X(32.6)}" y="${Y(5.2)}" width="${46}" height="${70}" rx="2" fill="#c8d0d7" stroke="#98a3ac" stroke-width=".9"/>
-    <rect x="${X(32.6)}" y="${Y(5.2)}" width="${46}" height="${12}" rx="2" fill="rgba(255,255,255,.5)"/>
-    <path d="M ${X(36.4)} ${Y(6.6)} v ${50} h ${5.6} v -${50}"
+    <rect x="${X(31.4)}" y="${Y(5.9)}" width="${72}" height="${64}" rx="2" fill="#0f1418" stroke="#242c34" stroke-width=".9"/>
+    <rect x="${X(32.6)}" y="${Y(6.8)}" width="${46}" height="${55}" rx="2" fill="#c8d0d7" stroke="#98a3ac" stroke-width=".9"/>
+    <rect x="${X(32.6)}" y="${Y(6.8)}" width="${46}" height="${11}" rx="2" fill="rgba(255,255,255,.5)"/>
+    <path d="M ${X(36.4)} ${Y(8)} v ${38} h ${5.6} v -${38}"
           fill="none" stroke="#b9c3cb" stroke-width="1.3" opacity=".5"/>
-    ${silk('ESP32-WROOM-32', X(32.6) + 23, Y(11.4), { size: 4.4, weight: 700, fill: '#3b444c', family: 'ui-sans-serif,sans-serif' })}
-    ${silk('FCC · 2.4 GHz', X(32.6) + 23, Y(13.8), { size: 3.2, fill: '#57626b', family: 'ui-sans-serif,sans-serif' })}
+    ${silk('ESP32-WROOM-32', X(32.6) + 23, Y(12.4), { size: 4.4, weight: 700, fill: '#3b444c', family: 'ui-sans-serif,sans-serif' })}
+    ${silk('FCC · 2.4 GHz', X(32.6) + 23, Y(14.6), { size: 3.2, fill: '#57626b', family: 'ui-sans-serif,sans-serif' })}
     <!-- полосковая антенна -->
     <g stroke="#c9a227" stroke-width="1.6" fill="none" stroke-linejoin="round">
-      <path d="M ${X(43.4)} ${Y(6.4)} v ${14} h 1.8 v -${14} h 1.8 v ${14} h 1.8 v -${14} h 1.8 v ${14}"/>
+      <path d="M ${X(43.4)} ${Y(8)} v ${11} h 1.8 v -${11} h 1.8 v ${11} h 1.8 v -${11} h 1.8 v ${11}"/>
     </g>
 
     <!-- USB и кнопки -->
@@ -251,45 +248,32 @@ function paintPico(spec) {
   const { w, h } = spec;
   const X = (mm) => mm * PX_PER_MM - w / 2;
   const Y = (mm) => mm * PX_PER_MM - h / 2;
-  // зубчатые полуотверстия по краям — визитная карточка Pico
-  const castellations = spec.pins.filter((p) => p.dir === 'up' || p.dir === 'down').map((p) => {
-    const y = p.dir === 'up' ? -h / 2 : h / 2;
-    return `<path d="M ${p.x - 3.6} ${y} a 3.6 3.6 0 0 1 7.2 0 z" fill="#c8b26a" opacity=".85"/>
-            <circle cx="${p.x}" cy="${y}" r="1.6" fill="#0a1014"/>`;
-  }).join('');
   return `
     ${pcbBody(w, h, '#0c3b2a', '#052018', { radius: 6 })}
-    ${header(spec.pins, { dir: 'up', w, h })}
-    ${header(spec.pins, { dir: 'down', w, h })}
-    ${castellations}
+    ${header(spec.pins, { dir: 'up', w })}
+    ${header(spec.pins, { dir: 'down', w })}
 
-    <!-- RP2040 -->
-    ${chip(X(22.4), Y(8.2), 28, 26, 'RP2040', '', { legs: 12, silkSize: 4.2 })}
-
-    <!-- обвязка -->
-    <rect x="${X(37.6)}" y="${Y(9)}" width="15" height="8" rx="3.2" fill="#c3ccd4" stroke="#8d99a3" stroke-width=".8"/>
-    ${silk('12 MHz', X(40), Y(8.2), { size: 3.2, opacity: 0.55 })}
-    ${capElectro(X(37.4), Y(15.4), 4.2)}
-    ${capElectro(X(42.6), Y(15.4), 4.2)}
+    <!-- RP2040 в середине, между рядами подписей -->
+    ${chip(X(22.8), Y(6.0), 40, 22, 'RP2040', '', { legs: 12, silkSize: 4 })}
 
     <!-- USB -->
-    ${usb(X(0.2) - 9, Y(7.2), 16, 27, { type: 'micro' })}
+    ${usb(X(0.2) - 9, Y(7.6), 16, 27, { type: 'micro' })}
 
     <!-- BOOTSEL и отладочные площадки -->
-    ${tactile(X(12.6), Y(15.4), 11, 'BOOTSEL', { above: true })}
-    <rect x="${X(44.4)}" y="${Y(6.2)}" width="21" height="8" rx="1.2" fill="#101519" stroke="#20272e" stroke-width=".8"/>
-    ${[0, 1, 2].map((i) => `<rect x="${X(45.4) + i * 6.4}" y="${Y(7)}" width="4.6" height="5.6" rx=".7"
+    ${tactile(X(8.2), Y(12), 10, 'BOOTSEL', { above: true })}
+    <rect x="${X(44.4)}" y="${Y(9.2)}" width="21" height="8" rx="1.2" fill="#101519" stroke="#20272e" stroke-width=".8"/>
+    ${[0, 1, 2].map((i) => `<rect x="${X(45.4) + i * 6.4}" y="${Y(10)}" width="4.6" height="5.6" rx=".7"
       fill="#0a0f14" stroke="#d4af37" stroke-width=".9" opacity=".9"/>`).join('')}
-    ${silk('DEBUG', X(47.4), Y(12), { size: 3.2, opacity: 0.7 })}
+    ${silk('DEBUG', X(47.4), Y(14.2), { size: 3.2, opacity: 0.7 })}
 
     <!-- встроенный светодиод (GP25) -->
     <g class="led-on">
-      <circle cx="${X(8.6)}" cy="${Y(8.6)}" r="3.4" fill="#0e2231" stroke="#1b4358"/>
-      <circle class="builtin-glow" cx="${X(8.6)}" cy="${Y(8.6)}" r="3.4" fill="#7ef29d" opacity="0"/>
+      <circle cx="${X(7)}" cy="${Y(7.4)}" r="3.2" fill="#0e2231" stroke="#1b4358"/>
+      <circle class="builtin-glow" cx="${X(7)}" cy="${Y(7.4)}" r="3.2" fill="#7ef29d" opacity="0"/>
     </g>
 
     <!-- шелкография -->
-    ${silk('Raspberry Pi Pico', X(15.4), Y(11.8), { size: 4.4, weight: 700, fill: '#eaf6ee', family: 'ui-sans-serif,sans-serif' })}`;
+`;
 }
 
 // -------------------------------------------------------------- заглушка ----
@@ -301,19 +285,26 @@ function paintGeneric(spec) {
     ${silk(spec.chip || '', 0, 12, { size: 5, opacity: 0.6 })}`;
 }
 
-/** Подписи выводов — как белая краска на текстолите, вдоль площадок. */
+/**
+ * Подписи выводов — белая краска на текстолите, строго от края площадки внутрь:
+ * так они не наезжают ни на сами площадки, ни друг на друга.
+ */
 function pinLabels(spec) {
   const { h, pins } = spec;
-  // отступ подписи от края: у Uno гребёнка стоит глубже, у Pico и ESP32 почти на краю
-  const inset = spec.labelInset ?? 22;
   const size = h > 180 ? 5.8 : h > 100 ? 4.4 : 3.8;
   return pins.map((p) => {
-    if (p.dir === 'right') {
-      return silk(p.silk || p.label, spec.w / 2 - 14, p.y + 1.6, { size, rot: -90, fill: '#f4fbfb', opacity: 0.9, weight: 600 });
+    if (p.silk === '') return '';                 // подпись не нужна (её роль играет шелкография узла)
+    // вывод сбоку (ICSP) — подпись слева от площадки, вдоль платы
+    if (p.dir === 'right' || p.dir === 'left') {
+      const x = p.dir === 'right' ? p.x - 9 : p.x + 9;
+      return silk(p.silk || p.label, x, p.y + 1.4, { size, rot: -90, fill: '#f4fbfb', opacity: 0.9, weight: 600 });
     }
     const up = p.y < 0;
-    const y = up ? -h / 2 + inset : h / 2 - inset;
-    return silk(p.silk || p.label, p.x, y, { size, rot: -90, fill: '#f4fbfb', opacity: 0.9, weight: 600 });
+    // площадка занимает ±5 px от вывода; текст начинается сразу за ней и идёт вглубь платы
+    const y = up ? p.y + 7 : p.y - 7;
+    return silk(p.silk || p.label, p.x, y, {
+      size, rot: -90, anchor: up ? 'end' : 'start', fill: '#f4fbfb', opacity: 0.9, weight: 600,
+    });
   }).join('');
 }
 

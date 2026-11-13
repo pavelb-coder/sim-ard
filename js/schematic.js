@@ -33,6 +33,7 @@ export class Schematic {
 
     this.layerWires = svg.querySelector('#wiresLayer');
     this.layerHits = svg.querySelector('#wireHitLayer');
+    this.layerBoards = svg.querySelector('#boardsLayer');
     this.layerParts = svg.querySelector('#partsLayer');
     this.layerPins = svg.querySelector('#pinsLayer');
     this.layerPending = svg.querySelector('#pendingLayer');
@@ -157,14 +158,17 @@ export class Schematic {
     this.layerHits.innerHTML = hitsvg;
     this.layerWires.innerHTML = wsvg;
 
-    // детали
+    // детали: платы — отдельным слоем ниже проводов, чтобы провод доходил до площадки
     let psvg = '';
+    let bsvg = '';
     for (const p of this.parts) {
       const sel = this.selected?.kind === 'part' && this.selected.id === p.id ? ' selected' : '';
       const markup = p.__def.render(p);
-      psvg += `<g transform="translate(${p.x} ${p.y})" data-wrap="${p.id}">${markup.replace('class="part"', `class="part${sel}"`)}</g>`;
+      const wrap = `<g transform="translate(${p.x} ${p.y})" data-wrap="${p.id}">${markup.replace('class="part"', `class="part${sel}"`)}</g>`;
+      if (p.__def.board) bsvg += wrap; else psvg += wrap;
     }
     this.layerParts.innerHTML = psvg;
+    this.layerBoards.innerHTML = bsvg;
 
     // выводы
     let pinsvg = '';
@@ -263,7 +267,8 @@ export class Schematic {
   /** Обновляет «физику» на схеме: яркость, нажатия, состояния выводов. */
   applySim(partInfo, runtimes) {
     for (const p of this.parts) {
-      const g = this.layerParts.querySelector(`[data-id="${p.id}"]`);
+      const g = this.layerParts.querySelector(`[data-id="${p.id}"]`)
+        || this.layerBoards.querySelector(`[data-id="${p.id}"]`);
       if (!g || !p.__def.update) continue;
       const info = partInfo?.get?.(p.id) || {};
       const env = {
@@ -420,7 +425,7 @@ export class Schematic {
         if (Math.abs(dx) + Math.abs(dy) > 2) this.moved = true;
         part.x = snap(this.drag.partX + dx);
         part.y = snap(this.drag.partY + dy);
-        const wrap = this.layerParts.querySelector(`[data-wrap="${part.id}"]`);
+        const wrap = this.wrapOf(part.id);
         if (wrap) wrap.setAttribute('transform', `translate(${part.x} ${part.y})`);
         this._updateWiresFor(part.id);
       }
@@ -474,10 +479,16 @@ export class Schematic {
     this.svg.setPointerCapture?.(ev.pointerId);
   }
 
+  /** Обёртка детали: платы живут в отдельном слое. */
+  wrapOf(id) {
+    return this.layerParts.querySelector(`[data-wrap="${id}"]`)
+      || this.layerBoards.querySelector(`[data-wrap="${id}"]`);
+  }
+
   refreshPart(partOrId) {
     const part = typeof partOrId === 'string' ? this.part(partOrId) : partOrId;
     if (!part || !part.__def) return;
-    const wrap = this.layerParts.querySelector(`[data-wrap="${part.id}"]`);
+    const wrap = this.wrapOf(part.id);
     if (!wrap) return;
     const sel = this.selected?.kind === 'part' && this.selected.id === part.id ? ' selected' : '';
     wrap.innerHTML = part.__def.render(part).replace('class="part"', `class="part${sel}"`);
@@ -627,7 +638,7 @@ export function route(A, B, { lane = 0, aBoard = false, bBoard = false, box = nu
 
   // провод не должен резать плату насквозь: если какой-то отрезок заходит
   // внутрь корпуса, обходим плату сбоку, как настоящий провод в обход
-  if (box && pts.some((p, i) => i && enters(p, pts[i - 1], box))) {
+  if (box && pts.some((p, i) => i > 1 && enters(p, pts[i - 1], box))) {   // первый отрезок — это площадка на плате
     pts = aroundBoard(A, B, a, b, box);
   }
 
