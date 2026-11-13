@@ -22,15 +22,31 @@ if [ ! -f "$wt/tools/sync-simulator.sh" ]; then
   exit 0
 fi
 
-# 2. Рабочее дерево могло «отвалиться» после перезапуска песочницы.
+# 2. Рабочее дерево могло «отвалиться» после перезапуска песочницы:
+#    обычно теряется только связка .git-файла с основным репозиторием.
 if ! git -C "$wt" rev-parse --verify -q HEAD >/dev/null 2>&1; then
   say "· восстанавливаю рабочее дерево ветки moodle…"
-  git -C "$repo" worktree prune >/dev/null 2>&1 || true
-  if ! git -C "$repo" worktree add --force "$wt" moodle >/dev/null 2>&1; then
-    say "✗ не удалось развернуть ветку moodle в $wt"
-    say "  подсказка: git worktree add /путь/к/moodle moodle"
+  wtgit="$repo/.git/worktrees/moodle"
+  if [ ! -f "$wtgit/gitdir" ]; then
+    mkdir -p "$wtgit"
+    printf '%s/.git\n' "$wt" > "$wtgit/gitdir"
+    printf 'ref: refs/heads/moodle\n' > "$wtgit/HEAD"
+    printf '../..\n' > "$wtgit/commondir"
+  fi
+  printf 'gitdir: %s\n' "$wtgit" > "$wt/.git"
+  git -C "$repo" worktree repair "$wt" >/dev/null 2>&1 || true
+  # индекс мог остаться от прежнего состояния — пересобираем из HEAD
+  git -C "$wt" reset -q >/dev/null 2>&1 || true
+
+  if ! git -C "$wt" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    git -C "$repo" worktree add --force "$wt" moodle >/dev/null 2>&1 || true
+  fi
+  if ! git -C "$wt" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    say "✗ не удалось восстановить рабочее дерево ветки moodle в $wt"
+    say "  подсказка: git -C $repo worktree add /путь/к/moodle moodle"
     exit 0
   fi
+  say "· рабочее дерево восстановлено"
 fi
 
 branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
