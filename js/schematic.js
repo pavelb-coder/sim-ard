@@ -11,6 +11,23 @@ import { PARTS, pinWorld, allPins, REF_PREFIX } from './parts.js';
 
 const snap = (v) => Math.round(v / 5) * 5;
 
+/**
+ * Куда поставить подпись вывода у детали (не у платы).
+ * Наружу по направлению вывода: под нижней площадкой, над верхней, сбоку от
+ * боковой — чтобы текст не наезжал на рисунок. Отдельный вывод может задать
+ * смещение сам (labelDx / labelDy / labelAnchor) — так подписаны сегменты
+ * индикатора, где подписи идут столбиком сбоку.
+ */
+function pinLabelPos(pin) {
+  if (pin.labelAnchor) {
+    return { x: pin.x + (pin.labelDx || 0), y: pin.y + (pin.labelDy || 0), anchor: pin.labelAnchor };
+  }
+  if (pin.dir === 'down') return { x: pin.x, y: pin.y + 11, anchor: 'middle' };
+  if (pin.dir === 'left') return { x: pin.x - 8, y: pin.y + 2, anchor: 'end' };
+  if (pin.dir === 'right') return { x: pin.x + 8, y: pin.y + 2, anchor: 'start' };
+  return { x: pin.x, y: pin.y - 8, anchor: 'middle' };
+}
+
 /** Цвета проводов: земля, питание и «сигнальная» палитра по кругу. */
 export const WIRE_COLORS = { gnd: '#93a4b4', vcc: '#f2555a', v33: '#f5a25d', vin: '#f5a25d' };
 export const SIGNAL_COLORS = ['#f2c94c', '#4ade80', '#5aa9e6', '#c084fc', '#2dd4bf', '#fb923c', '#f472b6', '#a3e635'];
@@ -71,6 +88,10 @@ export class Schematic {
     if (type === 'relay') return { energized: false };
     if (type === 'stepper28byj') return { angle: 0, steps: 0, phases: [false, false, false, false] };
     if (type === 'rgbled') return {};
+    if (type === 'battery9') return { voltage: 9 };
+    if (type === 'batteryAA') return { voltage: 6 };
+    if (type === 'psu') return { voltage: 5 };
+    if (type === 'scope') return {};
     if (type === 'seg7') return {};
     return {};
   }
@@ -193,7 +214,11 @@ export class Schematic {
         pinsvg += `<circle class="pin${p.__def.board ? ' pin-board' : ''}${active}${link}" data-key="${key}" data-pin="${pin.compId}|${pin.pin}" cx="${pin.x}" cy="${pin.y}" r="${r}"/>`;
         // у платы подписи выводов уже нарисованы на корпусе — не дублируем
         if (this.view.s > 0.75 && !p.__def.board) {
-          pinsvg += `<text x="${pin.x}" y="${pin.y - 7}" style="font:6px ui-monospace;fill:#6f869a;text-anchor:middle;pointer-events:none">${pin.label}</text>`;
+          // подпись вывода ставится наружу от корпуса: у нижних выводов — под
+          // площадкой, у верхних — над ней, у боковых — сбоку, чтобы текст не
+          // наезжал на рисунок детали
+          const l = pinLabelPos(pin);
+          pinsvg += `<text x="${l.x}" y="${l.y}" style="font:6px ui-monospace;fill:#6f869a;text-anchor:${l.anchor};pointer-events:none">${pin.label}</text>`;
         }
       }
     }
@@ -368,6 +393,19 @@ export class Schematic {
       if (partEl) {
         const id = partEl.dataset.id;
         const part = this.part(id);
+        // preventDefault() гасит click/dblclick, поэтому двойное нажатие
+        // ловим сами: две «нажатия» по одной детали за 400 мс — это редактор
+        const now = performance.now();
+        const tap = this._lastTap;
+        this._lastTap = { id, t: now };
+        if (tap && tap.id === id && now - tap.t < 400 && part) {
+          this._lastTap = null;
+          this.drag = null;
+          this.editPart(part);
+          this.render();
+          ev.preventDefault();
+          return;
+        }
         const knob = ev.target.closest('[data-role="knob"]');
         const stick = ev.target.closest('[data-role="stick"]');
         this.selected = { kind: 'part', id };
@@ -499,18 +537,33 @@ export class Schematic {
     }, { passive: false });
 
     svg.addEventListener('dblclick', (ev) => {
-      const partEl = ev.target.closest('.part');
+      // указатель захвачен холстом (панорама), поэтому ev.target может быть
+      // самим svg — тогда ищем деталь под курсором вручную
+      const partEl = ev.target.closest?.('.part')
+        || document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.part') || null;
       if (!partEl) return;
       const part = this.part(partEl.dataset.id);
-      if (!part) return;
-      if (part.type === 'resistor') {
-        const v = prompt('Сопротивление, Ом:', String(part.props.value));
-        if (v !== null && Number(v) > 0) { part.props.value = Number(v); this.render(); this.onChange(); }
-      } else if (part.type === 'pot') {
-        const v = prompt('Полное сопротивление потенциометра, Ом:', String(part.props.ohms));
-        if (v !== null && Number(v) > 0) { part.props.ohms = Number(v); this.onChange(); }
-      }
+      if (part) this.editPart(part);
     });
+  }
+
+  /** Двойной клик по детали: у резистора — номинал, у источника — напряжение. */
+  editPart(part) {
+    if (part.type === 'resistor') {
+      const v = prompt('Сопротивление, Ом:', String(part.props.value));
+      if (v !== null && Number(v) > 0) { part.props.value = Number(v); this.render(); this.onChange(); }
+    } else if (part.type === 'battery9' || part.type === 'batteryAA' || part.type === 'psu') {
+      const v = prompt('Напряжение источника, В (1,5…24):', String(part.props.voltage));
+      if (v !== null && Number(v) > 0) {
+        part.props.voltage = Math.max(1.5, Math.min(24, Number(v)));
+        this.refreshPart(part);
+        this.render();
+        this.onChange();
+      }
+    } else if (part.type === 'pot') {
+      const v = prompt('Полное сопротивление потенциометра, Ом:', String(part.props.ohms));
+      if (v !== null && Number(v) > 0) { part.props.ohms = Number(v); this.onChange(); }
+    }
   }
 
   _startPan(ev) {

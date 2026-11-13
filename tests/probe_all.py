@@ -11,7 +11,8 @@ OUT = pathlib.Path(__file__).parent / "shots"
 OUT.mkdir(exist_ok=True)
 
 IDS = ["blink", "led", "button", "pot", "rc", "servo", "lcd", "oled",
-       "dht", "sonar", "danger", "esp32", "pico", "pico-pwm", "two-boards"]
+       "dht", "sonar", "danger", "esp32", "pico", "pico-pwm", "two-boards",
+       "rgb", "relay", "joystick", "seg7", "stepper", "power", "scope-pwm"]
 
 
 async def main():

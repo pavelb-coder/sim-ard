@@ -23,6 +23,7 @@ export const SHORT_NAME = {
   lcd1602: 'LCD 1602', oled: 'OLED 128×64', buzzer: 'зуммер', ldr: 'фоторезистор',
   pir: 'PIR', dht11: 'DHT11', hcsr04: 'HC-SR04',
   diode: 'диод', npn: 'транзистор', rgbled: 'светодиод RGB', toggle: 'тумблер',
+  battery9: 'батарейка 9 В', batteryAA: 'отсек 4×AA', psu: 'источник питания', scope: 'осциллограф',
   seg7: 'индикатор', relay: 'реле', joystick: 'джойстик', stepper28byj: 'шаговый двигатель',
   uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico',
   nano: 'Arduino Nano', promini: 'Arduino Pro Mini', leonardo: 'Arduino Leonardo', mega: 'Arduino Mega 2560',
@@ -33,6 +34,7 @@ export const REF_PREFIX = {
   pot: 'RV', servo: 'M', lcd1602: 'LCD', oled: 'DS', buzzer: 'BZ', ldr: 'R', pir: 'PIR',
   dht11: 'DHT', hcsr04: 'SR', uno: 'A', esp32: 'A', pico: 'A',
   diode: 'VD', npn: 'VT', rgbled: 'D', toggle: 'S', seg7: 'HG', relay: 'K', joystick: 'RV', stepper28byj: 'M',
+  battery9: 'GB', batteryAA: 'GB', psu: 'G', scope: 'OS',
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
 
@@ -44,15 +46,18 @@ function partLabel(comp, type) {
 
 const partTag = (comp, w, h, body, extra = '') => {
   const label = partLabel(comp, comp.type);
-  // подпись — «шильдик» под деталью: провода проходят под ним и не рвут текст
+  // шильдик стоит ниже самой нижней подписи вывода, чтобы они не наезжали
+  const pins = comp.__def?.pins ? comp.__def.pins(comp) : [];
+  const lowest = pins.reduce((m, p) => Math.max(m, p.y + (p.dir === 'down' ? 16 : 6)), h / 2);
+  const base = Math.round(lowest);
   const tw = Math.round(label.length * 3.5 + 12);
   return `<g class="part" data-id="${comp.id}">
      <rect class="hit" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" fill="transparent"/>
      <g class="body">${body}</g>${extra}
      <g class="tag">
-       <rect class="part-tag" x="${-tw / 2}" y="${h / 2 + 12}" width="${tw}" height="14" rx="7"
+       <rect class="part-tag" x="${-tw / 2}" y="${base + 12}" width="${tw}" height="14" rx="7"
              fill="#0c141b" stroke="#22323f" stroke-width=".8"/>
-       <text class="part-label" x="0" y="${h / 2 + 22}"
+       <text class="part-label" x="0" y="${base + 22}"
              style="font:6px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle;pointer-events:none">${esc(label)}</text>
      </g>
    </g>`;
@@ -270,11 +275,11 @@ const DISCRETE = {
     render(comp) {
       const t = comp.props?.temp ?? 24, h = comp.props?.hum ?? 45;
       return partTag(comp, 66, 54, `
-        <rect x="-22" y="-20" width="44" height="40" rx="3" fill="#1b3a5c" stroke="#2c5c8a"/>
-        <rect x="-16" y="-14" width="32" height="14" rx="1" fill="#0d2233"/>
-        <text x="0" y="9" style="font:6px ui-monospace;fill:#a9d4f5;text-anchor:middle">${t.toFixed(0)}°C ${h.toFixed(0)}%</text>
-        <line x1="-20" y1="20" x2="-20" y2="22" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="20" y1="20" x2="20" y2="22" stroke="#8aa4b8" stroke-width="1.4"/>`);
+        <rect x="-22" y="-24" width="44" height="34" rx="3" fill="#1b3a5c" stroke="#2c5c8a"/>
+        <rect x="-16" y="-18" width="32" height="14" rx="1" fill="#0d2233"/>
+        <text x="0" y="4" style="font:6px ui-monospace;fill:#a9d4f5;text-anchor:middle">${t.toFixed(0)}°C ${h.toFixed(0)}%</text>
+        <line x1="-20" y1="10" x2="-20" y2="22" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="20" y1="10" x2="20" y2="22" stroke="#8aa4b8" stroke-width="1.4"/>`);
     },
     update(g, comp) {
       const t = g.querySelector('.body text');
@@ -349,7 +354,7 @@ const DISCRETE = {
         <line x1="-4" y1="6" x2="10" y2="12" stroke="#d8e4ee" stroke-width="1.6"/>
         <path class="arrow" d="M 12 12 L 3 11 L 7 5 Z" fill="#d8e4ee"/>
         <circle class="state" cx="16" cy="-14" r="3" fill="#3a4b5c"/>` + `
-        <text x="0" y="42" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">BC547  hFE≈100</text>`);
+        <text x="0" y="50" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">BC547  hFE≈100</text>`);
     },
     update(g, comp, env) {
       const on = !!env.info?.on;
@@ -376,7 +381,7 @@ const DISCRETE = {
         <circle class="core" cx="0" cy="-4" r="7" fill="#dfe8ef" opacity=".85"/>
         <path d="M -13 0 L -13 24 M -7 6 L -7 24 M 7 6 L 7 24 M 13 0 L 13 24"
               stroke="#8aa4b8" stroke-width="1.3" fill="none"/>
-        <text x="0" y="40" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">общий катод</text>`);
+        <text x="0" y="47" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">общий катод</text>`);
     },
     update(g, comp, env) {
       const ch = env.info?.channels || [0, 0, 0];
@@ -429,7 +434,7 @@ const DISCRETE = {
     name: 'Индикатор 7 сегментов', category: 'Модули', w: 84, h: 120,
     pins: () => [
       ...['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP'].map((id, i) => (
-        { id, label: id, x: -34, y: -35 + i * 10, dir: 'left' })),
+        { id, label: id, x: -34, y: -35 + i * 10, dir: 'left', labelDx: -8, labelDy: 2, labelAnchor: 'end' })),
       { id: 'COM', label: '−', x: 34, y: 0, dir: 'right' },
     ].sort((a, b) => a.y - b.y),
     render(comp) {
@@ -683,7 +688,6 @@ const MODULES = {
         <rect x="-56" y="-30" width="42" height="26" rx="2" fill="#0d1712" stroke="#2b8f6a"/>
         <text x="-35" y="-14" style="font:5.4px ui-monospace;fill:#6fae92;text-anchor:middle">2003A</text>
         ${leds}
-        <text x="-35" y="34" style="font:5.4px ui-monospace;fill:#6fae92;text-anchor:middle">IN1…IN4</text>
         <g class="motor" transform="translate(34 -6)">
           <circle r="30" fill="#9aa6b2" stroke="#6d7885" stroke-width="1.4"/>
           <circle r="23" fill="#b7c2cc" stroke="#8b97a3" stroke-width="1"/>
@@ -711,10 +715,150 @@ const MODULES = {
   },
 };
 
+
+// ------------------------------------------------------------- питание ----
+const POWER = {
+  battery9: {
+    name: 'Батарейка 9 В', category: 'Питание', w: 78, h: 66,
+    pins: () => [
+      { id: '+', label: '+', x: -20, y: 30, dir: 'down' },
+      { id: '−', label: '−', x: 20, y: 30, dir: 'down' },
+    ],
+    render(comp) {
+      const v = Number(comp.props?.voltage) || 9;
+      return partTag(comp, 78, 66, `
+        <line x1="-20" y1="30" x2="-20" y2="22" stroke="#c0392b" stroke-width="1.6"/>
+        <line x1="20" y1="30" x2="20" y2="22" stroke="#8aa4b8" stroke-width="1.6"/>
+        <rect x="-30" y="-26" width="60" height="48" rx="4" fill="#1b2430" stroke="#33465a"/>
+        <rect x="-18" y="-32" width="16" height="8" rx="3" fill="#c0392b" stroke="#7d2b20"/>
+        <rect x="4" y="-32" width="14" height="8" rx="3" fill="#c3ccd4" stroke="#7d93a6"/>
+        <text x="0" y="-8" style="font:11px ui-monospace;fill:#ffd166;text-anchor:middle">${v.toFixed(1)} В</text>
+        <text x="0" y="6" style="font:5.6px ui-monospace;fill:#8fbde3;text-anchor:middle">КРОНА / 6F22</text>
+        <text x="0" y="16" style="font:5px ui-monospace;fill:#5f8ba8;text-anchor:middle">алкалиновая</text>`);
+    },
+    update() {},
+  },
+
+  batteryAA: {
+    name: 'Отсек 4×AA', category: 'Питание', w: 132, h: 72,
+    pins: () => [
+      { id: '+', label: '+', x: -22, y: 32, dir: 'down' },
+      { id: '−', label: '−', x: 22, y: 32, dir: 'down' },
+    ],
+    render(comp) {
+      const v = Number(comp.props?.voltage) || 6;
+      const cells = [-48, -24, 0, 24].map((x, i) => `
+        <rect x="${x}" y="-24" width="18" height="42" rx="3" fill="#2a3440" stroke="#46586a"/>
+        <rect x="${x + 6}" y="-28" width="6" height="5" rx="1.5" fill="#c3ccd4"/>
+        <rect x="${x + 2}" y="-16" width="14" height="8" rx="1" fill="${i % 2 ? '#c0392b' : '#3d5a7a'}"/>
+        <text x="${x + 9}" y="10" style="font:5px ui-monospace;fill:#7d93a6;text-anchor:middle">1,5</text>`).join('');
+      return partTag(comp, 132, 72, `
+        <rect x="-62" y="-32" width="124" height="56" rx="3" fill="#101820" stroke="#2b3945"/>
+        ${cells}
+        <line x1="-22" y1="24" x2="-22" y2="32" stroke="#c0392b" stroke-width="1.6"/>
+        <line x1="22" y1="24" x2="22" y2="32" stroke="#8aa4b8" stroke-width="1.6"/>
+        <text x="0" y="22" style="font:6px ui-monospace;fill:#ffd166;text-anchor:middle">${v.toFixed(1)} В = 4 × 1,5 В</text>`);
+    },
+    update() {},
+  },
+
+  psu: {
+    name: 'Лабораторный источник', category: 'Питание', w: 126, h: 84,
+    pins: () => [
+      { id: '+', label: '+', x: -24, y: 38, dir: 'down' },
+      { id: '−', label: '−', x: 0, y: 38, dir: 'down' },
+    ],
+    render(comp) {
+      const v = Number(comp.props?.voltage) || 5;
+      return partTag(comp, 126, 84, `
+        <rect x="-58" y="-38" width="116" height="66" rx="4" fill="#151d26" stroke="#33465a"/>
+        <rect x="-50" y="-32" width="62" height="26" rx="2" fill="#04121f" stroke="#24405c"/>
+        <text class="psu-v" x="-19" y="-13" style="font:13px ui-monospace;fill:#7ef29d;text-anchor:middle">${v.toFixed(1)}</text>
+        <text x="-19" y="-2" style="font:5px ui-monospace;fill:#4f7799;text-anchor:middle">ВОЛЬТ</text>
+        <circle cx="34" cy="-18" r="11" fill="#2a3440" stroke="#46586a"/>
+        <line class="psu-knob" x1="34" y1="-18" x2="${34 + 8 * Math.cos((v / 12) * 4.7 - 2.35)}" y2="${-18 + 8 * Math.sin((v / 12) * 4.7 - 2.35)}"
+              stroke="#c3ccd4" stroke-width="2"/>
+        <text x="34" y="2" style="font:5px ui-monospace;fill:#5f8ba8;text-anchor:middle">0…12 В</text>
+        <text x="-30" y="16" style="font:5.4px ui-monospace;fill:#8fbde3;text-anchor:middle">выход DC</text>
+        <line x1="-24" y1="28" x2="-24" y2="38" stroke="#c0392b" stroke-width="1.6"/>
+        <line x1="0" y1="28" x2="0" y2="38" stroke="#8aa4b8" stroke-width="1.6"/>`);
+    },
+    update(g, comp) {
+      const v = Number(comp.props?.voltage) || 5;
+      const t = g.querySelector('.psu-v');
+      if (t) t.textContent = v.toFixed(1);
+      const k = g.querySelector('.psu-knob');
+      if (k) {
+        const a = (v / 12) * 4.7 - 2.35;
+        k.setAttribute('x2', String(34 + 8 * Math.cos(a)));
+        k.setAttribute('y2', String(-18 + 8 * Math.sin(a)));
+      }
+    },
+  },
+
+  scope: {
+    name: 'Осциллограф', category: 'Модули', w: 156, h: 112,
+    pins: () => [
+      { id: 'CH1', label: '1', x: -74, y: -18, dir: 'left' },
+      { id: 'CH2', label: '2', x: -74, y: 8, dir: 'left' },
+      { id: 'GND', label: '⊥', x: 0, y: 50, dir: 'down' },
+    ],
+    render(comp) {
+      return partTag(comp, 156, 112, `
+        <rect x="-74" y="-50" width="148" height="94" rx="4" fill="#1a222c" stroke="#3a4b5c"/>
+        <rect x="-62" y="-42" width="112" height="66" rx="2" fill="#04121f" stroke="#24405c"/>
+        <g class="grid" stroke="#12283a" stroke-width=".6">
+          ${[-3, -2, -1, 0, 1, 2, 3].map((i) => `<line x1="${-62}" y1="${-9 + i * 8}" x2="${50}" y2="${-9 + i * 8}"/>`).join('')}
+          ${[-5, -3, -1, 1, 3, 5].map((i) => `<line x1="${-6 + i * 9}" y1="-42" x2="${-6 + i * 9}" y2="24"/>`).join('')}
+        </g>
+        <polyline class="ch1" points="" fill="none" stroke="#ffd166" stroke-width="1.4"/>
+        <polyline class="ch2" points="" fill="none" stroke="#5ad2ff" stroke-width="1.4"/>
+        <text class="read" x="0" y="34" style="font:6px ui-monospace;fill:#8fbde3;text-anchor:middle">— нет сигнала</text>
+        <text x="-34" y="34" style="font:5px ui-monospace;fill:#4f7799;text-anchor:middle">1</text>
+        <text x="-34" y="26" style="font:6px ui-monospace;fill:#ffd166;text-anchor:middle">●</text>
+        <text x="-20" y="34" style="font:5px ui-monospace;fill:#4f7799;text-anchor:middle">2</text>
+        <text x="-14" y="26" style="font:6px ui-monospace;fill:#5ad2ff;text-anchor:middle">●</text>
+        <line x1="-74" y1="-18" x2="-62" y2="-18" stroke="#8aa4b8" stroke-width="1.2"/>
+        <line x1="-74" y1="8" x2="-62" y2="8" stroke="#8aa4b8" stroke-width="1.2"/>
+        <line x1="0" y1="44" x2="0" y2="50" stroke="#8aa4b8" stroke-width="1.2"/>`);
+    },
+    update(g, comp) {
+      const tr = comp.__trace || { ch1: [], ch2: [], max: 0 };
+      const draw = (sel, arr) => {
+        const el = g.querySelector(sel);
+        if (!el) return;
+        if (!arr || arr.length < 2) { el.setAttribute('points', ''); return; }
+        const full = Math.max(5, tr.max || 5);
+        const n = arr.length;
+        const pts = arr.map((v, i) => {
+          const x = -62 + (i / (n - 1)) * 112;
+          const y = 12 - Math.max(-1, Math.min(1, (v || 0) / full)) * 48;
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        });
+        el.setAttribute('points', pts.join(' '));
+      };
+      draw('.ch1', tr.ch1);
+      draw('.ch2', tr.ch2);
+      const read = g.querySelector('.read');
+      if (read) {
+        const a = tr.ch1?.length ? tr.ch1[tr.ch1.length - 1] : null;
+        const b = tr.ch2?.length ? tr.ch2[tr.ch2.length - 1] : null;
+        if (a === null && b === null) read.textContent = '— нет сигнала';
+        else if (tr.ch1pwm) read.textContent = `ШИМ ${Math.round(tr.ch1pwm.duty * 100)}% · ${tr.ch1pwm.vcc.toFixed(1)} В · CH1`;
+        else if (tr.ch2pwm) read.textContent = `ШИМ ${Math.round(tr.ch2pwm.duty * 100)}% · ${tr.ch2pwm.vcc.toFixed(1)} В · CH2`;
+        else {
+          const fmt = (v) => (Math.abs(v) < 0.005 ? '0.00' : v.toFixed(2));
+          read.textContent = `${a === null ? '—' : fmt(a)} / ${b === null ? '—' : fmt(b)} В`;
+        }
+      }
+    },
+  },
+};
+
 function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
 // ------------------------------------------------------------- сборка ----
-export const PARTS = { ...DISCRETE, ...MODULES };
+export const PARTS = { ...DISCRETE, ...MODULES, ...POWER };
 
 for (const spec of Object.values(BOARDS)) {
   PARTS[spec.id] = {
@@ -749,7 +893,8 @@ export function pinWorld(comp, pinId) {
 
 export function allPins(comp) {
   return PARTS[comp.type].pins(comp).map((p) => ({
-    compId: comp.id, pin: p.id, x: comp.x + p.x, y: comp.y + p.y, dir: p.dir, label: p.label,
+    ...p,
+    compId: comp.id, pin: p.id, x: comp.x + p.x, y: comp.y + p.y,
   }));
 }
 

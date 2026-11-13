@@ -19,6 +19,7 @@ const boardSpecOf = (type) => BOARDS[type] || BOARDS.uno;
 
 const R_OUT = 0.25;
 const R_PULLUP = 20000;
+const SOURCES = new Set(['battery9', 'batteryAA', 'psu']);
 const HFE = 100;                 // усиление BC547 — для модели ключа
 // последовательность фаз 28BYJ-48 (IN1…IN4): полушаги по кругу
 const STEP_SEQ = ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001'];
@@ -104,6 +105,11 @@ export class Circuit {
   /** Шина питания, к которой логично тянуть подтяжки: первая найденная. */
   vccNet() {
     for (const b of this.boards) if (b.vccNet && b.vccNet !== this.groundNet) return b.vccNet;
+    for (const p of this.parts) {
+      if (!SOURCES.has(p.type)) continue;
+      const net = this.netOf(p.id, '+');
+      if (net && net !== this.groundNet) return net;
+    }
     return this.groundNet;
   }
 
@@ -114,6 +120,7 @@ export class Circuit {
     const partInfo = new Map();
     const diodeIdx = new Map();
     const multiIdx = new Map();   // partId -> { канал: индекс диода } для RGB и 7-сегментника
+    const sourceIdx = new Map();  // partId -> индекс источника (для тока)
     const pwmNets = new Map();
     this.time += dt;
 
@@ -264,6 +271,38 @@ export class Circuit {
         case 'buzzer': {
           const a = n('1'), b = n('2');
           if (a && b && a !== b) push({ type: 'R', n1: a, n2: b, value: 100 });
+          break;
+        }
+        case 'battery9':
+        case 'batteryAA':
+        case 'psu': {
+          // Источник питания: идеальная ЭДС + внутреннее сопротивление.
+          // Минус сажаем на общий узел отсчёта, чтобы схема работала и без
+          // платы (в SPICE это узел 0 — «земля» прибора).
+          const plus = n('+'), minus = n('−') || gnd;
+          const volts = Math.max(1.5, Math.min(24, Number(p.props?.voltage) || (p.type === 'batteryAA' ? 6 : p.type === 'psu' ? 5 : 9)));
+          info.source = volts;
+          info.voltage = volts;
+          if (plus) {
+            const inner = `bat_${p.id}`;
+            push({ type: 'R', n1: plus, n2: inner, value: 0.4 });      // внутреннее сопротивление
+            const vi = push({ type: 'V', n1: inner, n2: minus, value: volts });
+            sourceIdx.set(p.id, vi);
+            if (minus !== gnd) push({ type: 'R', n1: minus, n2: gnd, value: 0.001 });
+            if (plus !== gnd) push({ type: 'R', n1: plus, n2: gnd, value: 1e6 });  // чтобы узел не висел
+            // замкнули клеммы проводом: остаётся только внутреннее сопротивление,
+            // честные 22 А и предупреждение «КЗ» (plus и minus стали одним узлом)
+            if (plus === minus) info.shorted = true;
+          }
+          break;
+        }
+        case 'scope': {
+          // Щупы осциллографа — 1 МОм на общий провод, как у настоящего прибора
+          const g0 = n('GND') || gnd;
+          for (const id of ['CH1', 'CH2']) {
+            const net = n(id);
+            if (net && g0 && net !== g0) push({ type: 'R', n1: net, n2: g0, value: 1e6 });
+          }
           break;
         }
         case 'diode': {
@@ -488,6 +527,23 @@ export class Circuit {
       }
     }
 
+    // источники питания: ток и короткое замыкание
+    for (const [partId, idx] of sourceIdx) {
+      const info = partInfo.get(partId);
+      if (!info) continue;
+      const I = Math.abs(res.currents[idx] || 0);
+      info.current = I;
+      const p = this.parts.find((q) => q.id === partId);
+      if (I > 2.5) {
+        this.warnings.push({
+          text: `«${this.nameOf(partId)}»: ток ${I.toFixed(1)} А — это короткое замыкание, в железе источник бы сел или сработала защита.`,
+          level: 'danger',
+        });
+      } else if (I > 1.2 && p) {
+        this.warnings.push({ text: `«${this.nameOf(partId)}»: ${I.toFixed(1)} А — многовато для источника.`, level: 'warn' });
+      }
+    }
+
     // зуммер звучит, если на нём есть напряжение
     for (const p of this.parts) {
       if (p.type !== 'buzzer') continue;
@@ -498,6 +554,7 @@ export class Circuit {
     }
 
     this._last = res.v;
+    try { this._duty = dutyOf; } catch { this._duty = null; }
     return { ok: true, voltages: res.v, partInfo, warnings: this.warnings, iterations: res.iterations };
   }
 
@@ -508,6 +565,12 @@ export class Circuit {
   nameOf(partId) {
     const p = this.parts.find((q) => q.id === partId);
     return p ? (this.defOf(p)?.name || p.type) : partId;
+  }
+
+  /** Скважность ШИМ на узле (если узел связан с ШИМ-выводом платы). */
+  dutyOfNet(net) {
+    const d = this._duty?.get(net);
+    return d ? { duty: d.duty, vcc: d.vcc } : null;
   }
 
   pinVoltage(compId, pin) {

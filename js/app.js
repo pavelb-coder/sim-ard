@@ -50,6 +50,7 @@ const schematic = new Schematic({
     updateStats();
     scheduleAutosave();
     refreshHints();
+    buildScopeChannels();
     if (running) solveOnce(1 / 60);
   },
 });
@@ -78,7 +79,8 @@ schematic.onHoverWire = (w) => {
 };
 
 // ------------------------------------------------------------------ палитра ----
-const CATS = ['Платы', 'Компоненты', 'Датчики', 'Модули'];
+const CATS = ['Платы', 'Питание', 'Компоненты', 'Датчики', 'Модули'];
+const SOURCE_TYPES = new Set(['battery9', 'batteryAA', 'psu']);
 const palette = $('palette');
 for (const cat of CATS) {
   const head = document.createElement('div');
@@ -144,6 +146,10 @@ function iconFor(type) {
     case 'seg7': return `<svg ${c} aria-hidden="true"><rect x="7" y="1" width="12" height="16" rx="1.5"/><path d="M9 4h8M9 9h8M9 14h8" stroke="#ff8a3d"/></svg>`;
     case 'relay': return `<svg ${c} aria-hidden="true"><rect x="3" y="4" width="20" height="11" rx="1.5"/><rect x="5" y="6" width="8" height="7" rx="1" fill="#2f74b8" stroke="#2f74b8"/><path d="M15 12l5-4"/><circle cx="20" cy="12" r="1.4"/></svg>`;
     case 'joystick': return `<svg ${c} aria-hidden="true"><rect x="3" y="4" width="20" height="11" rx="2"/><circle cx="13" cy="9" r="4"/><circle cx="13" cy="9" r="1.2"/></svg>`;
+    case 'battery9': return `<svg ${c} aria-hidden="true"><rect x="8" y="4" width="12" height="13" rx="1.5" fill="#1b2430"/><rect x="10" y="2" width="4" height="2.5" rx="1" fill="#c0392b" stroke="#c0392b"/><rect x="15" y="2" width="3" height="2.5" rx="1"/><path d="M14 9v4M12 11h4" stroke="#ffd166"/></svg>`;
+    case 'batteryAA': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="22" height="10" rx="2"/><rect x="5" y="7" width="4" height="6" rx="1" fill="#3d5a7a" stroke="#3d5a7a"/><rect x="10" y="7" width="4" height="6" rx="1" fill="#c0392b" stroke="#c0392b"/><rect x="15" y="7" width="4" height="6" rx="1" fill="#3d5a7a" stroke="#3d5a7a"/></svg>`;
+    case 'psu': return `<svg ${c} aria-hidden="true"><rect x="3" y="4" width="20" height="12" rx="2"/><rect x="5" y="6" width="9" height="5" rx="1" fill="#04121f" stroke="#24405c"/><circle cx="19" cy="9" r="2.5"/><path d="M8 16v2M14 16v2"/></svg>`;
+    case 'scope': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#04121f" stroke="#24405c"/><path d="M5 10l3-4 3 8 3-8 3 4h4" stroke="#ffd166" stroke-width="1.2"/></svg>`;
     case 'stepper28byj': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="10" height="9" rx="1"/><circle cx="18" cy="9" r="5"/><circle cx="18" cy="9" r="1.6"/><path d="M18 4v2"/></svg>`;
     default: return `<svg ${c} aria-hidden="true"><rect x="4" y="4" width="18" height="10" rx="2"/></svg>`;
   }
@@ -459,8 +465,23 @@ async function run() {
 
   const list = boards();
   if (!list.length) {
-    setProblems([{ msg: 'На схеме нет платы — перетащите Arduino Uno, ESP32 или Pico из палитры', line: 0, level: 'danger' }]);
-    showProblemsTab();
+    // Схема без платы: источник питания + детали. Скетча нет, но цепь
+    // считается по-настоящему — диоды горят, осциллограф рисует сигнал.
+    const hasSource = schematic.parts.some((p) => SOURCE_TYPES.has(p.type));
+    if (!hasSource) {
+      setProblems([{ msg: 'На схеме нет платы. Перетащите Arduino Uno, ESP32 или Pico — или поставьте источник питания (раздел «Питание»), чтобы собрать схему без платы', line: 0, level: 'danger' }]);
+      showProblemsTab();
+      return;
+    }
+    setProblems([]);
+    runtimes = new Map();
+    circuit.setSchematic(schematic.parts, schematic.wires);
+    resetTrace();
+    running = true;
+    $('stopBtn').disabled = false;
+    setStatus('Схема под питанием', 'ok');
+    startTimer();
+    startDriver();
     return;
   }
 
@@ -589,9 +610,42 @@ function tickSteppers(dt) {
   }
 }
 
+/** Отсчёты для детали-осциллографа: у каждого щупа свой буфер на ~2 с. */
+const SCOPE_PART_LEN = 140;
+const PWM_PERIOD = 24;   // отсчётов на период — на экране видно ~6 периодов
+function sampleScopeParts() {
+  for (const part of schematic.parts) {
+    if (part.type !== 'scope') continue;
+    const tr = part.__trace || (part.__trace = { ch1: [], ch2: [], max: 5 });
+    // На выводе с ШИМ среднее напряжение — это прямая линия. Но осциллограф
+    // должен показать прямоугольник, поэтому на таком узле дорисовываем
+    // настоящие импульсы: 0 ↔ Vcc по скважности вывода платы.
+    const sample = (pinId, key) => {
+      const d = circuit.dutyOfNet(circuit.netOf(part.id, pinId));
+      if (!d || d.duty <= 0.005 || d.duty >= 0.995) { tr[key + 'pwm'] = null; return circuit.pinVoltage(part.id, pinId); }
+      tr[key + 'pwm'] = d;
+      const ph = part['__ph' + key] = ((part['__ph' + key] || 0) + 1) % PWM_PERIOD;
+      return ph < d.duty * PWM_PERIOD ? d.vcc * 0.99 : 0;
+    };
+    const v1 = sample('CH1', 'ch1');
+    const v2 = sample('CH2', 'ch2');
+    tr.ch1.push(v1 === null ? 0 : v1);
+    tr.ch2.push(v2 === null ? 0 : v2);
+    if (tr.ch1.length > SCOPE_PART_LEN) { tr.ch1.shift(); tr.ch2.shift(); }
+    const peak = Math.max(...tr.ch1.map(Math.abs), ...tr.ch2.map(Math.abs));
+    tr.max = peak > 12 ? 24 : peak > 5 ? 12 : 5;
+  }
+}
+
 function sampleScope() {
   if (!scopeOn) return;
-  const vals = scope.channels.map((ch) => (ch.source ? circuit.voltageOf(ch.source.boardId, ch.source.pin) : null));
+  const vals = scope.channels.map((ch) => {
+    if (!ch.source) return null;
+    // у платы — по номеру вывода (там же известна скважность ШИМ), у детали — по имени вывода
+    return ch.source.board
+      ? circuit.voltageOf(ch.source.boardId, Number(ch.source.pin))
+      : circuit.pinVoltage(ch.source.boardId, ch.source.pin);
+  });
   scope.push(vals);
 }
 
@@ -617,6 +671,7 @@ function startDriver() {
     }
     updateScopePwm();
     sampleTrace(res);
+    sampleScopeParts();
     if (++frameCount % 2 === 0) scope.draw();
     requestAnimationFrame(tick);
   };
@@ -695,11 +750,25 @@ function buildScopeControls() {
 function buildScopeChannels() {
   const wrap = $('scopeChannels');
   const options = [];
+  // деталь могли удалить — щуп на несуществующем выводе снимаем
+  const alive = new Set(schematic.parts.map((p) => `${p.id}|`));
+  for (const ch of scope.channels) {
+    if (ch.source && ![...alive].some((pre) => ch.source.key?.startsWith(pre))) scope.setChannel(ch.index, null);
+  }
+  // выводы плат
   for (const b of boards()) {
     const spec = BOARDS[b.type];
     for (const p of spec.pins) {
       if (typeof p.num !== 'number') continue;
-      options.push({ value: `${b.id}|${p.num}`, label: `${spec.short} ${p.label}` });
+      options.push({ value: `${b.id}|${p.id}`, label: `${spec.short} · ${p.label}`, board: true, num: p.num });
+    }
+  }
+  // и выводы всех остальных деталей — щуп можно повесить на любой узел
+  for (const part of schematic.parts) {
+    if (part.__def?.board) continue;
+    const name = part.ref || part.__def?.name || part.type;
+    for (const pin of part.__def.pins(part)) {
+      options.push({ value: `${part.id}|${pin.id}`, label: `${name} · ${pin.label}`, board: false });
     }
   }
   wrap.innerHTML = scope.channels.map((ch, i) => `
@@ -716,11 +785,17 @@ function buildScopeChannels() {
       const i = Number(sel.dataset.ch);
       if (!sel.value) { scope.setChannel(i, null); }
       else {
-        const [boardId, pin] = sel.value.split('|');
-        const b = schematic.part(boardId);
-        const spec = BOARDS[b.type];
-        const p = spec.pins.find((x) => x.num === Number(pin));
-        scope.setChannel(i, { key: sel.value, boardId, pin: Number(pin), label: `${spec.short} ${p.label}` });
+        const [compId, pinId] = sel.value.split('|');
+        const opt = options.find((o) => o.value === sel.value);
+        // старые ссылки хранили номер вывода платы («b1|9») — поддерживаем и их
+        const legacy = !opt && /^\d+$/.test(pinId);
+        scope.setChannel(i, {
+          key: sel.value,
+          boardId: compId,
+          pin: opt?.board || legacy ? (legacy ? Number(pinId) : opt.num) : pinId,
+          board: !!(opt?.board || legacy),
+          label: opt ? opt.label.replace(' · ', ' ') : (legacy ? compId + ' ' + pinId : compId),
+        });
       }
       scope.draw();
     });
@@ -731,12 +806,19 @@ function updateScopePwm() {
   if (!scopeOn) return;
   for (const ch of scope.channels) {
     if (!ch.source) continue;
-    const rt = runtimes.get(ch.source.boardId);
-    const st = rt?.pins.get(ch.source.pin);
-    const b = schematic.part(ch.source.boardId);
-    ch.source.pwm = (st && st.mode === 'OUTPUT' && st.pwm > 0 && st.pwm < 255)
-      ? { duty: st.pwm / 255, vcc: BOARDS[b.type].vcc, freq: 490 }
-      : null;
+    if (ch.source.board) {
+      const rt = runtimes.get(ch.source.boardId);
+      const st = rt?.pins.get(ch.source.pin);
+      const b = schematic.part(ch.source.boardId);
+      ch.source.pwm = (st && st.mode === 'OUTPUT' && st.pwm > 0 && st.pwm < 255)
+        ? { duty: st.pwm / 255, vcc: b ? BOARDS[b.type].vcc : 5, freq: 490 }
+        : null;
+      continue;
+    }
+    // щуп на выводе детали, но узел связан с ШИМ-выводом платы через резистор:
+    // прибор должен показать прямоугольник, а не среднее
+    const d = circuit.dutyOfNet(circuit.netOf(ch.source.boardId, ch.source.pin));
+    ch.source.pwm = (d && d.duty > 0.005 && d.duty < 0.995) ? { duty: d.duty, vcc: d.vcc, freq: 490 } : null;
   }
 }
 
@@ -854,7 +936,7 @@ function applyExampleScope(ex) {
     const spec = BOARDS[b.type];
     for (const want of ex.scope) {
       const p = pinBySelector(spec, want);
-      if (p) found.push({ key: `${b.id}|${p.num}`, boardId: b.id, pin: p.num, label: `${spec.short} ${p.label}` });
+      if (p) found.push({ key: `${b.id}|${p.id}`, boardId: b.id, pin: p.num, board: true, label: `${spec.short} ${p.label}` });
     }
   }
   found.slice(0, 4).forEach((src, i) => scope.setChannel(i, src));
@@ -1242,6 +1324,7 @@ window.__sim = {
   get runtimes() { return runtimes; },
   get scope() { return scope; },
   get trace() { return trace; },
+  get last() { return lastSolve; },
   get tasks() { return TASKS; },
   get tasksPanel() { return tasksPanel; },
   get progress() { return progress; },
