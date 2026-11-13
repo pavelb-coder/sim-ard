@@ -16,6 +16,40 @@ export class StopSketch extends Error {
   constructor() { super('остановлено пользователем'); this.name = 'StopSketch'; }
 }
 
+/**
+ * Методы String из Arduino, которых нет в JavaScript.
+ * Расширяем прототип один раз при загрузке модуля — так `s.toInt()` в скетче
+ * работает без переписывания кода школьника.
+ */
+function extendString() {
+  const P = String.prototype;
+  if (P.toInt) return;
+  Object.defineProperty(P, 'toInt', { value() { const n = parseInt(String(this).trim(), 10); return Number.isFinite(n) ? n : 0; }, configurable: true });
+  Object.defineProperty(P, 'toFloat', { value() { const n = parseFloat(String(this).trim()); return Number.isFinite(n) ? n : 0; }, configurable: true });
+  Object.defineProperty(P, 'equals', { value(o) { return String(this) === String(o); }, configurable: true });
+  Object.defineProperty(P, 'equalsIgnoreCase', { value(o) { return String(this).toLowerCase() === String(o).toLowerCase(); }, configurable: true });
+  Object.defineProperty(P, 'toCharArray', {
+    value(buf, len) {
+      const text = String(this);
+      const n = Math.min(len ?? text.length, text.length);
+      for (let i = 0; i < n; i++) buf[i] = text.charCodeAt(i) & 0xff;
+      if (buf.length > n) buf[n] = 0;
+      return n;
+    },
+    configurable: true,
+  });
+  Object.defineProperty(P, 'remove', {
+    value(idx) {
+      const text = String(this);
+      String.prototype.__rm = true;
+      return idx < 0 ? text : text.slice(0, idx);
+    },
+    configurable: true,
+  });
+}
+
+extendString();
+
 export class ArduinoRuntime {
   constructor(opts = {}) {
     this.spec = opts.spec || BOARDS.uno;
@@ -42,12 +76,26 @@ export class ArduinoRuntime {
     this.stopped = false;
     this.startTime = performance.now();
 
+    // EEPROM: у настоящего AVR это 1 КБ, которая переживает перезагрузку.
+    // Здесь — таблица адресов, общая для всех запусков скетча на этой плате.
+    this.eeprom = {
+      _size: 1024,
+      _mem: this.eepromStore || (this.eepromStore = new Map()),
+      read(addr) { return this._mem.get(Number(addr) | 0) ?? 0; },
+      write(addr, val) { this._mem.set(Number(addr) | 0, Number(val) & 0xff); },
+      update(addr, val) { if (this.read(addr) !== (Number(val) & 0xff)) this.write(addr, val); },
+      length() { return this._size; },
+      get(addr, type) { return this.read(addr); },
+      put(addr, val) { this.write(addr, val); },
+    };
+
     const rt = this;
     this.Serial = {
       _baud: 9600,
       begin(baud = 9600) { this._baud = baud; },
-      print(...args) { rt.onSerial(args.map((a) => rt._fmt(a)).join('')); },
-      println(...args) { rt.onSerial((args.length ? args.map((a) => rt._fmt(a)).join('') : '') + '\n'); },
+      print(...args) { rt.onSerial(rt._fmtArgs(args)); },
+      println(...args) { rt.onSerial((args.length ? rt._fmtArgs(args) : '') + '\n'); },
+      printf(fmt, ...args) { rt.onSerial(rt._format(fmt, args)); },
       write(v) { rt.onSerial(String.fromCharCode(v & 0xff)); },
       flush() {},
       available() { return 0; },
@@ -62,11 +110,188 @@ export class ArduinoRuntime {
     this.onSerial(s + '\n');
   }
 
+  /** print(x), print(x, HEX): во втором аргументе — система счисления. */
+  _fmtArgs(args) {
+    if (args.length >= 2 && typeof args[1] === 'number' && [10, 16, 2, 8].includes(args[1])) {
+      return this._fmtNum(args[0], args[1]);
+    }
+    return args.map((a) => this._fmt(a)).join('');
+  }
+
+  _fmtNum(v, base) {
+    const n = Math.trunc(Number(v) || 0);
+    if (base === 16) return (n < 0 ? '-0x' : '0x') + Math.abs(n).toString(16).toUpperCase();
+    if (base === 8) return (n < 0 ? '-0' : '0') + Math.abs(n).toString(8);
+    if (base === 2) return (n < 0 ? '-0b' : '0b') + Math.abs(n).toString(2);
+    return String(n);
+  }
+
+  /** Массив символов (char buf[16]) печатаем как строку — до первого нуля. */
+  _fmtArray(arr) {
+    if (!arr.length) return '';
+    const chars = [];
+    for (const el of arr) {
+      if (el === 0 || el === '\u0000' || el === '' || el == null) break;
+      if (typeof el === 'number') chars.push(String.fromCharCode(el & 0xff));
+      else if (typeof el === 'string') chars.push(el[0]);
+      else break;
+    }
+    return chars.join('');
+  }
+
   _fmt(v) {
+    if (Array.isArray(v)) return this._fmtArray(v);
     if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
     if (typeof v === 'boolean') return v ? '1' : '0';
+    if (v === undefined) return '';
     return String(v);
   }
+
+  // ------------------------------------------------ помощь транспайлеру ----
+  /** (int)x, (long)x — усечение и 32 бита, как у AVR. */
+  i32(v) { const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) | 0 : 0; }
+  b8(v) { const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) & 0xff : 0; }
+  chr(v) { return typeof v === 'string' ? v : String.fromCharCode(Math.trunc(Number(v) || 0) & 0xff); }
+  /** String(x) и String(x, HEX) */
+  str(v, base) {
+    if (base === 16) return Math.trunc(Number(v) || 0).toString(16).toUpperCase();
+    if (base === 2) return Math.trunc(Number(v) || 0).toString(2);
+    if (base === 8) return Math.trunc(Number(v) || 0).toString(8);
+    if (typeof v === 'number' && !Number.isInteger(v)) return String(Math.floor(v * 100 + 0.5) / 100);
+    return this._fmt(v);
+  }
+  /** sizeof(массив) — в элементах (как sizeof(a)/sizeof(a[0]) в C++). */
+  sizeof(v) {
+    if (Array.isArray(v)) return v.length;
+    if (typeof v === 'string') return v.length;
+    return 1;
+  }
+
+  /** Форматирование в стиле sprintf → строка (буфер пишут sprintf/snprintf). */
+  _format(fmt, args) {
+    const out = String(fmt).replace(
+      /%([-+ 0#]*)(\d+)?(?:\.(\d+))?(?:l|h|hh|ll)?([diouxXeEfgGsc%])/g,
+      (m, flags, width, prec, conv) => {
+        if (conv === '%') return '%';
+        let val = args.shift();
+        let text;
+        switch (conv) {
+          case 'd': case 'i': text = String(Math.trunc(Number(val) || 0)); break;
+          case 'u': text = String(Math.trunc(Number(val) || 0) >>> 0); break;
+          case 'o': text = Math.trunc(Number(val) || 0).toString(8); break;
+          case 'x': text = (Math.trunc(Number(val) || 0) >>> 0).toString(16); break;
+          case 'X': text = (Math.trunc(Number(val) || 0) >>> 0).toString(16).toUpperCase(); break;
+          case 'f': case 'e': case 'g': {
+            const p = prec === undefined ? 2 : Number(prec);
+            text = Number(val || 0).toFixed(p);
+            break;
+          }
+          case 's': text = this._fmt(val); break;
+          case 'c': text = typeof val === 'string' ? val[0] : String.fromCharCode(Math.trunc(Number(val) || 0) & 0xff); break;
+          default: text = this._fmt(val);
+        }
+        const w = width ? Number(width) : 0;
+        if (w > text.length) {
+          const pad = (flags.includes('0') && conv !== 's' && conv !== 'c') ? '0' : ' ';
+          text = flags.includes('-') ? text.padEnd(w, pad) : text.padStart(w, pad);
+        }
+        return text;
+      },
+    );
+    return out;
+  }
+
+  _writeChars(buf, text, limit) {
+    if (!buf) return 0;
+    const cut = limit === undefined ? text.length : Math.min(text.length, limit - 1);
+    for (let i = 0; i < cut; i++) buf[i] = text.charCodeAt(i) & 0xff;
+    if (buf.length > cut) buf[cut] = 0;
+    return cut;
+  }
+
+  /** sprintf(буфер, формат, …) — как в C: результат в буфер, вернули длину. */
+  sprintf(buf, fmt, ...args) {
+    const text = this._format(fmt, args);
+    this._writeChars(buf, text);
+    return text.length;
+  }
+  snprintf(buf, size, fmt, ...args) {
+    const limit = Math.max(1, Number(size) || 1);
+    const text = this._format(fmt, args);
+    this._writeChars(buf, text, limit);
+    return text.length;
+  }
+
+  /** dtostrf(значение, ширина, знаков, буфер) — из AVR-библиотеки stdlib. */
+  dtostrf(val, width, prec, buf) {
+    let text = Number(val || 0).toFixed(Math.max(0, Math.trunc(Number(prec) || 0)));
+    const w = Math.trunc(Number(width) || 0);
+    if (w > text.length) text = text.padStart(w, ' ');
+    this._writeChars(buf, text);
+    return text;
+  }
+
+  // ---------------------------------------------------- строки и биты ----
+  strlen(a) { return Array.isArray(a) ? this._fmtArray(a).length : String(a).length; }
+  strcpy(dst, src) { this._copyChars(dst, String(src)); return dst; }
+  strncpy(dst, src, n) { this._copyChars(dst, String(src).slice(0, Math.max(0, n | 0))); return dst; }
+  _copyChars(dst, text) {
+    if (!Array.isArray(dst)) return;
+    const len = Math.min(dst.length - 1, text.length);
+    for (let i = 0; i < len; i++) dst[i] = text.charCodeAt(i) & 0xff;
+    dst[len] = 0;
+  }
+  strcat(dst, src) { return this.strcpy(dst, this._fmtArray(dst) + String(src)); }
+  strcmp(a, b) {
+    const x = Array.isArray(a) ? this._fmtArray(a) : String(a);
+    const y = Array.isArray(b) ? this._fmtArray(b) : String(b);
+    return x === y ? 0 : (x < y ? -1 : 1);
+  }
+  strncmp(a, b, n) { return this.strcmp(String(a).slice(0, n), String(b).slice(0, n)); }
+  atoi(v) { return Math.trunc(parseFloat(this._fmt(v))) || 0; }
+  atol(v) { return this.atoi(v); }
+  atof(v) { return parseFloat(this._fmt(v)) || 0; }
+  itoa(v, buf, base = 10) { return this.strcpy(buf, Math.trunc(Number(v) || 0).toString(base)); }
+  utoa(v, buf, base = 10) { return this.strcpy(buf, (Math.trunc(Number(v) || 0) >>> 0).toString(base)); }
+  ltoa(v, buf, base = 10) { return this.strcpy(buf, Math.trunc(Number(v) || 0).toString(base)); }
+  bitRead(x, n) { return (x >> n) & 1; }
+  bitWrite(x, n, b) { return b ? (x | (1 << n)) : (x & ~(1 << n)); }
+  bitSet(x, n) { return x | (1 << n); }
+  bitClear(x, n) { return x & ~(1 << n); }
+  bit(n) { return 1 << n; }
+  lowByte(x) { return x & 0xff; }
+  highByte(x) { return (x >> 8) & 0xff; }
+
+  /** shiftOut(dataPin, clockPin, bitOrder, value) — как в железе, по одному биту. */
+  shiftOut(dataPin, clockPin, bitOrder, value) {
+    let v = Math.trunc(Number(value) || 0) & 0xff;
+    for (let i = 0; i < 8; i++) {
+      const bitOut = bitOrder === this.LSBFIRST ? (v & 1) : ((v & 0x80) ? 1 : 0);
+      this.digitalWrite(dataPin, bitOut);
+      this.digitalWrite(clockPin, 1);
+      this.digitalWrite(clockPin, 0);
+      v = bitOrder === this.LSBFIRST ? (v >> 1) : ((v << 1) & 0xff);
+    }
+  }
+  /** shiftIn(dataPin, clockPin, bitOrder) — читаем байт по фронту такта. */
+  shiftIn(dataPin, clockPin, bitOrder) {
+    let value = 0;
+    for (let i = 0; i < 8; i++) {
+      this.digitalWrite(clockPin, 1);
+      const bitIn = this.digitalRead(dataPin);
+      this.digitalWrite(clockPin, 0);
+      if (bitOrder === this.LSBFIRST) value |= bitIn << i;
+      else value = (value << 1) | (bitIn & 1);
+    }
+    return value & 0xff;
+  }
+  /** Прерывания не моделируются — вызовы молча ничего не делают. */
+  attachInterrupt() {}
+  detachInterrupt() {}
+  digitalPinToInterrupt(pin) { return pin; }
+  interrupts() {}
+  noInterrupts() {}
+  yield() {}
 
   _frame() {
     return new Promise((resolve) => requestAnimationFrame(() => { this.onFrame(); resolve(); }));
@@ -234,6 +459,25 @@ export class ArduinoRuntime {
       min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.sqrt,
       pow: Math.pow, sin: Math.sin, cos: Math.cos, tan: Math.tan,
       floor: Math.floor, ceil: Math.ceil, round: Math.round, fabs: Math.abs,
+      // препроцессор/predefined-константы Arduino
+      HEX: 16, DEC: 10, OCT: 8, BIN: 2, LSBFIRST: 0, MSBFIRST: 1, ARDUINO: 10819,
+      CHANGE: 1, RISING: 2, FALLING: 3, LED_BUILTIN: this.spec.builtinLed,
+      // строки, символы, биты и вывод битов — как в avr-libc / Arduino
+      i32: this.i32.bind(this), b8: this.b8.bind(this), chr: this.chr.bind(this),
+      str: this.str.bind(this), sizeof: this.sizeof.bind(this),
+      strlen: this.strlen.bind(this), strcpy: this.strcpy.bind(this), strncpy: this.strncpy.bind(this),
+      strcat: this.strcat.bind(this), strcmp: this.strcmp.bind(this), strncmp: this.strncmp.bind(this),
+      atoi: this.atoi.bind(this), atol: this.atol.bind(this), atof: this.atof.bind(this),
+      itoa: this.itoa.bind(this), utoa: this.utoa.bind(this), ltoa: this.ltoa.bind(this),
+      sprintf: this.sprintf.bind(this), snprintf: this.snprintf.bind(this), dtostrf: this.dtostrf.bind(this),
+      bitRead: this.bitRead.bind(this), bitWrite: this.bitWrite.bind(this),
+      bitSet: this.bitSet.bind(this), bitClear: this.bitClear.bind(this), bit: this.bit.bind(this),
+      lowByte: this.lowByte.bind(this), highByte: this.highByte.bind(this),
+      shiftOut: this.shiftOut.bind(this), shiftIn: this.shiftIn.bind(this),
+      attachInterrupt: this.attachInterrupt.bind(this), detachInterrupt: this.detachInterrupt.bind(this),
+      digitalPinToInterrupt: this.digitalPinToInterrupt.bind(this),
+      interrupts: this.interrupts.bind(this), noInterrupts: this.noInterrupts.bind(this),
+      EEPROM: this.eeprom,
     };
     // A0… — это аналоговые выводы платы в её собственном порядке
     this.spec.pins.filter((p) => p.kind === 'analog').slice(0, 8).forEach((p, i) => {

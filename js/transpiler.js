@@ -32,7 +32,6 @@ const UNSUPPORTED = {
   goto: 'goto не поддерживается',
   typedef: 'typedef не поддерживается',
   namespace: 'namespace не поддерживается',
-  enum: 'enum пока не поддерживается — используйте const int',
 };
 
 /** Классы из libraries.js: их можно объявлять как в скетче — Servo myservo; */
@@ -46,6 +45,89 @@ function initRest(dims, d) {
   return `.fill(0).map(() => new Array(${dims[d + 1]})${initRest(dims, d + 1)})`;
 }
 function mkRest(dims, d) { return initRest(dims, d); }
+
+/** Типы, к которым можно приводить: (int)x, (byte)x, (float)x … */
+const CAST_INFO = {
+  int: 'i32', int16_t: 'i32', int32_t: 'i32', long: 'i32', short: 'i32', word: 'i32',
+  uint16_t: 'i32', uint32_t: 'i32', size_t: 'i32', unsigned: 'i32', signed: 'i32',
+  byte: 'b8', uint8_t: 'b8', char: 'chr',
+  float: 'num', double: 'num',
+  bool: 'bool', boolean: 'bool',
+  String: 'str',
+};
+
+/** Размеры типов в байтах — для sizeof(int) и подобных. */
+const TYPE_BYTES = {
+  int: 2, short: 2, word: 2, unsigned: 2, uint16_t: 2, int16_t: 2,
+  long: 4, unsigned_long: 4, uint32_t: 4, int32_t: 4, float: 4, double: 4,
+  char: 1, byte: 1, uint8_t: 1, int8_t: 1, bool: 1, boolean: 1, size_t: 2,
+};
+
+/**
+ * Читает «операнд» — то, к чему применяется приведение типа:
+ * имя, число, вызов, элемент массива, поле, отрицание, скобки и хвосты [i], (…), .f.
+ * Возвращает { end, text } — индекс сразу за операндом и его текст.
+ */
+function readOperand(toks, start) {
+  let i = start;
+  const text = [];
+  const push = (t) => text.push(t.v);
+  const skip = () => { while (i < toks.length && toks[i].t === 'nl') i++; };
+  skip();
+  let unary = 0;
+  while (i < toks.length && toks[i].t === 'op' && ['-', '+', '!', '~', '++', '--'].includes(toks[i].v) && unary < 3) {
+    push(toks[i]); i++; skip(); unary++;
+  }
+  if (i >= toks.length) return { end: i, text: text.join(' ') };
+  const t0 = toks[i];
+  if (t0.t === 'op' && t0.v === '(') {
+    let depth = 0;
+    while (i < toks.length) {
+      const q = toks[i];
+      if (q.t === 'op' && q.v === '(') depth++;
+      if (q.t === 'op' && q.v === ')') { depth--; push(q); i++; if (!depth) break; continue; }
+      push(q); i++;
+    }
+  } else if (t0.t === 'id' || t0.t === 'num' || t0.t === 'str') {
+    push(t0); i++;
+  } else {
+    return { end: i, text: text.join(' ') };
+  }
+  // хвосты: [i], (…), .поле, ++/--
+  for (;;) {
+    let k = i;
+    while (k < toks.length && toks[k].t === 'nl') k++;
+    const q = toks[k];
+    if (!q || q.t !== 'op') break;
+    if (q.v === '[') {
+      let depth = 0;
+      for (; k < toks.length; k++) {
+        const r = toks[k];
+        if (r.t === 'op' && r.v === '[') depth++;
+        if (r.t === 'op' && r.v === ']') { depth--; push(r); k++; if (!depth) break; continue; }
+        push(r);
+      }
+      i = k;
+    } else if (q.v === '(') {
+      let depth = 0;
+      for (; k < toks.length; k++) {
+        const r = toks[k];
+        if (r.t === 'op' && r.v === '(') depth++;
+        if (r.t === 'op' && r.v === ')') { depth--; push(r); k++; if (!depth) break; continue; }
+        push(r);
+      }
+      i = k;
+    } else if (q.v === '.') {
+      push(q); k++;
+      while (k < toks.length && toks[k].t === 'nl') k++;
+      if (toks[k]) { push(toks[k]); k++; }
+      i = k;
+    } else if (q.v === '++' || q.v === '--') {
+      push(q); i = k + 1;
+    } else break;
+  }
+  return { end: i, text: text.join(' ') };
+}
 
 /** Склеивает токены аргументов, вставляя пробел только между словами. */
 function joinToks(list) {
@@ -123,8 +205,13 @@ export function transpile(source) {
   const out = [];
   let i = 0;
   let pendingType = false;   // ждём имя переменной после типа
+  let lastTypes = [];        // слова последнего объявления (const char …)
   let declConst = false;     // было const — не печатать let
   const braceStack = [];     // 'block' | 'arr' — чтобы закрыть литерал скобкой ]
+  const condStack = [];      // [{ active, taken }] — вложенные #if/#ifdef
+  const macros = new Set(['ARDUINO']);   // имена из #define (для #ifdef)
+  const macroFns = new Map();            // из них — с параметрами: имя → сколько аргументов
+  const enumNames = new Set();           // имена enum, чтобы не спутать с переменными
 
   // Свои функции компилируются в async, поэтому и вызовы надо ждать:
   // иначе «char k = scan();» получит промис вместо символа.
@@ -153,6 +240,23 @@ export function transpile(source) {
   const error = (line, msg) => errors.push({ line, msg });
   const warn = (line, msg) => warnings.push({ line, msg });
 
+  /** index первого перевода строки после from (чтобы «съесть» директиву целиком) */
+  const lineEndIndex = (from) => {
+    let k = from;
+    while (k < toks.length && toks[k].t !== 'nl') k++;
+    return k;
+  };
+
+  /** Условие препроцессора: defined(NAME), числа и простая арифметика. */
+  const evalCondition = (list) => {
+    let src = list.map((t) => t.v).join(' ').trim();
+    if (!src) return false;
+    src = src.replace(/defined\s*\(\s*([A-Za-z_]\w*)\s*\)/g,
+      (m, n) => (macros.has(n) || macroFns.has(n) ? '1' : '0'));
+    if (!/^[0-9+\-*/%<>=!&|() .\t]*$/.test(src)) return true;   // не разобрали — считаем истиной
+    try { return !!Function(`"use strict"; return (${src || '1'});`)(); } catch { return true; }
+  };
+
   while (i < toks.length) {
     const tk = toks[i];
 
@@ -162,28 +266,166 @@ export function transpile(source) {
     if (tk.t === 'op' && tk.v === '#') {
       const j = nextMeaningful(toks, i + 1);
       const dir = toks[j] ? toks[j].v : '';
+      const endOfLine = () => { while (i < toks.length && toks[i].t !== 'nl') i++; };
+      const restOfLine = (from) => {
+        const out = [];
+        let k = from;
+        while (k < toks.length && toks[k].t !== 'nl') { out.push(toks[k]); k++; }
+        return out;
+      };
+
+      // --- #if / #ifdef / #ifndef / #elif / #else / #endif ---
+      if (dir === 'if' || dir === 'ifdef' || dir === 'ifndef') {
+        let cond;
+        if (dir === 'ifdef' || dir === 'ifndef') {
+          const nameTok = toks[nextMeaningful(toks, j + 1)];
+          const has = !!(nameTok && macros.has(nameTok.v));
+          cond = dir === 'ifdef' ? has : !has;
+        } else {
+          cond = evalCondition(restOfLine(nextMeaningful(toks, j + 1)));
+        }
+        condStack.push({ active: cond, taken: cond });
+        i = lineEndIndex(i);
+        continue;
+      }
+      if (dir === 'elif' || dir === 'else' || dir === 'endif') {
+        const top = condStack[condStack.length - 1];
+        if (!top) {
+          warn(tk.line, `#${dir} без #if`);
+        } else if (dir === 'endif') {
+          condStack.pop();
+        } else if (dir === 'else') {
+          top.active = !top.taken;
+          top.taken = true;
+        } else {
+          const cond = !top.taken && evalCondition(restOfLine(nextMeaningful(toks, j + 1)));
+          top.active = cond;
+          if (cond) top.taken = true;
+        }
+        i = lineEndIndex(i);
+        continue;
+      }
+
+      // внутри выключенной ветки остальное просто пропускаем
+      if (condStack.some((c) => !c.active)) {
+        endOfLine();
+        continue;
+      }
+
       if (dir === 'include') {
         // #include <Servo.h> — ничего не делаем: классы из libraries.js
         // уже в области видимости, а неизвестный заголовок ловит checkIncludes()
       } else if (dir === 'define') {
-        const nameTok = toks[nextMeaningful(toks, j + 1)];
+        const nameIdx = nextMeaningful(toks, j + 1);
+        const nameTok = toks[nameIdx];
         if (nameTok) {
-          emit(`const ${nameTok.v} = `);
-          let k = nextMeaningful(toks, nextMeaningful(toks, j + 1) + 1);
-          let any = false;
-          while (k < toks.length && toks[k].t !== 'nl') {
-            emit(toks[k].t === 'str' ? toks[k].v : toks[k].v);
-            if (toks[k].t === 'id' || toks[k].t === 'op') emit(' ');
-            any = true; k++;
+          macros.add(nameTok.v);
+          const rawNext = toks[nameIdx + 1];          // без перескока через перевод строки
+          const afterName = nextMeaningful(toks, nameIdx + 1);
+          // макрос с параметрами: #define SQ(x) ((x)*(x))  →  const SQ = (x) => ((x)*(x));
+          const looksFn = rawNext && rawNext.t === 'op' && rawNext.v === '(';
+          if (looksFn) {
+            const params = [];
+            let k = nextMeaningful(toks, nameIdx + 1) + 1;   // после '('
+            let depth = 1;
+            for (; k < toks.length && toks[k].t !== 'nl'; k++) {
+              const q = toks[k];
+              if (q.t === 'op' && q.v === '(') depth++;
+              if (q.t === 'op' && q.v === ')') { depth--; if (!depth) { k++; break; } }
+              if (q.t === 'op' && q.v === ',') continue;
+              if (q.t === 'id' && TYPES.has(q.v)) continue;
+              if (q.t !== 'nl') params.push(q.v);
+            }
+            const body = restOfLine(k).map((q) => q.v).join(' ');
+            macroFns.set(nameTok.v, params.length);
+            emit(`const ${nameTok.v} = (${params.join(', ')}) => (${body || 'undefined'});\n`);
+          } else {
+            const valueToks = rawNext && rawNext.t === 'nl' ? [] : restOfLine(nameIdx + 1);
+            emit(`const ${nameTok.v} = ${valueToks.length ? valueToks.map((q) => q.v).join(' ') : 'true'};\n`);
           }
-          emit(any ? ';\n' : 'undefined;\n');
         }
-      } else if (dir !== '') {
+      } else if (dir === 'undef') {
+        const nameTok = toks[nextMeaningful(toks, j + 1)];
+        if (nameTok) { macros.delete(nameTok.v); macroFns.delete(nameTok.v); }
+      } else if (dir === 'error') {
+        const msg = restOfLine(nextMeaningful(toks, j + 1)).map((q) => q.v).join(' ');
+        error(tk.line, `#error ${msg}`.trim());
+      } else if (dir === 'warning') {
+        warn(tk.line, restOfLine(nextMeaningful(toks, j + 1)).map((q) => q.v).join(' '));
+      } else if (dir !== 'pragma' && dir !== '') {
         warn(tk.line, `Директива #${dir} пропущена`);
       }
-      // проматываем до конца строки
-      while (i < toks.length && toks[i].t !== 'nl') i++;
+      endOfLine();
       continue;
+    }
+
+    // всё, что попало в выключенную ветку #if, не компилируем
+    if (condStack.some((c) => !c.active)) {
+      if (tk.t === 'nl') emit('\n');
+      i++;
+      continue;
+    }
+
+    // ---------- enum { A, B = 5, C }; ----------
+    if (tk.t === 'id' && tk.v === 'enum') {
+      let k = nextMeaningful(toks, i + 1);
+      let enumName = null;
+      if (toks[k] && toks[k].t === 'id' && toks[k].v !== '{') { enumName = toks[k].v; k = nextMeaningful(toks, k + 1); }
+      if (!toks[k] || toks[k].v !== '{') {
+        error(tk.line, 'enum без списка значений');
+        i++;
+        continue;
+      }
+      const entries = [];
+      let next = 0;
+      k = nextMeaningful(toks, k + 1);
+      while (k < toks.length && !(toks[k].t === 'op' && toks[k].v === '}')) {
+        if (toks[k].t === 'id') {
+          const nm = toks[k].v;
+          let exprTxt = null;
+          let value = next;
+          let q = nextMeaningful(toks, k + 1);
+          if (toks[q] && toks[q].t === 'op' && toks[q].v === '=') {
+            const parts = [];
+            q = nextMeaningful(toks, q + 1);
+            while (q < toks.length && !(toks[q].t === 'op' && (toks[q].v === ',' || toks[q].v === '}'))) {
+              parts.push(toks[q].v);
+              q = nextMeaningful(toks, q + 1);
+            }
+            exprTxt = parts.join(' ');
+            const num = Number(exprTxt);
+            if (Number.isFinite(num)) { value = num; next = num + 1; } else { value = null; }
+          } else {
+            next += 1;
+          }
+          entries.push({ name: nm, value, exprTxt });
+          enumNames.add(nm);
+          k = nextMeaningful(toks, q);
+        } else {
+          k = nextMeaningful(toks, k + 1);
+        }
+      }
+      for (const e of entries) {
+        emit(`const ${e.name} = ${e.value !== null ? e.value : `(${e.exprTxt})`};`);
+      }
+      if (enumName) {
+        const obj = entries.map((e) => `${e.name}: ${e.value !== null ? e.value : `(${e.exprTxt})`}`).join(', ');
+        emit(`const ${enumName} = { ${obj} };`);
+      }
+      emit('\n');
+      // проматываем до '}' и, если есть, ';'
+      let m = k;
+      while (m < toks.length && !(toks[m].t === 'op' && toks[m].v === '}')) m++;
+      m = nextMeaningful(toks, m + 1);
+      if (toks[m] && toks[m].t === 'op' && toks[m].v === ';') m++;
+      i = m;
+      continue;
+    }
+
+    // ---------- String(x) / String(x, HEX) ----------
+    if (tk.t === 'id' && tk.v === 'String') {
+      const nx = toks[nextMeaningful(toks, i + 1)];
+      if (nx && nx.t === 'op' && nx.v === '(') { emit('rt.str'); i++; continue; }
     }
 
     // ---------- неподдерживаемое ----------
@@ -221,12 +463,18 @@ export function transpile(source) {
 
     // ---------- типы и объявления ----------
     if (tk.t === 'id' && TYPES.has(tk.v)) {
+      lastTypes.push(tk.v);
       if (tk.v === 'const') { emit('const '); declConst = true; pendingType = true; i++; continue; }
       pendingType = true;
       i++;
-      // мусор после типа: указатели/ссылки
+      // указатели: char*/const char* — это просто строка, остальное не умеем
       let k = nextMeaningful(toks, i);
       if (toks[k] && toks[k].t === 'op' && (toks[k].v === '*' || toks[k].v === '&')) {
+        const isChar = tk.v === 'char' || lastTypes.includes('char');
+        if (isChar && toks[k].v === '*') {
+          i = k + 1;                       // пропускаем звёздочку, дальше обычное имя
+          continue;
+        }
         error(tk.line, 'указатели и ссылки не поддерживаются');
       }
       continue;
@@ -310,6 +558,58 @@ export function transpile(source) {
       continue;
     }
 
+    // ---------- yield() — отдать управление (у нас это пустой вызов) ----------
+    if (tk.t === 'id' && tk.v === 'yield') {
+      const p0 = prevMeaningful(toks, i);
+      const isMember = p0 >= 0 && toks[p0].t === 'op' && toks[p0].v === '.';
+      const nx = toks[nextMeaningful(toks, i + 1)];
+      if (!isMember && nx && nx.t === 'op' && nx.v === '(') { emit('rt.yield'); i++; continue; }
+    }
+
+    // ---------- макрос с параметрами: следим за числом аргументов ----------
+    if (tk.t === 'id' && macroFns.has(tk.v) && tk.v !== 'yield') {
+      const po = nextMeaningful(toks, i + 1);
+      if (toks[po] && toks[po].t === 'op' && toks[po].v === '(') {
+        let depth = 0, n = 1, empty = true;
+        for (let k = po; k < toks.length; k++) {
+          const t = toks[k];
+          if (t.t === 'op' && (t.v === '(' || t.v === '[' || t.v === '{')) { depth++; continue; }
+          if (t.t === 'op' && (t.v === ')' || t.v === ']' || t.v === '}')) { depth--; if (!depth) break; continue; }
+          if (t.t === 'op' && t.v === ',' && depth === 1) { n++; continue; }
+          if (t.t !== 'nl') empty = false;
+        }
+        const need = macroFns.get(tk.v);
+        const got = empty ? 0 : n;
+        if (got !== need) error(tk.line, `Макрос ${tk.v} ждёт ${need} арг., а получил ${got}`);
+      }
+    }
+
+    // ---------- for (int x : массив) → for (let x of массив) ----------
+    if (tk.t === 'id' && tk.v === 'for') {
+      const po = nextMeaningful(toks, i + 1);
+      if (toks[po] && toks[po].t === 'op' && toks[po].v === '(') {
+        let depth = 0, colon = -1, semi = false;
+        for (let k = po; k < toks.length; k++) {
+          const t = toks[k];
+          if (t.t === 'op' && (t.v === '(' || t.v === '[' || t.v === '{')) { depth++; continue; }
+          if (t.t === 'op' && (t.v === ')' || t.v === ']' || t.v === '}')) { depth--; if (!depth) break; continue; }
+          if (depth !== 1) continue;
+          if (t.t === 'op' && t.v === ';') { semi = true; break; }
+          if (t.t === 'op' && t.v === ':') colon = k;
+        }
+        if (colon > 0 && !semi) {
+          const ids = [];
+          for (let k = po + 1; k < colon; k++) if (toks[k].t === 'id') ids.push(toks[k].v);
+          const name = ids[ids.length - 1];
+          if (name) {
+            emit(`for (let ${name} of `);
+            i = colon + 1;
+            continue;
+          }
+        }
+      }
+    }
+
     // ---------- delay → await ----------
     if (tk.t === 'id' && (tk.v === 'delay' || tk.v === 'delayMicroseconds')) {
       const p = prevMeaningful(toks, i);
@@ -344,6 +644,94 @@ export function transpile(source) {
 
     if (tk.t === 'str') { emit(tk.v); i++; continue; }
     if (tk.t === 'num') { emit(tk.v); i++; continue; }
+
+    // ---------- sizeof(x) / sizeof(int) ----------
+    if (tk.t === 'id' && tk.v === 'sizeof') {
+      const open = nextMeaningful(toks, i + 1);
+      if (toks[open] && toks[open].t === 'op' && toks[open].v === '(') {
+        const first = nextMeaningful(toks, open + 1);
+        let q = first;
+        let typeName = '';
+        while (toks[q] && toks[q].t === 'id' && TYPES.has(toks[q].v)) {
+          typeName += (typeName ? '_' : '') + toks[q].v;
+          q = nextMeaningful(toks, q + 1);
+        }
+        if (typeName && toks[q] && toks[q].t === 'op' && toks[q].v === ')') {
+          const bytes = TYPE_BYTES[typeName] ?? TYPE_BYTES[typeName.replace(/^unsigned_/, 'unsigned_')] ?? 4;
+          emit(String(bytes));
+          i = nextMeaningful(toks, q + 1);
+          continue;
+        }
+        // sizeof(выражение) — считаем длину массива в элементах
+        const operand = readOperand(toks, open + 1);
+        let endPos = operand.end;
+        const closePos = nextMeaningful(toks, endPos);
+        if (toks[closePos] && toks[closePos].t === 'op' && toks[closePos].v === ')') endPos = nextMeaningful(toks, closePos + 1);
+        emit(`rt.sizeof(${operand.text})`);
+        i = endPos;
+        continue;
+      }
+    }
+
+    // ---------- приведение типа: (int)x, (byte)x, (float)x ----------
+    if (tk.t === 'op' && tk.v === '(') {
+      const typeIdx = nextMeaningful(toks, i + 1);
+      const t1 = toks[typeIdx];
+      if (t1 && t1.t === 'id') {
+        let k = typeIdx;
+        let words = [];
+        while (toks[k] && toks[k].t === 'id' && TYPES.has(toks[k].v)) {
+          words.push(toks[k].v);
+          k = nextMeaningful(toks, k + 1);
+        }
+        const closeIdx = k;
+        const key = words.join('_').replace(/^(const|static|volatile|auto|register|inline)_?/, '');
+        const info = CAST_INFO[key] || CAST_INFO[words[words.length - 1]];
+        const closeOk = toks[closeIdx] && toks[closeIdx].t === 'op' && toks[closeIdx].v === ')';
+        if (info && closeOk && words.length) {
+          const afterCast = nextMeaningful(toks, closeIdx + 1);
+          const nt = toks[afterCast];
+          const operandStarts = nt && (nt.t === 'id' || nt.t === 'num' || nt.t === 'str'
+            || (nt.t === 'op' && ['(', '-', '+', '!', '~'].includes(nt.v)));
+          if (operandStarts) {
+            const operand = readOperand(toks, closeIdx + 1);
+            const v = operand.text;
+            const wrap = {
+              i32: `rt.i32(${v})`,
+              b8: `rt.b8(${v})`,
+              chr: `rt.chr(${v})`,
+              num: `Number(${v})`,
+              bool: `!!(${v})`,
+              str: `rt.str(${v})`,
+            }[info];
+            emit(wrap);
+            i = operand.end;
+            continue;
+          }
+        }
+      }
+    }
+
+    // ---------- F("текст") — строка во флеш-памяти, для нас просто строка ----------
+    if (tk.t === 'id' && tk.v === 'F') {
+      const nx = toks[nextMeaningful(toks, i + 1)];
+      if (nx && nx.t === 'op' && nx.v === '(') { i++; continue; }
+    }
+
+    // ---------- .length() — в Arduino это метод, в JS — свойство ----------
+    if (tk.t === 'op' && tk.v === '.') {
+      const nameIdx = nextMeaningful(toks, i + 1);
+      const nm = toks[nameIdx];
+      if (nm && nm.t === 'id' && nm.v === 'length') {
+        const p1 = nextMeaningful(toks, nameIdx + 1);
+        const p2 = p1 < toks.length ? nextMeaningful(toks, p1 + 1) : -1;
+        if (toks[p1] && toks[p1].v === '(' && toks[p2] && toks[p2].v === ')') {
+          emit('.length');
+          i = nextMeaningful(toks, p2 + 1);
+          continue;
+        }
+      }
+    }
 
     // ---------- вызов своей функции ----------
     if (tk.t === 'id' && userFns.has(tk.v)) {

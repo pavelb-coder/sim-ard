@@ -1138,6 +1138,42 @@ void loop() {
 }
 `
   },
+  {
+    id: 'rpi5-led',
+    name: 'Raspberry Pi 5: светодиод на GPIO14',
+    autorun: true,
+    schematic: {
+      parts: [
+        board('rpi5', 0, 0, 'b1'),
+        { id: 'r1', type: 'resistor', x: -10, y: 190, props: { value: 220 } },
+        { id: 'd1', type: 'led', x: 130, y: 190, props: { color: '#3fd07a' } },
+      ],
+      wires: [
+        wire('b1', 'GPIO14', 'r1', '1'),
+        wire('r1', '2', 'd1', 'A'),
+        wire('d1', 'K', 'b1', 'GND'),
+      ],
+    },
+    code: `# Raspberry Pi 5: мигаем светодиодом на GPIO14 — это 8-й контакт гребёнки (TXD).
+# Логика у Pi 3,3 В, с вывода можно взять не больше 16 мА, поэтому резистор 220 Ом.
+# Всё как на настоящей плате: MicroPython, модуль machine, time.sleep.
+
+from machine import Pin
+import time
+
+led = Pin(14, Pin.OUT)
+count = 0
+
+while True:
+    led.value(1)
+    time.sleep(0.4)
+    led.value(0)
+    time.sleep(0.4)
+    count += 1
+    if count % 5 == 0:
+        print("миганий:", count)
+`,
+  },
 ];
 
 /** Стартовый скетч для платы, добавленной из палитры. */
@@ -1146,6 +1182,22 @@ export function defaultCodeFor(type, lang) {
     return lang === 'cpp'
       ? `// Pico на C++: светодиод на GP25.\n\nvoid setup() {\n  pinMode(LED_BUILTIN, OUTPUT);\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  digitalWrite(LED_BUILTIN, HIGH);\n  delay(500);\n  digitalWrite(LED_BUILTIN, LOW);\n  delay(500);\n}\n`
       : `# Pico на MicroPython: светодиод на GP25.\n\nfrom machine import Pin\nimport time\n\nled = Pin(25, Pin.OUT)\n\nwhile True:\n    led.toggle()\n    time.sleep(0.5)\n`;
+  }
+  if (type === 'rpi5') {
+    return `# Raspberry Pi 5: светодиод на GPIO17 (физический вывод 11).
+# У Pi логика 3,3 В, а на GPIO можно вешать до 16 мА — резистор обязателен.
+
+from machine import Pin
+import time
+
+led = Pin(14, Pin.OUT)
+
+while True:
+    led.value(1)
+    time.sleep(0.5)
+    led.value(0)
+    time.sleep(0.5)
+`;
   }
   if (type === 'esp32') {
     return `// ESP32: встроенный светодиод на GPIO2, логика 3,3 В.\n\nvoid setup() {\n  pinMode(2, OUTPUT);\n  Serial.begin(115200);\n  Serial.println("ESP32 запущен");\n}\n\nvoid loop() {\n  digitalWrite(2, HIGH);\n  delay(500);\n  digitalWrite(2, LOW);\n  delay(500);\n}\n`;

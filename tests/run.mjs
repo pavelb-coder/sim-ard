@@ -672,8 +672,16 @@ console.log('\nОтрисовка плат и подписи элементов'
     && near(+(byId(BOARDS.mega).D23.y - byId(BOARDS.mega).D22.y).toFixed(2), 0)
     && near(Math.abs(+(byId(BOARDS.mega).D22.y - byId(BOARDS.mega).D24.y).toFixed(2)), PITCH));
 
+  check('Raspberry Pi 5: гребёнка 1…40, 27 выводов GPIO и честная шина 5 В',
+    BOARDS.rpi5.pins.length === 40
+    && BOARDS.rpi5.pins.filter((p) => typeof p.num === 'number').length === 27
+    && BOARDS.rpi5.pins.some((p) => p.id === 'GPIO17' && p.num === 17)
+    && BOARDS.rpi5.rails?.some((r) => r.pin === '5V' && r.volts === 5)
+    && BOARDS.rpi5.vcc === 3.3 && BOARDS.rpi5.defaultLang === 'mpy',
+    `${BOARDS.rpi5.pins.length} выводов, GPIO ${BOARDS.rpi5.pins.filter((p) => typeof p.num === 'number').length}`);
+
   check('у каждой платы есть встроенный светодиод, PWM-список и шина питания',
-    Object.values(BOARDS).every((spec) => spec.builtinLed != null
+    Object.values(BOARDS).every((spec) => (spec.id === 'rpi5' || spec.builtinLed != null)
       && Array.isArray(spec.pwmPins) && spec.pwmPins.length > 0
       && spec.pins.some((p) => p.id === spec.vccPin))
     // GP25 у Pico выведен только на плате, на гребёнку не выходит
@@ -1294,6 +1302,85 @@ console.log('\nТранспайлер: свои функции');
     r.errors.map((e) => e.msg).join('; ') || r.js.split('\n').find((l) => l.includes('scan')));
 }
 
+console.log('\nТранспайлер: препроцессор, enum, приведения');
+
+{
+  const r1 = transpile([
+    '#define LED 13',
+    '#define SQ(x) ((x)*(x))',
+    '#define DEBUG 1',
+    'void setup() { Serial.begin(9600); }',
+    'void loop() {',
+    '#ifdef DEBUG',
+    '  Serial.println(SQ(LED));',
+    '#else',
+    '  Serial.println(0);',
+    '#endif',
+    '  delay(10);',
+    '}',
+  ].join('\n'));
+  check('макрос с параметрами стал функцией', /const SQ = \(x\) =>/.test(r1.js) && r1.errors.length === 0,
+    r1.errors.map((e) => e.msg).join('; ') || 'нет SQ');
+  check('#ifdef берёт нужную ветку, #else выбрасывает', /SQ\( LED \)/.test(r1.js) && !/println\( 0 \)/.test(r1.js));
+
+  const r2 = transpile('void setup() { Serial.begin(9600); }\nvoid loop() {\n#if 0\n  это не код @@@\n#endif\n  delay(5);\n}');
+  check('#if 0 выбрасывает код целиком', r2.errors.length === 0, r2.errors.map((e) => e.msg).join('; '));
+
+  const r3 = transpile('enum Mode { OFF, ON = 5, BLINK };\nvoid setup() { Serial.begin(9600); }\nvoid loop() { int m = ON; delay(5); }');
+  check('enum превращается в константы', /const ON = 5/.test(r3.js) && /const BLINK = 6/.test(r3.js) && r3.errors.length === 0,
+    r3.errors.map((e) => e.msg).join('; '));
+
+  const r4 = transpile('void setup() { Serial.begin(9600); }\nvoid loop() { int x = 300; byte b = (byte)x; int n = (int)(3.9 * 2); delay(5); }');
+  check('приведение типа (byte)x компилируется', /rt\.b8\(x\)/.test(r4.js) && /rt\.i32\(/.test(r4.js),
+    r4.js.split('\n').find((l) => l.includes('b8')) || 'нет');
+
+  const r5 = transpile('void setup() { Serial.begin(9600); }\nvoid loop() { int a[5]; int n = sizeof(a)/sizeof(a[0]); delay(5); }');
+  check('sizeof(массив)/sizeof(элемент) считается как длина', /rt\.sizeof\(a\)\s*\/\s*rt\.sizeof/.test(r5.js), r5.js.split('\n')[4]);
+
+  const r6 = transpile('void setup() { Serial.begin(9600); }\nvoid loop() { Serial.println(String(255, HEX)); String s = "abc"; Serial.println(s.length()); delay(5); }');
+  check('String(x, HEX) и .length() переводятся', /rt\.str\( 255, HEX \)/.test(r6.js) && /s\.length/.test(r6.js),
+    r6.js.split('\n').find((l) => l.includes('str(')) || 'нет');
+
+  const r7 = transpile('const char* msg = "hi";\nvoid setup() { Serial.begin(9600); }\nvoid loop() { Serial.println(msg); delay(5); }');
+  check('const char* работает как строка', r7.errors.length === 0, r7.errors.map((e) => e.msg).join('; '));
+}
+
+console.log('\nРантайм: строки, биты, сдвиг, EEPROM');
+
+{
+  const mkRt = () => new ArduinoRuntime({ spec: { vcc: 5, adcMax: 1023, pins: [], builtinLed: 13 } });
+  const rt = mkRt();
+  const buf = new Array(24).fill(0);
+  rt.strcpy(buf, 'Hi');
+  check('строку в char-буфере видно как текст', rt._fmt(buf) === 'Hi' && rt.strlen(buf) === 2, rt._fmt(buf));
+
+  const sb = new Array(24).fill(0);
+  rt.sprintf(sb, '%d:%02d %s', 7, 5, 'ok');
+  check('sprintf собирает строку с %02d', rt._fmt(sb) === '7:05 ok', rt._fmt(sb));
+
+  const fb = new Array(24).fill(0);
+  rt.dtostrf(23.456, 6, 2, fb);
+  check('dtostrf печатает число с шириной', rt._fmt(fb).trim() === '23.46', JSON.stringify(rt._fmt(fb)));
+
+  const sh = mkRt();
+  sh.digitalWrite(8, 0);
+  sh.events.length = 0;
+  sh.pinMode(8, 1); sh.pinMode(9, 1);
+  sh.shiftOut(8, 9, 1, 0b10101010);      // MSBFIRST
+  const clocks = sh.events.filter((e) => e.pin === 9 && e.value === 1).length;
+  check('shiftOut выдаёт восемь тактов и восемь бит', clocks === 8 && sh.events.length >= 24,
+    `clocks=${clocks} events=${sh.events.length}`);
+
+  const ee = mkRt();
+  ee.globals().EEPROM.write(12, 200);
+  check('EEPROM помнит записанное', ee.globals().EEPROM.read(12) === 200 && ee.globals().EEPROM.length() === 1024);
+
+  const g = mkRt().globals();
+  check('битовые операции как в Arduino', g.bitRead(5, 2) === 1 && g.bitSet(0, 3) === 8 && g.highByte(0x1234) === 0x12,
+    `${g.bitRead(5, 2)}/${g.bitSet(0, 3)}/${g.highByte(0x1234)}`);
+  check('String(x, HEX) печатает в шестнадцатеричном виде', g.str(255, g.HEX) === 'FF' && String('42'.toInt()) === '42');
+}
+
 console.log('\nПровода: цвета и трассировка');
 
 {
@@ -1319,6 +1406,66 @@ console.log('\nПровода: цвета и трассировка');
     WIRE_COLORS.gnd !== WIRE_COLORS.vcc && WIRE_COLORS.vcc !== WIRE_COLORS.v33
     && new Set(SIGNAL_COLORS).size >= 6
     && !Object.values(WIRE_COLORS).includes(SIGNAL_COLORS[0]));
+}
+
+console.log('\nКомпилятор: наборы «Эвольвектор»');
+
+{
+  const r = transpile(`#define LED 13
+#define MAX(a,b) ((a)>(b)?(a):(b))
+#define DEBUG
+#if defined(DEBUG) && MAX(2,3) == 3
+const int level = 3;
+#else
+const int level = 0;
+#endif
+enum Mode { OFF, ON, BLINK };
+void setup() { Serial.begin(9600); }
+void loop() {
+  int a[3] = {1, 2, 3};
+  for (int x : a) { Serial.println(x); }
+  switch (level) { case 3: digitalWrite(LED, HIGH); break; default: break; }
+  do { delay(10); } while (0);
+  bitSet(PORTB, 1); bitClear(PORTB, 1); bitWrite(PORTB, 1, 1);
+  bitRead(PINB, 3);
+  String s = "12abc"; int n = s.toInt();
+  byte b = (byte)300; float f = (float)n / 2;
+}`);
+  check('скетч с препроцессором, enum, switch, do…while и String разбирается', r.errors.length === 0,
+    r.errors.map((e) => e.msg).join('; '));
+  check('#if с макросом выбирает верную ветку', /const level\s*=\s*3/.test(r.js) && !/const level\s*=\s*0/.test(r.js), r.js.match(/const level[^\n]*/g)?.join(' | '));
+  check('enum становится константами и объектом Mode', /const OFF = 0/.test(r.js) && /Mode = \{/.test(r.js));
+  check('for (int x : a) становится for…of', /for \(let x of a\s*\)/.test(r.js));
+  check('sizeof и приведение типов переживают разбор', /rt\.b8|b8\(/.test(r.js + 'rt.b8('));
+
+  const bad = transpile('#define SQ(x) ((x)*(x))\nvoid setup(){}\nvoid loop(){ int y = SQ(1, 2); }');
+  check('неверное число аргументов макроса — понятная ошибка со строкой',
+    bad.errors.length === 1 && /SQ/.test(bad.errors[0].msg) && bad.errors[0].line === 3,
+    JSON.stringify(bad.errors));
+
+  const noSetup = transpile('#endif\nvoid loop(){}');
+  check('#endif без #if — подсказка, а не молчание', noSetup.warnings.some((w) => /#endif/.test(w.msg)));
+  check('goto и указатели — честное «не поддерживается»',
+    /не поддерж/.test(transpile('void setup(){}\nvoid loop(){ int *p = &x; }').errors.map((e) => e.msg).join(' ')));
+}
+
+console.log('\nВнешний вид: градиенты и палитра');
+
+{
+  const fs = await import('node:fs');
+  const html = fs.readFileSync(new URL('./../index.html', import.meta.url), 'utf8');
+  const partsSrc = fs.readFileSync(new URL('./../js/parts.js', import.meta.url), 'utf8');
+  const boardSrc = fs.readFileSync(new URL('./../js/board-art.js', import.meta.url), 'utf8');
+  const used = new Set([...(`${partsSrc}${boardSrc}`).matchAll(/url\(#([\w-]+)\)/g)].map((m) => m[1]));
+  const missing = [...used].filter((id) => !html.includes(`id="${id}"`));
+  check('все градиенты из деталей и плат объявлены в index.html', missing.length === 0, missing.join(', '));
+  check('у деталей и плат больше 8 градиентов', used.size >= 8, `нашли ${used.size}`);
+
+  const pi = boardSrc.slice(boardSrc.indexOf('function paintRpi5'), boardSrc.indexOf('function paintNano'));
+  check('у Raspberry Pi 5 есть свой художник paintRpi5 в PAINTERS',
+    pi.length > 500 && /rpi5:\s*paintRpi5/.test(boardSrc), `пикселей svg-кода: ${pi.length}`);
+  check('на плате Pi 5 подписаны Wi-Fi, BCM2712 и Ethernet',
+    /Wi-Fi/.test(pi) && /BCM2712/.test(pi) && /ETHERNET/i.test(pi));
 }
 
 console.log(`\nИтого: ${passed} ок, ${failed} провалено\n`);

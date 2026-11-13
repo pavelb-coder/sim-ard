@@ -276,6 +276,97 @@ function paintPico(spec) {
 `;
 }
 
+// -------------------------------------------------------- Raspberry Pi 5 ----
+function paintRpi5(spec) {
+  const { w, h } = spec;
+  const X = (mm) => mm * PX_PER_MM - w / 2;
+  const Y = (mm) => mm * PX_PER_MM - h / 2;
+  const M = PX_PER_MM;
+  const box = (x, y, bw, bh, fill, stroke = 'rgba(0,0,0,.45)', rx = 1.6) => `
+    <rect x="${X(x)}" y="${Y(y)}" width="${bw * M}" height="${bh * M}" rx="${rx}"
+          fill="${fill}" stroke="${stroke}" stroke-width=".8"/>`;
+
+  return `
+    ${pcbBody(w, h, '#12583a', '#072a1b', {
+      radius: 6,
+      holes: [
+        [X(6), Y(6), 4.2], [X(79), Y(6), 4.2], [X(6), Y(50), 4.2], [X(79), Y(50), 4.2],
+      ],
+    })}
+
+    <!-- дорожки: несколько линий текстолита, чтобы плата не выглядела пустой -->
+    <g stroke="rgba(190,255,210,.10)" stroke-width="1.1" fill="none">
+      <path d="M ${X(8)} ${Y(14)} H ${X(26)} V ${Y(30)} H ${X(40)}"/>
+      <path d="M ${X(8)} ${Y(40)} H ${X(24)} V ${Y(46)}"/>
+      <path d="M ${X(60)} ${Y(10)} V ${Y(26)} H ${X(72)}"/>
+      <path d="M ${X(46)} ${Y(38)} H ${X(70)} V ${Y(24)}"/>
+    </g>
+
+    <!-- гребёнка 2×20: нечётные сверху, чётные снизу -->
+    ${header(spec.pins, { dir: 'up', w })}
+    ${header(spec.pins, { dir: 'down', w })}
+
+    <!-- экранированный модуль Wi-Fi/BT -->
+    <rect x="${X(7)}" y="${Y(9)}" width="${27 * M}" height="${19 * M}" rx="1.4"
+          fill="url(#sim-metal-v)" stroke="#7d8790" stroke-width=".9"/>
+    <rect x="${X(8.4)}" y="${Y(10.4)}" width="${24 * M}" height="${16 * M}" rx="1"
+          fill="none" stroke="rgba(255,255,255,.35)" stroke-width=".7"/>
+    ${silk('Wi-Fi · BT', X(20.5), Y(20), { size: 4.4, fill: '#33414b', weight: 600 })}
+
+    <!-- BCM2712 и память -->
+    ${chip(X(40), Y(10), 44, 34, 'BCM2712', 'Raspberry Pi 5', { legs: 10, silkSize: 5.6 })}
+    ${chip(X(58), Y(12), 26, 16, 'LPDDR4X', '', { legs: 8, silkSize: 4 })}
+    ${chip(X(58), Y(26), 22, 14, 'RP1', 'I/O', { legs: 8, silkSize: 4.4 })}
+
+    <!-- разъёмы по нижнему краю: Ethernet, USB 3, USB 2 -->
+    <rect x="${X(58)}" y="${Y(43)}" width="${23 * M}" height="${12 * M}" rx="1.2"
+          fill="url(#sim-metal-v)" stroke="#6f7a83" stroke-width=".9"/>
+    <rect x="${X(59.6)}" y="${Y(44.4)}" width="${19.8 * M}" height="${9 * M}" rx=".8" fill="#1b2127"/>
+    ${[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `<rect x="${X(61) + i * 2.4 * M}" y="${Y(45.6)}" width="${1.4 * M}" height="${6.4 * M}" rx=".3" fill="#b7a878" opacity=".85"/>`).join('')}
+    ${silk('ETHERNET', X(69.5), Y(42), { size: 3.6, fill: '#e8f2f4', opacity: 0.85 })}
+
+    ${box(33, 43, 22, 11, 'url(#sim-metal-v)', '#6f7a83')}
+    ${box(34.4, 44.2, 9.4, 8.6, '#1d64c8', 'rgba(0,0,0,.5)', 0.8)}
+    ${box(34.4, 44.2, 9.4, 4.2, '#2b7ae0', 'none', 0.8)}
+    ${box(45.2, 44.2, 8.4, 8.6, '#20262c', 'rgba(0,0,0,.5)', 0.8)}
+    ${silk('USB 3', X(39), Y(42.2), { size: 3.6, fill: '#e8f2f4', opacity: 0.85 })}
+
+    <!-- левый торец: USB-C питания и два micro-HDMI -->
+    <rect x="${X(0.6)}" y="${Y(30)}" width="${11 * M}" height="${7 * M}" rx="${3 * M}"
+          fill="url(#sim-metal-v)" stroke="#6f7a83" stroke-width=".9"/>
+    <rect x="${X(1.6)}" y="${Y(31.2)}" width="${7.4 * M}" height="${4.6 * M}" rx="${1.6 * M}" fill="#15191d"/>
+    ${silk('USB-C 5V', X(6), Y(39.6), { size: 3.4, fill: '#e8f2f4', opacity: 0.85 })}
+
+    ${[16, 23.4].map((y) => `<rect x="${X(0.6)}" y="${Y(y)}" width="${9 * M}" height="${5 * M}" rx="1.4"
+        fill="url(#sim-metal-v)" stroke="#6f7a83" stroke-width=".9"/>
+      <rect x="${X(1.6)}" y="${Y(y + 0.9)}" width="${6 * M}" height="${3.2 * M}" rx=".8" fill="#14181c"/>`).join('')}
+    ${silk('HDMI0', X(5), Y(14.4), { size: 3.2, fill: '#e8f2f4', opacity: 0.8 })}
+    ${silk('HDMI1', X(5), Y(21.8), { size: 3.2, fill: '#e8f2f4', opacity: 0.8 })}
+
+    <!-- кнопка питания, разъём вентилятора, PoE-контакты -->
+    ${tactile(X(46), Y(50), 11, 'PWR')}
+    <rect x="${X(64)}" y="${Y(20)}" width="${7 * M}" height="${4 * M}" rx=".8" fill="#e9e4d8" stroke="#8d8776" stroke-width=".7"/>
+    ${[0, 1].map((i) => `<rect x="${X(65.2) + i * 2.6 * M}" y="${Y(21)}" width="${1.2 * M}" height="${2 * M}" fill="#b9b2a0"/>`).join('')}
+    ${silk('FAN', X(67.5), Y(27), { size: 3.4, fill: '#e8f2f4', opacity: 0.8 })}
+    ${[0, 1, 2, 3].map((i) => `<circle cx="${X(66 + i * 2.54)}" cy="${Y(14)}" r="2.2" fill="#0a1014" stroke="#d4af37" stroke-width=".9"/>`).join('')}
+    ${silk('PoE+', X(70), Y(19), { size: 3.4, fill: '#e8f2f4', opacity: 0.8 })}
+
+    <!-- логотип и модель -->
+    ${silk('Raspberry Pi 5', X(20), Y(38), { size: 7.4, weight: 700, fill: '#eef8f4', spacing: 0.3 })}
+    ${silk('МОДЕЛЬ B · 8 ГБ', X(20), Y(43.6), { size: 4, fill: '#cfe9dc', opacity: 0.85 })}
+
+    <!-- индикатор питания -->
+    <g class="led-on">
+      <circle cx="${X(12)}" cy="${Y(46)}" r="3" fill="url(#sim-lens-red)"/>
+      <circle cx="${X(12)}" cy="${Y(46)}" r="3" fill="#ff5b4a" opacity=".55"/>
+      <circle class="builtin-glow" cx="${X(12)}" cy="${Y(46)}" r="5.6" fill="#ff6a58" opacity="0"/>
+    </g>
+    ${silk('PWR', X(12), Y(52.4), { size: 3.2, fill: '#e8f2f4', opacity: 0.7 })}
+
+    <!-- шелкография -->
+`;
+}
+
 // -------------------------------------------------------------- заглушка ----
 function paintGeneric(spec) {
   const { w, h } = spec;
@@ -499,7 +590,7 @@ function paintMega(spec) {
 }
 
 const PAINTERS = {
-  uno: paintUno, esp32: paintEsp32, pico: paintPico,
+  uno: paintUno, esp32: paintEsp32, pico: paintPico, rpi5: paintRpi5,
   nano: paintNano, promini: paintProMini, leonardo: paintLeonardo, mega: paintMega,
 };
 

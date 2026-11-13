@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Галерея деталей</title>
+<style>
+  body { background:#0d1319; color:#cfe3f2; font:13px ui-sans-serif,system-ui,sans-serif; margin:0; padding:14px }
+  h2 { font:600 13px ui-sans-serif; color:#7fa8c4; margin:16px 0 6px }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start }
+  .cell { background:#111a23; border:1px solid #1e2c38; border-radius:8px; padding:8px }
+  svg { display:block; overflow:visible }
+</style>
+<svg width="0" height="0" style="position:absolute">
+  <defs id="defs"></defs>
+</svg>
+<div id="app"></div>
+<script type="module">
+import { PARTS } from '../js/parts.js';
+import { renderBoardArt } from '../js/board-art.js';
+import { BOARDS } from '../js/boards.js';
+
+// забираем <defs> прямо из index.html, чтобы галерея была как настоящая схема
+const src = await fetch('../index.html').then((r) => r.text());
+const defs = /<defs>([\s\S]*?)<\/defs>/.exec(src)[1];
+document.getElementById('defs').innerHTML = defs;
+
+const groups = [
+  ['Платы', ['rpi5']],
+  ['Компоненты', ['led', 'resistor', 'electrolytic', 'diode', 'npn', 'pnp', 'tip120', 'mosfet',
+    'ledBicolor', 'ledBar', 'traffic', 'button', 'pot', 'toggle', 'rgbled']],
+  ['Модули', ['l298n', 'dcmotor', 'keypad', 'sr595', 'sr165', 'buzzer', 'servo', 'lcd1602', 'oled',
+    'seg7', 'relay', 'joystick', 'stepper28byj', 'dht11', 'hcsr04', 'pir', 'ldr']],
+  ['Питание', ['battery9', 'batteryAA', 'psu']],
+  ['Приборы', ['scope', 'multimeter', 'logicprobe']],
+];
+let n = 0;
+for (const [title, types] of groups) {
+  const h = document.createElement('h2'); h.textContent = title; document.getElementById('app').appendChild(h);
+  const row = document.createElement('div'); row.className = 'row';
+  for (const t of types) {
+    if (!PARTS[t]) continue;
+    n++;
+    const cell = document.createElement('div'); cell.className = 'cell';
+    const comp = { id: `p${n}`, ref: `X${n}`, type: t, x: 0, y: 0, props: {}, __def: PARTS[t] };
+    const def = PARTS[t];
+    const pad = 46;
+    const w = (def.w || 100) + pad * 2;
+    const h2 = (def.h || 100) + pad * 2;
+    cell.innerHTML = `<svg width="${w}" height="${h2}" viewBox="${-w / 2} ${-h2 / 2} ${w} ${h2}">${def.render(comp)}</svg>`;
+    row.appendChild(cell);
+  }
+  document.getElementById('app').appendChild(row);
+}
+window.__ready = true;
+</script>

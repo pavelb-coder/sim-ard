@@ -25,6 +25,12 @@ export const INCLUDES = new Map([
   ['stepper.h', ['Stepper']],
   ['math.h', []],
   ['string.h', []],
+  ['stdlib.h', []],
+  ['stdio.h', []],
+  ['eeprom.h', []],
+  ['avr/pgmspace.h', []],
+  ['avr/interrupt.h', []],
+  ['math.h', []],
 ]);
 
 export function checkIncludes(source) {

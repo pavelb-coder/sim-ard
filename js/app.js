@@ -121,6 +121,7 @@ function iconFor(type) {
     case 'uno': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#1276b0" stroke="#1276b0"/><path d="M6 3v-1M10 3v-1M14 3v-1M18 3v-1"/></svg>`;
     case 'esp32': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#2f3b46"/><rect x="9" y="5" width="8" height="5" rx="1" fill="#4a5b6b"/></svg>`;
     case 'pico': return `<svg ${c} aria-hidden="true"><rect x="4" y="3" width="18" height="12" rx="2" fill="#1f4d3a"/><rect x="9" y="5" width="8" height="5" rx="1" fill="#3d7a5c"/></svg>`;
+    case 'rpi5': return `<svg ${c} aria-hidden="true"><rect x="2" y="4" width="20" height="14" rx="2" fill="#12583a"/><rect x="4" y="6" width="7" height="5" rx="1" fill="#b7c3cc"/><rect x="13" y="6" width="6" height="6" rx="1" fill="#151c23"/><rect x="4" y="13" width="16" height="2" rx="1" fill="#0a2f1e"/></svg>`;
     case 'nano': return `<svg ${c} aria-hidden="true"><rect x="3" y="6" width="20" height="7" rx="1.5" fill="#1276b0" stroke="#1276b0"/><path d="M6 6v-1M10 6v-1M14 6v-1M18 6v-1M6 13v1M10 13v1M14 13v1M18 13v1"/></svg>`;
     case 'promini': return `<svg ${c} aria-hidden="true"><rect x="5" y="6" width="16" height="6" rx="1.5" fill="#0f6d74"/><path d="M7 6v-1M10 6v-1M13 6v-1M16 6v-1M7 12v1M10 12v1M13 12v1M16 12v1"/></svg>`;
     case 'leonardo': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="12" rx="2" fill="#1276b0" stroke="#1276b0"/><rect x="3" y="7" width="3" height="4" rx="1" fill="#c3ccd4"/><path d="M9 3v-1M13 3v-1M17 3v-1"/></svg>`;
@@ -477,7 +478,10 @@ function prepareBoard(part) {
   }
 
   const globals = { ...rt.globals(), ...libs, ...mpyGlobals(rt) };
-  const names = Object.keys(globals).filter((k) => /^[A-Za-z_$][\w$]*$/.test(k));
+  // имена становятся параметрами функции — зарезервированные слова JS нельзя
+  const RESERVED = new Set(['yield', 'let', 'static', 'await', 'enum', 'implements', 'interface',
+    'package', 'private', 'protected', 'public', 'arguments', 'eval', 'class', 'function']);
+  const names = Object.keys(globals).filter((k) => /^[A-Za-z_$][\w$]*$/.test(k) && !RESERVED.has(k));
   let fn = null;
   try {
     fn = new AsyncFunction(...names, `"use strict";\n${body}\n//# sourceURL=sketch_${part.id}.js`);

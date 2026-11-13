@@ -134,6 +134,32 @@ export const BOARDS = {
     pins: buildPico(),
   },
 
+  // ------------------------------------------------------ Raspberry Pi 5 --------
+  // 85 × 56 мм, гребёнка 2×20 с шагом 2,54 мм. Как и у Pico, ряды развёрнуты
+  // на противоположные края — так провода не путаются: нечётные выводы сверху,
+  // чётные снизу, номера те же, что на настоящем разъёме (1…40).
+  rpi5: {
+    id: 'rpi5',
+    name: 'Raspberry Pi 5',
+    short: 'RPi 5',
+    vcc: 3.3,                // логика 3,3 В, как у настоящего
+    vccPin: '3V3',
+    adcMax: 4095,
+    builtinLed: null,        // пользовательского светодиода на плате нет
+    pwmPins: [12, 13, 18, 19, 14, 15],
+    languages: ['mpy'],
+    defaultLang: 'mpy',
+    wmm: 85,
+    hmm: 56,
+    padInset: 2.54,
+    w: M(85),
+    h: M(56),
+    chip: 'BCM2712',
+    labelInset: 24,
+    rails: [{ pin: '5V', volts: 5 }],   // шина 5 В от USB-C-питания
+    pins: buildRpi5(),
+  },
+
   // ---------------------------------------------------------- Arduino Nano ----
   // W 43,18 · H 17,78 · два ряда по 15 выводов с шагом 2,54 мм, mini-USB слева
   nano: {
@@ -484,6 +510,43 @@ function buildPico() {
     needle(22), gnd(6), needle(21), needle(20), needle(19), needle(18), gnd(7), needle(17), needle(16),
   ].map((p, i) => bot(xs[i], p));
   return [...upper, ...lower];
+}
+
+
+/** Raspberry Pi 5: физические выводы 1…40, GPIO-номера как в MicroPython. */
+function buildRpi5() {
+  // пары «физический вывод → функция»; odd — сверху, even — снизу
+  const layout = [
+    [1, pwr('3V3', '3V3', 'v33')], [2, pwr('5V', '5V', 'vcc')],
+    [3, { id: 'GPIO2', num: 2, label: 'GPIO2', silk: 'GP2', kind: 'digital' }], [4, pwr('5V2', '5V', 'vcc', '5V')],
+    [5, { id: 'GPIO3', num: 3, label: 'GPIO3', silk: 'GP3', kind: 'digital' }], [6, pwr('GND', 'GND', 'gnd')],
+    [7, { id: 'GPIO4', num: 4, label: 'GPIO4', silk: 'GP4', kind: 'digital' }], [8, pwr('GND2', 'GND', 'gnd', 'GND')],
+    [9, pwr('GND3', 'GND', 'gnd', 'GND')], [10, { id: 'GPIO14', num: 14, label: 'GPIO14', silk: 'GP14', kind: 'digital' }],
+    [11, { id: 'GPIO17', num: 17, label: 'GPIO17', silk: 'GP17', kind: 'digital' }], [12, { id: 'GPIO15', num: 15, label: 'GPIO15', silk: 'GP15', kind: 'digital' }],
+    [13, { id: 'GPIO27', num: 27, label: 'GPIO27', silk: 'GP27', kind: 'digital' }], [14, pwr('GND4', 'GND', 'gnd', 'GND')],
+    [15, { id: 'GPIO22', num: 22, label: 'GPIO22', silk: 'GP22', kind: 'digital' }], [16, { id: 'GPIO18', num: 18, label: 'GPIO18', silk: 'GP18', kind: 'digital' }],
+    [17, pwr('3V3_2', '3V3', 'v33', '3V3')], [18, { id: 'GPIO23', num: 23, label: 'GPIO23', silk: 'GP23', kind: 'digital' }],
+    [19, { id: 'GPIO10', num: 10, label: 'GPIO10', silk: 'GP10', kind: 'digital' }], [20, { id: 'GPIO24', num: 24, label: 'GPIO24', silk: 'GP24', kind: 'digital' }],
+    [21, { id: 'GPIO9', num: 9, label: 'GPIO9', silk: 'GP9', kind: 'digital' }], [22, pwr('GND5', 'GND', 'gnd', 'GND')],
+    [23, { id: 'GPIO11', num: 11, label: 'GPIO11', silk: 'GP11', kind: 'digital' }], [24, { id: 'GPIO25', num: 25, label: 'GPIO25', silk: 'GP25', kind: 'digital' }],
+    [25, pwr('GND6', 'GND', 'gnd', 'GND')], [26, { id: 'GPIO8', num: 8, label: 'GPIO8', silk: 'GP8', kind: 'digital' }],
+    [27, { id: 'GPIO0', num: 0, label: 'GPIO0', silk: 'GP0', kind: 'digital' }], [28, { id: 'GPIO7', num: 7, label: 'GPIO7', silk: 'GP7', kind: 'digital' }],
+    [29, { id: 'GPIO5', num: 5, label: 'GPIO5', silk: 'GP5', kind: 'digital' }], [30, pwr('GND7', 'GND', 'gnd', 'GND')],
+    [31, { id: 'GPIO6', num: 6, label: 'GPIO6', silk: 'GP6', kind: 'digital' }], [32, { id: 'GPIO12', num: 12, label: 'GPIO12', silk: 'GP12', kind: 'digital' }],
+    [33, { id: 'GPIO13', num: 13, label: 'GPIO13', silk: 'GP13', kind: 'digital' }], [34, pwr('GND8', 'GND', 'gnd', 'GND')],
+    [35, { id: 'GPIO19', num: 19, label: 'GPIO19', silk: 'GP19', kind: 'digital' }], [36, { id: 'GPIO16', num: 16, label: 'GPIO16', silk: 'GP16', kind: 'digital' }],
+    [37, { id: 'GPIO26', num: 26, label: 'GPIO26', silk: 'GP26', kind: 'digital' }], [38, { id: 'GPIO20', num: 20, label: 'GPIO20', silk: 'GP20', kind: 'digital' }],
+    [39, pwr('GND9', 'GND', 'gnd', 'GND')], [40, { id: 'GPIO21', num: 21, label: 'GPIO21', silk: 'GP21', kind: 'digital' }],
+  ];
+  const topRow = [];
+  const botRow = [];
+  for (const [phys, pin] of layout) {
+    const idx = Math.floor((phys - 1) / 2);          // 0…19 вдоль платы
+    const xmm = 4.6 + idx * 2.54;
+    if (phys % 2 === 1) topRow.push(top(xmm, pin));
+    else botRow.push(bot(xmm, pin));
+  }
+  return [...topRow, ...botRow];
 }
 
 /**

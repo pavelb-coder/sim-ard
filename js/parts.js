@@ -8,6 +8,9 @@
 
 import { BOARDS } from './boards.js';
 import { renderBoardArt } from './board-art.js';
+import {
+  lead, resistorBody, ledLens, electrolyticCan, diodeBody, to92, to220, dipBody, pcbModule, shade,
+} from './realism.js';
 
 export const GRID = 10;
 
@@ -30,14 +33,14 @@ export const SHORT_NAME = {
   l298n: 'драйвер L298N', dcmotor: 'мотор постоянного тока', keypad: 'клавиатура 4×4',
   sr595: 'сдвиговый регистр 74HC595', sr165: 'сдвиговый регистр 74HC165',
   seg7: 'индикатор', relay: 'реле', joystick: 'джойстик', stepper28byj: 'шаговый двигатель',
-  uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico',
+  uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico', rpi5: 'Raspberry Pi 5',
   nano: 'Arduino Nano', promini: 'Arduino Pro Mini', leonardo: 'Arduino Leonardo', mega: 'Arduino Mega 2560',
 };
 
 export const REF_PREFIX = {
   led: 'D', resistor: 'R', capacitor: 'C', electrolytic: 'C', inductor: 'L', button: 'S',
   pot: 'RV', servo: 'M', lcd1602: 'LCD', oled: 'DS', buzzer: 'BZ', ldr: 'R', pir: 'PIR',
-  dht11: 'DHT', hcsr04: 'SR', uno: 'A', esp32: 'A', pico: 'A',
+  dht11: 'DHT', hcsr04: 'SR', uno: 'A', esp32: 'A', pico: 'A', rpi5: 'A',
   diode: 'VD', npn: 'VT', rgbled: 'D', toggle: 'S', seg7: 'HG', relay: 'K', joystick: 'RV', stepper28byj: 'M',
   battery9: 'GB', batteryAA: 'GB', psu: 'G', scope: 'OS', multimeter: 'PA', logicprobe: 'PL',
   ledBicolor: 'D', ledBar: 'HL', traffic: 'HL', pnp: 'VT', mosfet: 'VT', tip120: 'VT',
@@ -86,21 +89,20 @@ const DISCRETE = {
     render(comp) {
       const c = comp.props?.color || '#ff5544';
       return partTag(comp, 56, 34, `
-        <line x1="-26" y1="0" x2="-8" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="8" y1="0" x2="26" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <circle class="glow" cx="0" cy="0" r="23" fill="${c}" opacity="0"/>
-        <circle class="glow-core" cx="0" cy="0" r="12" fill="${c}" opacity="0"/>
-        <circle cx="0" cy="0" r="11" fill="#2a3440" stroke="#46586a" stroke-width="1.2"/>
-        <path d="M -6 -6 L 6 0 L -6 6 Z" fill="#d8e4ee"/>
-        <line x1="6" y1="-7" x2="6" y2="7" stroke="#d8e4ee" stroke-width="1.6"/>
-        <text x="0" y="27" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">A→K</text>`);
+        ${lead(-26, -12)}
+        ${lead(12, 26)}
+        ${ledLens({ color: c, r: 12, label: '' })}
+        <path class="sym" d="M -4.5 -5.5 L 4.5 0 L -4.5 5.5 Z" fill="#ffffff" opacity=".5"/>
+        <line x1="4.5" y1="-5.5" x2="4.5" y2="5.5" stroke="#ffffff" stroke-width="1.3" opacity=".5"/>
+        <text x="-19" y="-9" style="font:6px ui-monospace,monospace;fill:#7d93a6">A</text>
+        <text x="16" y="-9" style="font:6px ui-monospace,monospace;fill:#7d93a6">K</text>`);
     },
     update(g, comp, env) {
       const b = Math.min(1, env.brightness || 0);
-      const halo = g.querySelector('.glow'), core = g.querySelector('.glow-core'), sym = g.querySelector('path');
-      if (halo) halo.setAttribute('opacity', String(b * 0.32));
-      if (core) core.setAttribute('opacity', String(b * 0.55));
-      if (sym) sym.setAttribute('fill', b > 0.02 ? '#fff6cf' : '#d8e4ee');
+      const halo = g.querySelector('.glow'), core = g.querySelector('.glow-core'), sym = g.querySelector('.sym');
+      if (halo) halo.setAttribute('opacity', String(b * 0.4));
+      if (core) core.setAttribute('opacity', String(b * 0.6));
+      if (sym) sym.setAttribute('opacity', b > 0.02 ? '0.9' : '0.5');
     },
   },
 
@@ -113,11 +115,8 @@ const DISCRETE = {
     render(comp) {
       const v = comp.props?.value ?? 220;
       return partTag(comp, 70, 26, `
-        <line x1="-32" y1="0" x2="-18" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="18" y1="0" x2="32" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <path d="M -18 0 l 4 -7 l 4 14 l 4 -14 l 4 14 l 4 -14 l 4 14 l 4 -7 l 4 0"
-              fill="none" stroke="#e6c07b" stroke-width="1.6" stroke-linejoin="round"/>
-        <text x="0" y="20" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">${fmtR(v)}</text>`);
+        ${resistorBody({ value: v, x1: -18, x2: 18 })}
+        <text x="0" y="20" style="font:6px ui-monospace,monospace;fill:#a8c0d2;text-anchor:middle">${fmtR(v)}</text>`);
     },
   },
 
@@ -151,13 +150,11 @@ const DISCRETE = {
     ],
     render(comp) {
       const uf = (comp.props?.farads ?? 1e-4) * 1e6;
+      const text = uf >= 1000 ? `${(uf / 1000).toFixed(0)} мФ` : `${uf.toFixed(0)} мкФ`;
       return partTag(comp, 64, 34, `
-        <line x1="-30" y1="0" x2="-5" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="5" y1="0" x2="30" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-5" y1="-11" x2="-5" y2="11" stroke="#ffb26b" stroke-width="2"/>
-        <path d="M 9 -11 A 11 11 0 0 1 9 11" fill="none" stroke="#bfe0ff" stroke-width="2"/>
-        <text x="-11" y="-13" style="font:7px ui-monospace;fill:#ffb26b;text-anchor:middle">+</text>
-        <text x="0" y="25" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">${uf >= 1000 ? (uf / 1000).toFixed(0) + ' мФ' : uf.toFixed(0) + ' мкФ'}</text>`);
+        ${lead(-30, -12)}
+        ${lead(12, 30)}
+        ${electrolyticCan({ r: 13, text })}`);
     },
   },
 
@@ -186,17 +183,16 @@ const DISCRETE = {
     ],
     render(comp) {
       return partTag(comp, 64, 36, `
-        <line x1="-30" y1="8" x2="-14" y2="8" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="14" y1="8" x2="30" y2="8" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-14" y1="8" x2="-6" y2="8" stroke="#e6eef5" stroke-width="1.6"/>
-        <line x1="6" y1="8" x2="14" y2="8" stroke="#e6eef5" stroke-width="1.6"/>
-        <line class="plunger" x1="-10" y1="-6" x2="10" y2="-6" stroke="#9fb6c9" stroke-width="2"/>
-        <circle cx="0" cy="-6" r="4" fill="#3a4b5c"/>
-        <text x="0" y="26" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">нажмите</text>`);
+        ${lead(-30, -14, 8)}${lead(14, 30, 8)}
+        <rect x="-18" y="-12" width="36" height="24" rx="3" fill="#4a5560" stroke="#6c7883" stroke-width="1"/>
+        <rect x="-15" y="-9" width="30" height="18" rx="2" fill="url(#sim-metal)" stroke="#8b98a4" stroke-width=".8"/>
+        <rect class="cap" x="-11" y="-7" width="22" height="14" rx="6" fill="url(#sim-metal-h)" stroke="#7b8894" stroke-width=".8"/>
+        <ellipse cx="-4" cy="-3" rx="5.5" ry="2.6" fill="rgba(255,255,255,.6)"/>
+        <text x="0" y="26" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">нажмите</text>`);
     },
     update(g, comp) {
-      const p = g.querySelector('.plunger');
-      if (p) { p.setAttribute('y1', comp.props?.pressed ? '2' : '-6'); p.setAttribute('y2', comp.props?.pressed ? '2' : '-6'); }
+      const cap = g.querySelector('.cap');
+      if (cap) cap.setAttribute('y', comp.props?.pressed ? '-4' : '-7');
     },
   },
 
@@ -209,16 +205,17 @@ const DISCRETE = {
     ],
     render(comp) {
       const a = comp.props?.value ?? 0.5;
-      const wx = -18 + 36 * a;
+      const wx = -16 + 32 * a;
       return partTag(comp, 76, 60, `
-        <line x1="-34" y1="6" x2="-22" y2="6" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="22" y1="6" x2="34" y2="6" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="0" y1="34" x2="0" y2="16" stroke="#8aa4b8" stroke-width="1.4"/>
-        <rect x="-22" y="-6" width="44" height="24" rx="3" fill="#2a3440" stroke="#46586a"/>
-        <rect x="-18" y="8" width="36" height="4" fill="#1a222b"/>
-        <rect data-role="knob" x="-22" y="-6" width="44" height="26" fill="transparent" style="cursor:ew-resize"/>
-        <polygon class="wiper" points="${wx},-2 ${wx - 4},4 ${wx + 4},4" fill="#e6c07b"/>
-        <text class="pot-value" x="0" y="-12" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">${Math.round(a * 100)}%</text>`);
+        ${lead(-34, -22, 6)}${lead(22, 34, 6)}
+        <line x1="0" y1="34" x2="0" y2="18" stroke="url(#sim-metal-h)" stroke-width="2.6" stroke-linecap="round"/>
+        <rect x="-22" y="-8" width="44" height="26" rx="3" fill="#1b3a5c" stroke="#2c5c8a"/>
+        <rect x="-19" y="-16" width="38" height="22" rx="3" fill="url(#sim-metal)" stroke="#7b8894" stroke-width=".8"/>
+        ${[0, 1, 2, 3, 4, 5].map((i) => `<line x1="${-16 + i * 6.4}" y1="-15" x2="${-16 + i * 6.4}" y2="-9" stroke="rgba(0,0,0,.28)" stroke-width="1.4"/>`).join('')}
+        <rect x="-14" y="-4" width="28" height="6" rx="3" fill="#12202c"/>
+        <rect data-role="knob" x="-22" y="-16" width="44" height="34" fill="transparent" style="cursor:ew-resize"/>
+        <polygon class="wiper" points="${wx},-3 ${wx - 4},3 ${wx + 4},3" fill="#ffd166"/>
+        <text class="pot-value" x="0" y="-22" style="font:6px ui-monospace,monospace;fill:#a8c0d2;text-anchor:middle">${Math.round(a * 100)}%</text>`);
     },
     update(g, comp) {
       const a = comp.props?.value ?? 0.5;
@@ -304,12 +301,18 @@ const DISCRETE = {
     ],
     render(comp) {
       const dist = comp.props?.distance ?? 50;
+      const eye = (cx) => `
+        <circle cx="${cx}" cy="0" r="12.5" fill="#0b1218" stroke="#7d8b96" stroke-width="1"/>
+        <circle cx="${cx}" cy="0" r="10" fill="url(#sim-metal)"/>
+        <circle cx="${cx}" cy="0" r="7" fill="none" stroke="rgba(0,0,0,.25)"/>
+        <circle cx="${cx}" cy="0" r="3.6" fill="#1b232b"/>
+        <ellipse cx="${cx - 3}" cy="-3.6" rx="3" ry="1.8" fill="rgba(255,255,255,.5)"/>`;
       return partTag(comp, 96, 54, `
-        <rect x="-40" y="-20" width="80" height="40" rx="3" fill="#12324a" stroke="#2c6a8a"/>
-        <circle cx="-20" cy="0" r="11" fill="#20333f" stroke="#5f7c8c"/>
-        <circle cx="20" cy="0" r="11" fill="#20333f" stroke="#5f7c8c"/>
-        <text x="0" y="-6" style="font:6px ui-monospace;fill:#a9d4f5;text-anchor:middle">${Math.round(dist)} см</text>
-        <text x="0" y="12" style="font:6px ui-monospace;fill:#5f8ba8;text-anchor:middle">HC-SR04</text>`);
+        <rect x="-40" y="-20" width="80" height="40" rx="3" fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.1"/>
+        ${eye(-20)}${eye(20)}
+        <rect x="-14" y="-10" width="28" height="20" rx="2" fill="#151c23" stroke="#2b3945"/>
+        <text x="0" y="4" style="font:6.4px ui-monospace,monospace;fill:#8ce8a4;text-anchor:middle">${Math.round(dist)} см</text>
+        <text x="0" y="15" style="font:4.6px ui-monospace,monospace;fill:#cfe9dc;text-anchor:middle">HC-SR04</text>`);
     },
     update(g, comp) {
       const t = g.querySelector('.body text');
@@ -326,12 +329,12 @@ const DISCRETE = {
     ],
     render(comp) {
       return partTag(comp, 60, 34, `
-        <line x1="-28" y1="0" x2="-9" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="9" y1="0" x2="28" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <circle class="glow" cx="0" cy="0" r="16" fill="#ffd166" opacity="0"/>
-        <path class="tri" d="M -9 -8 L 9 0 L -9 8 Z" fill="#d8e4ee"/>
-        <line x1="9" y1="-9" x2="9" y2="9" stroke="#d8e4ee" stroke-width="1.8"/>
-        <text x="0" y="24" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">A→K  0,65 В</text>`);
+        ${lead(-28, -9)}
+        ${lead(9, 28)}
+        <circle class="glow" cx="0" cy="0" r="17" fill="#ffd166" opacity="0"/>
+        ${diodeBody({ x1: -9, x2: 9 })}
+        <path class="tri" d="M -3.5 -4.6 L 5 0 L -3.5 4.6 Z" fill="#dbe6ee" opacity=".9"/>
+        <text x="0" y="23" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">A→K · 0,65 В</text>`);
     },
     update(g, comp, env) {
       const i = env.current || 0;
@@ -351,17 +354,20 @@ const DISCRETE = {
     ],
     render(comp) {
       return partTag(comp, 70, 72, `
-        <line x1="-32" y1="0" x2="-14" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="10" y1="-30" x2="10" y2="-12" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="10" y1="12" x2="10" y2="30" stroke="#8aa4b8" stroke-width="1.4"/>
-        <circle cx="4" cy="0" r="20" fill="#222c36" stroke="#46586a" stroke-width="1.2"/>
-        <line x1="-14" y1="0" x2="-4" y2="0" stroke="#d8e4ee" stroke-width="1.8"/>
-        <line x1="-4" y1="-11" x2="-4" y2="11" stroke="#d8e4ee" stroke-width="2.2"/>
-        <line x1="-4" y1="-6" x2="10" y2="-12" stroke="#d8e4ee" stroke-width="1.6"/>
-        <line x1="-4" y1="6" x2="10" y2="12" stroke="#d8e4ee" stroke-width="1.6"/>
-        <path class="arrow" d="M 12 12 L 3 11 L 7 5 Z" fill="#d8e4ee"/>
-        <circle class="state" cx="16" cy="-14" r="3" fill="#3a4b5c"/>` + `
-        <text x="0" y="50" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">BC547  hFE≈100</text>`);
+        ${lead(-32, -16)}
+        <line x1="10" y1="-30" x2="10" y2="-12" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="10" y1="12" x2="10" y2="30" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <path d="M -16 -20 L 8 -20 A 12 12 0 0 1 8 20 L -16 20 Z" fill="url(#sim-plastic)" stroke="#2b3945" stroke-width="1.2"/>
+        <path d="M -10 -14 L 0 -14" stroke="rgba(255,255,255,.22)" stroke-width="2.6"/>
+        <ellipse cx="-8" cy="-13" rx="5" ry="2.6" fill="rgba(255,255,255,.14)" transform="rotate(-12 -8 -13)"/>
+        <line x1="-16" y1="0" x2="-4" y2="0" stroke="#dfe8ef" stroke-width="1.8"/>
+        <line x1="-4" y1="-11" x2="-4" y2="11" stroke="#dfe8ef" stroke-width="2.4"/>
+        <line x1="-4" y1="-6" x2="10" y2="-12" stroke="#dfe8ef" stroke-width="1.6"/>
+        <line x1="-4" y1="6" x2="10" y2="12" stroke="#dfe8ef" stroke-width="1.6"/>
+        <path class="arrow" d="M 12 12 L 3 11 L 7 5 Z" fill="#dfe8ef"/>
+        <circle class="state" cx="15" cy="-16" r="3.2" fill="#3a4b5c" stroke="#1b2530"/>
+        <text x="-4" y="17" style="font:5px ui-monospace,monospace;fill:#93a4b2;text-anchor:middle">BC547</text>
+        <text x="0" y="50" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">NPN · hFE≈100</text>`);
     },
     update(g, comp, env) {
       const on = !!env.info?.on;
@@ -381,14 +387,19 @@ const DISCRETE = {
     ],
     render(comp) {
       return partTag(comp, 76, 60, `
-        <circle class="halo halo-r" cx="0" cy="-4" r="24" fill="#ff3b30" opacity="0"/>
-        <circle class="halo halo-g" cx="0" cy="-4" r="24" fill="#28d17c" opacity="0"/>
-        <circle class="halo halo-b" cx="0" cy="-4" r="24" fill="#3b82f6" opacity="0"/>
-        <circle cx="0" cy="-4" r="13" fill="#e9eef3" fill-opacity=".22" stroke="#9fb0bf" stroke-width="1.1"/>
-        <circle class="core" cx="0" cy="-4" r="7" fill="#dfe8ef" opacity=".85"/>
-        <path d="M -13 0 L -13 24 M -7 6 L -7 24 M 7 6 L 7 24 M 13 0 L 13 24"
-              stroke="#8aa4b8" stroke-width="1.3" fill="none"/>
-        <text x="0" y="47" style="font:6px ui-monospace;fill:#7d93a6;text-anchor:middle">общий катод</text>`);
+        <circle class="halo halo-r" cx="0" cy="-6" r="24" fill="#ff3b30" opacity="0"/>
+        <circle class="halo halo-g" cx="0" cy="-6" r="24" fill="#28d17c" opacity="0"/>
+        <circle class="halo halo-b" cx="0" cy="-6" r="24" fill="#3b82f6" opacity="0"/>
+        <path d="M -13 4 L -13 24 M -7 8 L -7 24 M 7 8 L 7 24 M 13 4 L 13 24"
+              stroke="url(#sim-metal-h)" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <circle cx="0" cy="-6" r="14" fill="#0f1a22" opacity=".5"/>
+        <circle cx="0" cy="-6" r="14" fill="url(#sim-lens)" stroke="#9fb0bf" stroke-width="1.1"/>
+        <circle cx="0" cy="-6" r="13" fill="#eaf1f6" fill-opacity=".18"/>
+        <path d="M -5 -11 L 4 -6 L -5 -1 Z" fill="#e9a0a0" opacity=".8"/>
+        <path d="M 5 -11 L -4 -6 L 5 -1 Z" fill="#9fe0b4" opacity=".7"/>
+        <circle class="core" cx="0" cy="-6" r="5" fill="#dfe8ef" opacity=".6"/>
+        <ellipse cx="-4.5" cy="-11" rx="3.6" ry="2.2" fill="rgba(255,255,255,.8)" transform="rotate(-25 -4.5 -11)"/>
+        <text x="0" y="46" style="font:5.6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">общий катод</text>`);
     },
     update(g, comp, env) {
       const ch = env.info?.channels || [0, 0, 0];
@@ -500,16 +511,20 @@ const MODULES = {
     render(comp) {
       const a = comp.props?.angle ?? 90;
       return partTag(comp, 90, 64, `
-        <rect x="-26" y="-20" width="52" height="34" rx="4" fill="#1c4f7a" stroke="#2c74ab"/>
-        <circle cx="0" cy="-4" r="12" fill="#0f2c42" stroke="#2c74ab"/>
+        <rect x="-26" y="-22" width="52" height="38" rx="4" fill="url(#sim-servo)" stroke="#123c60" stroke-width="1.1"/>
+        <rect x="-23" y="-19" width="46" height="8" rx="3" fill="rgba(255,255,255,.22)"/>
+        ${[0, 1, 2].map((i) => `<rect x="${-20 + i * 14}" y="8" width="10" height="4" rx="1" fill="rgba(0,0,0,.22)"/>`).join('')}
+        <circle cx="0" cy="-4" r="13" fill="#0f2c42" stroke="#2c74ab"/>
         <g transform="rotate(${a - 90} 0 -4)">
-          <rect x="-3" y="-30" width="6" height="26" rx="2" fill="#ffb26b"/>
-          <circle cx="0" cy="-30" r="3.5" fill="#ffd8a8"/>
+          <rect x="-3.4" y="-30" width="6.8" height="26" rx="2.4" fill="#e9eef3" stroke="#b7c3cc" stroke-width=".7"/>
+          <circle cx="0" cy="-30" r="4" fill="#f7fafc" stroke="#b7c3cc" stroke-width=".8"/>
+          <circle cx="0" cy="-4" r="4.4" fill="#cfd8e0"/>
         </g>
-        <text x="0" y="7" style="font:6px ui-monospace;fill:#9fc9e6;text-anchor:middle">${Math.round(a)}°</text>
-        <line x1="-30" y1="14" x2="-30" y2="26" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-10" y1="14" x2="-10" y2="26" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="10" y1="14" x2="10" y2="26" stroke="#8aa4b8" stroke-width="1.4"/>`);
+        <text x="0" y="7" style="font:6px ui-monospace,monospace;fill:#9fc9e6;text-anchor:middle">${Math.round(a)}°</text>
+        <text x="0" y="16" style="font:4.6px ui-monospace,monospace;fill:#7fb2d6;text-anchor:middle">SG90</text>
+        <line x1="-30" y1="16" x2="-30" y2="26" stroke="url(#sim-metal-h)" stroke-width="2.4" stroke-linecap="round"/>
+        <line x1="-10" y1="16" x2="-10" y2="26" stroke="#c0392b" stroke-width="2.4" stroke-linecap="round"/>
+        <line x1="10" y1="16" x2="10" y2="26" stroke="#1b1b1b" stroke-width="2.4" stroke-linecap="round"/>`);
     },
     update(g, comp) {
       const a = comp.props?.angle ?? 90;
@@ -531,16 +546,15 @@ const MODULES = {
     render(comp) {
       const lines = comp.props?.lines || ['', ''];
       const on = comp.props?.backlight !== false;
-      const row = (i) => `<text x="-64" y="${-9 + i * 14}" style="font:9px ui-monospace;fill:${on ? '#0a2b1d' : '#0d1712'};letter-spacing:.6px">${esc((lines[i] || '').padEnd(16).slice(0, 16)).replace(/ /g, '\u00a0')}</text>`;
+      const row = (i) => `<text x="-62" y="${-8 + i * 14}" style="font:9px ui-monospace,monospace;fill:${on ? '#0a2b1d' : '#0d1712'};letter-spacing:.6px">${esc((lines[i] || '').padEnd(16).slice(0, 16)).replace(/ /g, '\u00a0')}</text>`;
       return partTag(comp, 160, 76, `
-        <rect x="-72" y="-28" width="144" height="52" rx="3" fill="#0d3a1f" stroke="#1d6b38"/>
-        <rect x="-68" y="-24" width="136" height="38" rx="2" fill="${on ? '#7ef29d' : '#3f7a52'}"/>
+        <rect x="-72" y="-30" width="144" height="56" rx="3" fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.1"/>
+        <rect x="-66" y="-26" width="132" height="48" rx="2" fill="#151c23" stroke="#2b3945"/>
+        <rect x="-63" y="-23" width="126" height="42" rx="1.5" fill="${on ? '#8ce8a4' : '#3f7a52'}" stroke="#0d3a1f"/>
+        <rect x="-63" y="-23" width="126" height="10" rx="1.5" fill="rgba(255,255,255,.18)"/>
         ${row(0)}${row(1)}
-        <text x="0" y="20" style="font:5px ui-monospace;fill:#6f9a7f;text-anchor:middle">1602 I2C</text>
-        <line x1="-45" y1="-28" x2="-45" y2="-34" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-25" y1="-28" x2="-25" y2="-34" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-5" y1="-28" x2="-5" y2="-34" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="15" y1="-28" x2="15" y2="-34" stroke="#8aa4b8" stroke-width="1.4"/>`);
+        ${[[-45, -30], [-25, -30], [-5, -30], [15, -30]].map(([x, y]) => `<line x1="${x}" y1="${y}" x2="${x}" y2="${y - 4}" stroke="url(#sim-metal-h)" stroke-width="2.4" stroke-linecap="round"/>`).join('')}
+        <text x="0" y="22" style="font:4.8px ui-monospace,monospace;fill:#cfe9dc;text-anchor:middle">1602 · I2C · PCF8574</text>`);
     },
     update() {},
   },
@@ -556,16 +570,15 @@ const MODULES = {
     render(comp) {
       const lines = comp.props?.lines || [];
       const text = lines.slice(0, 8).map((l, i) =>
-        `<text x="-46" y="${-27 + i * 7}" style="font:6.5px ui-monospace;fill:#9ad7ff">${esc(String(l).slice(0, 18))}</text>`).join('');
+        `<text x="-45" y="${-26 + i * 7}" style="font:6.5px ui-monospace,monospace;fill:#bde6ff">${esc(String(l).slice(0, 18))}</text>`).join('');
       return partTag(comp, 120, 92, `
-        <rect x="-54" y="-38" width="108" height="76" rx="4" fill="#0a1220" stroke="#24405c"/>
-        <rect x="-48" y="-32" width="96" height="58" rx="2" fill="#04121f"/>
+        <rect x="-54" y="-38" width="108" height="76" rx="4" fill="url(#sim-dark-cell)" stroke="#24405c" stroke-width="1.1"/>
+        <rect x="-49" y="-33" width="98" height="60" rx="2.5" fill="#050a12" stroke="#1b2f3f"/>
+        <rect x="-47" y="-31" width="94" height="56" rx="2" fill="#04121f"/>
+        <rect x="-47" y="-31" width="94" height="18" rx="2" fill="url(#sim-glass)"/>
         ${text}
-        <text x="0" y="32" style="font:5px ui-monospace;fill:#4f7799;text-anchor:middle">SSD1306</text>
-        <line x1="-30" y1="-38" x2="-30" y2="-42" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-10" y1="-38" x2="-10" y2="-42" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="10" y1="-38" x2="10" y2="-42" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="30" y1="-38" x2="30" y2="-42" stroke="#8aa4b8" stroke-width="1.4"/>`);
+        ${[[-30, -38], [-10, -38], [10, -38], [30, -38]].map(([x, y]) => `<line x1="${x}" y1="${y}" x2="${x}" y2="${y - 4}" stroke="url(#sim-metal-h)" stroke-width="2.4" stroke-linecap="round"/>`).join('')}
+        <text x="0" y="33" style="font:4.8px ui-monospace,monospace;fill:#4f7799;text-anchor:middle">SSD1306 · 128×64</text>`);
     },
     update() {},
   },
@@ -578,11 +591,14 @@ const MODULES = {
     ],
     render(comp) {
       return partTag(comp, 60, 46, `
-        <line x1="-22" y1="12" x2="-14" y2="10" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="22" y1="12" x2="14" y2="10" stroke="#8aa4b8" stroke-width="1.4"/>
-        <path d="M -14 10 a 14 14 0 0 1 28 0 z" fill="#2a3440" stroke="#46586a"/>
-        <circle cx="0" cy="-2" r="3" fill="#0d141b"/>
-        <text class="note" x="0" y="-16" style="font:8px ui-monospace;fill:#5a6b7d;text-anchor:middle">♪</text>`);
+        ${lead(-22, -14, 12)}${lead(14, 22, 12)}
+        <circle cx="0" cy="0" r="15" fill="#0b1116" opacity=".5"/>
+        <circle cx="0" cy="0" r="14.5" fill="url(#sim-plastic)" stroke="#46586a" stroke-width="1"/>
+        <circle cx="0" cy="0" r="9.5" fill="#111820" stroke="#2b3945"/>
+        <circle cx="0" cy="0" r="2.4" fill="#05080a"/>
+        ${[[-5, -3], [5, -3], [0, 5], [-5, 4], [5, 4]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.3" fill="#05080a"/>`).join('')}
+        <ellipse cx="-4.6" cy="-6.5" rx="4" ry="2.4" fill="rgba(255,255,255,.35)" transform="rotate(-28 -4.6 -6.5)"/>
+        <text class="note" x="0" y="-19" style="font:9px ui-monospace,monospace;fill:#5a6b7d;text-anchor:middle">♪</text>`);
     },
     update(g, comp, env) {
       const n = g.querySelector('.note');
@@ -734,14 +750,16 @@ const POWER = {
     render(comp) {
       const v = Number(comp.props?.voltage) || 9;
       return partTag(comp, 78, 66, `
-        <line x1="-20" y1="30" x2="-20" y2="22" stroke="#c0392b" stroke-width="1.6"/>
-        <line x1="20" y1="30" x2="20" y2="22" stroke="#8aa4b8" stroke-width="1.6"/>
-        <rect x="-30" y="-26" width="60" height="48" rx="4" fill="#1b2430" stroke="#33465a"/>
-        <rect x="-18" y="-32" width="16" height="8" rx="3" fill="#c0392b" stroke="#7d2b20"/>
-        <rect x="4" y="-32" width="14" height="8" rx="3" fill="#c3ccd4" stroke="#7d93a6"/>
-        <text x="0" y="-8" style="font:11px ui-monospace;fill:#ffd166;text-anchor:middle">${v.toFixed(1)} В</text>
-        <text x="0" y="6" style="font:5.6px ui-monospace;fill:#8fbde3;text-anchor:middle">КРОНА / 6F22</text>
-        <text x="0" y="16" style="font:5px ui-monospace;fill:#5f8ba8;text-anchor:middle">алкалиновая</text>`);
+        <line x1="-20" y1="30" x2="-20" y2="24" stroke="#c0392b" stroke-width="2"/>
+        <line x1="20" y1="30" x2="20" y2="24" stroke="#8aa4b8" stroke-width="2"/>
+        <rect x="-30" y="-22" width="60" height="46" rx="4" fill="url(#sim-dark-cell)" stroke="#0d1218" stroke-width="1"/>
+        <rect x="-30" y="-22" width="60" height="46" rx="4" fill="none" stroke="rgba(255,255,255,.12)"/>
+        <rect x="-19" y="-30" width="17" height="9" rx="2.4" fill="url(#sim-metal)" stroke="#7d2b20"/>
+        <rect x="3" y="-30" width="15" height="9" rx="2.4" fill="url(#sim-metal)" stroke="#7d93a6"/>
+        <rect x="-24" y="-14" width="48" height="18" rx="2" fill="#1c5fa8" opacity=".85"/>
+        <text x="0" y="0" style="font:12px ui-monospace,monospace;fill:#f2f7fb;text-anchor:middle;font-weight:700">${v.toFixed(1)} В</text>
+        <text x="0" y="12" style="font:5.4px ui-monospace,monospace;fill:#dbe8f2;text-anchor:middle">КРОНА · 6F22</text>
+        <text x="0" y="20" style="font:4.6px ui-monospace,monospace;fill:#a9c6e0;text-anchor:middle">алкалиновая</text>`);
     },
     update() {},
   },
@@ -991,15 +1009,17 @@ const EXTRA = {
     ],
     render(comp) {
       return partTag(comp, 70, 56, `
-        <line x1="-30" y1="-8" x2="-14" y2="-8" stroke="#8aa4b8" stroke-width="1.3"/>
-        <line x1="-30" y1="8" x2="-14" y2="8" stroke="#8aa4b8" stroke-width="1.3"/>
-        <line x1="14" y1="0" x2="30" y2="0" stroke="#8aa4b8" stroke-width="1.3"/>
-        <circle class="halo1" cx="0" cy="0" r="20" fill="#ff5544" opacity="0"/>
-        <circle class="halo2" cx="0" cy="0" r="20" fill="#3fd07a" opacity="0"/>
-        <circle cx="0" cy="0" r="12" fill="#e9eef3" fill-opacity=".2" stroke="#9fb0bf" stroke-width="1.1"/>
-        <circle class="core" cx="0" cy="0" r="7" fill="#dfe8ef" opacity=".85"/>
-        <path d="M -12 -8 L -12 -8 M -12 -8 L -4 -8" stroke="#8aa4b8" stroke-width="1"/>
-        <text x="0" y="24" style="font:5.5px ui-monospace;fill:#7d93a6;text-anchor:middle">2 кристалла</text>`);
+        ${lead(-30, -13, -8)}${lead(-30, -13, 8)}${lead(13, 30, 0)}
+        <circle class="halo1" cx="0" cy="-4" r="19" fill="#ff5544" opacity="0"/>
+        <circle class="halo2" cx="0" cy="4" r="19" fill="#3fd07a" opacity="0"/>
+        <circle cx="0" cy="1" r="13" fill="#0f1a22" opacity=".55"/>
+        <circle cx="0" cy="0" r="13" fill="url(#sim-lens)" stroke="#9fb0bf" stroke-width="1.1"/>
+        <circle cx="0" cy="0" r="12" fill="#e9eef3" fill-opacity=".16"/>
+        <path d="M -3 -7 L 6 0 L -3 7 Z" fill="#e9a0a0" opacity=".75"/>
+        <path d="M 3 7 L -6 0 L 3 -7 Z" fill="#9fe0b4" opacity=".6"/>
+        <circle class="core" cx="0" cy="0" r="4.6" fill="#dfe8ef" opacity=".5"/>
+        <ellipse cx="-4" cy="-5" rx="3.4" ry="2.2" fill="rgba(255,255,255,.8)" transform="rotate(-25 -4 -5)"/>
+        <text x="0" y="27" style="font:5.5px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">2 кристалла · общий K</text>`);
     },
     update(g, comp, env) {
       const ch = env.info?.channels || [0, 0];
@@ -1025,12 +1045,15 @@ const EXTRA = {
     },
     render(comp) {
       const leds = Array.from({ length: 10 }, (_, i) => `
-        <circle class="halo" data-i="${i}" cx="${-81 + i * 18}" cy="0" r="11" fill="#7ef29d" opacity="0"/>
-        <circle cx="${-81 + i * 18}" cy="0" r="6" fill="#2a3440" stroke="#46586a"/>`).join('');
+        <circle class="halo" data-i="${i}" cx="${-81 + i * 18}" cy="0" r="13" fill="#7ef29d" opacity="0"/>
+        <circle cx="${-81 + i * 18}" cy="0" r="7.6" fill="#0d151c" stroke="#33465a"/>
+        <circle cx="${-81 + i * 18}" cy="-0.6" r="6.6" fill="url(#sim-lens)" opacity=".9"/>
+        <circle cx="${-81 + i * 18 - 2}" cy="-3.4" r="2.2" fill="rgba(255,255,255,.6)"/>`).join('');
       return partTag(comp, 196, 52, `
-        <rect x="-92" y="-12" width="184" height="24" rx="3" fill="#141c25" stroke="#33465a"/>
+        <rect x="-92" y="-15" width="184" height="30" rx="4" fill="url(#sim-dark-cell)" stroke="#33465a" stroke-width="1.1"/>
+        <rect x="-90" y="-13" width="180" height="7" rx="3" fill="rgba(255,255,255,.10)"/>
         ${leds}
-        <line x1="104" y1="0" x2="92" y2="0" stroke="#8aa4b8" stroke-width="1.3"/>`);
+        <line x1="104" y1="0" x2="92" y2="0" stroke="url(#sim-metal-h)" stroke-width="2.4" stroke-linecap="round"/>`);
     },
     update(g, comp, env) {
       const ch = env.info?.channels || [];
@@ -1050,12 +1073,17 @@ const EXTRA = {
       { id: 'GND', label: '−', x: 27, y: 68, dir: 'down' },
     ],
     render(comp) {
+      const lens = (cls, cy, color) => `
+        <circle class="lamp ${cls}" cx="0" cy="${cy}" r="14" fill="${color}" stroke="rgba(0,0,0,.5)"/>
+        <path d="M -17 ${cy - 17} a 17 17 0 0 1 34 0 z" fill="#0e141a" opacity=".85"/>
+        <ellipse cx="-4" cy="${cy - 6}" rx="4.6" ry="2.8" fill="rgba(255,255,255,.35)" transform="rotate(-25 -4 ${cy - 6})"/>`;
       return partTag(comp, 82, 136, `
-        <rect x="-34" y="-62" width="68" height="124" rx="7" fill="#151d26" stroke="#33465a"/>
-        <circle class="lamp r" cx="0" cy="-38" r="15" fill="#4a1f1c" stroke="#6b2f29"/>
-        <circle class="lamp y" cx="0" cy="0" r="15" fill="#4a3d1c" stroke="#6b5b29"/>
-        <circle class="lamp g" cx="0" cy="38" r="15" fill="#1c4a2b" stroke="#296b3d"/>
-        ${['-27', '-9', '9', '27'].map((x) => `<line x1="${x}" y1="62" x2="${x}" y2="68" stroke="#8aa4b8" stroke-width="1.3"/>`).join('')}`);
+        <rect x="-33" y="-62" width="66" height="124" rx="8" fill="url(#sim-dark-cell)" stroke="#33465a" stroke-width="1.2"/>
+        <rect x="-30" y="-59" width="60" height="118" rx="6" fill="none" stroke="rgba(255,255,255,.08)"/>
+        ${lens('r', -38, '#4a1f1c')}
+        ${lens('y', 0, '#4a3d1c')}
+        ${lens('g', 38, '#1c4a2b')}
+        ${['-27', '-9', '9', '27'].map((x) => `<line x1="${x}" y1="62" x2="${x}" y2="68" stroke="url(#sim-metal-h)" stroke-width="2.4" stroke-linecap="round"/>`).join('')}`);
     },
     update(g, comp, env) {
       const ch = env.info?.channels || [0, 0, 0];
@@ -1079,16 +1107,20 @@ const EXTRA = {
       { id: 'E', label: 'E', x: 22, y: 32, dir: 'down' },
     ],
     render(comp) {
-      return partTag(comp, 78, 76, `
-        <line x1="-30" y1="6" x2="-12" y2="6" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="22" y1="-26" x2="22" y2="-2" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="22" y1="14" x2="22" y2="32" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-12" y1="-8" x2="-12" y2="20" stroke="#8aa4b8" stroke-width="2"/>
-        <line x1="-12" y1="0" x2="22" y2="-2" stroke="#8aa4b8" stroke-width="1.6"/>
-        <line x1="-12" y1="12" x2="22" y2="14" stroke="#8aa4b8" stroke-width="1.6"/>
-        <path class="arrow" d="M 4 10 L 12 12 L 6 18 Z" fill="#8aa4b8"/>
-        <circle cx="10" cy="6" r="20" fill="none" stroke="#3a4b5c"/>
-        <text class="hint" x="30" y="52" style="font:5.4px ui-monospace;fill:#7d93a6;text-anchor:middle">BC557 hFE≈100</text>`);
+      return partTag(comp, 70, 72, `
+        ${lead(-32, -16)}
+        <line x1="10" y1="-30" x2="10" y2="-12" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="10" y1="12" x2="10" y2="30" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <path d="M -16 -20 L 8 -20 A 12 12 0 0 1 8 20 L -16 20 Z" fill="url(#sim-plastic)" stroke="#2b3945" stroke-width="1.2"/>
+        <path d="M -10 -14 L 0 -14" stroke="rgba(255,255,255,.22)" stroke-width="2.6"/>
+        <ellipse cx="-8" cy="-13" rx="5" ry="2.6" fill="rgba(255,255,255,.14)" transform="rotate(-12 -8 -13)"/>
+        <line x1="-16" y1="0" x2="-4" y2="0" stroke="#dfe8ef" stroke-width="1.8"/>
+        <line x1="-4" y1="-11" x2="-4" y2="11" stroke="#dfe8ef" stroke-width="2.4"/>
+        <line x1="-4" y1="-6" x2="10" y2="-12" stroke="#dfe8ef" stroke-width="1.6"/>
+        <line x1="-4" y1="6" x2="10" y2="12" stroke="#dfe8ef" stroke-width="1.6"/>
+        <path class="arrow" d="M -1 -6 L 8 -6 L 2 -12 Z" fill="#8aa4b8"/>
+        <text x="-4" y="17" style="font:5px ui-monospace,monospace;fill:#93a4b2;text-anchor:middle">BC557</text>
+        <text x="0" y="50" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">PNP · открыт низким</text>`);
     },
     update(g, comp, env) {
       const on = !!env.info?.on;
@@ -1106,16 +1138,20 @@ const EXTRA = {
     ],
     render(comp) {
       return partTag(comp, 86, 80, `
-        <rect x="-20" y="-24" width="44" height="52" rx="3" fill="#1a222c" stroke="#33465a"/>
-        <line x1="-34" y1="6" x2="-20" y2="6" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-20" y1="-6" x2="-20" y2="18" stroke="#c3ccd4" stroke-width="2"/>
-        <line x1="-14" y1="-6" x2="-14" y2="18" stroke="#c3ccd4" stroke-width="2"/>
-        <line x1="24" y1="-28" x2="24" y2="-6" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-14" y1="-6" x2="24" y2="-6" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="24" y1="18" x2="24" y2="34" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-14" y1="18" x2="24" y2="18" stroke="#8aa4b8" stroke-width="1.4"/>
-        <path class="chan" d="M 0 -6 L 8 -6 L 8 18 L 0 18" fill="none" stroke="#8aa4b8" stroke-width="1.6"/>
-        <text class="hint" x="0" y="40" style="font:5.4px ui-monospace;fill:#7d93a6;text-anchor:middle">n-канал, Rds≈0,05 Ом</text>`);
+        <line x1="-34" y1="6" x2="-20" y2="6" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="24" y1="-28" x2="24" y2="-6" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="24" y1="18" x2="24" y2="34" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <rect x="8" y="-24" width="32" height="18" rx="2" fill="url(#sim-metal)" stroke="#7d8790" stroke-width="1"/>
+        <circle cx="24" cy="-17" r="3.6" fill="#0e1318" stroke="#98a4ae"/>
+        <rect x="-20" y="-6" width="40" height="34" rx="4" fill="url(#sim-plastic)" stroke="#2b3945" stroke-width="1.2"/>
+        <path d="M -14 -2 L 12 -2" stroke="rgba(255,255,255,.22)" stroke-width="2.2"/>
+        <line x1="-20" y1="-6" x2="-20" y2="22" stroke="#c3ccd4" stroke-width="2"/>
+        <line x1="-14" y1="-6" x2="-14" y2="22" stroke="#c3ccd4" stroke-width="2"/>
+        <line x1="-14" y1="-6" x2="24" y2="-6" stroke="#c3ccd4" stroke-width="1.6"/>
+        <line x1="-14" y1="22" x2="24" y2="22" stroke="#c3ccd4" stroke-width="1.6"/>
+        <path class="chan" d="M -2 -6 L 8 -6 L 8 22 L -2 22" fill="none" stroke="#8aa4b8" stroke-width="1.6"/>
+        <text x="16" y="14" style="font:5px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">IRF540N</text>
+        <text class="hint" x="0" y="40" style="font:5.4px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">n-канал, Rds≈0,05 Ом</text>`);
     },
     update(g, comp, env) {
       const on = !!env.info?.on;
@@ -1138,15 +1174,18 @@ const EXTRA = {
     ],
     render(comp) {
       return partTag(comp, 84, 84, `
-        <line x1="-32" y1="8" x2="-14" y2="8" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="24" y1="-30" x2="24" y2="-4" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="24" y1="16" x2="24" y2="36" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-14" y1="-6" x2="-14" y2="22" stroke="#8aa4b8" stroke-width="2"/>
-        <line x1="-14" y1="0" x2="24" y2="-4" stroke="#8aa4b8" stroke-width="1.6"/>
-        <line x1="-14" y1="14" x2="24" y2="16" stroke="#8aa4b8" stroke-width="1.6"/>
-        <circle cx="16" cy="6" r="22" fill="none" stroke="#3a4b5c"/>
-        <line x1="14" y1="-6" x2="14" y2="-24" stroke="#3a4b5c" stroke-width="2.4"/>
-        <text class="hint" x="16" y="56" style="font:5.4px ui-monospace;fill:#7d93a6;text-anchor:middle">hFE≈1000, 5 А</text>`);
+        <line x1="-32" y1="8" x2="-14" y2="8" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="24" y1="-30" x2="24" y2="-6" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="24" y1="16" x2="24" y2="36" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
+        <rect x="6" y="-26" width="36" height="20" rx="2" fill="url(#sim-metal)" stroke="#7d8790" stroke-width="1"/>
+        <circle cx="24" cy="-18" r="4" fill="#0e1318" stroke="#98a4ae"/>
+        <rect x="-6" y="-8" width="60" height="42" rx="4" fill="url(#sim-plastic)" stroke="#2b3945" stroke-width="1.2"/>
+        <path d="M 0 -4 L 30 -4" stroke="rgba(255,255,255,.22)" stroke-width="2.4"/>
+        <line x1="-14" y1="0" x2="-14" y2="26" stroke="#dfe8ef" stroke-width="2"/>
+        <line x1="-14" y1="8" x2="24" y2="4" stroke="#dfe8ef" stroke-width="1.6"/>
+        <line x1="-14" y1="20" x2="24" y2="22" stroke="#dfe8ef" stroke-width="1.6"/>
+        <text x="16" y="10" style="font:5.4px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">TIP120</text>
+        <text class="hint" x="16" y="56" style="font:5.4px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">hFE≈1000, 5 А</text>`);
     },
     update(g, comp, env) {
       const hint = g.querySelector('.hint');
@@ -1170,17 +1209,37 @@ const EXTRA = {
     ],
     render(comp) {
       return partTag(comp, 148, 116, `
-        <rect x="-72" y="-52" width="144" height="100" rx="4" fill="#1a222c" stroke="#3a5a7a"/>
-        <rect x="-40" y="-40" width="80" height="46" rx="2" fill="#2a3440" stroke="#46586a"/>
-        <path d="M -40 8 L -40 40 M 0 6 L 0 40 M 40 8 L 40 40" stroke="#4a5f72" stroke-width="2.4"/>
-        <rect x="-30" y="-34" width="60" height="10" rx="2" fill="#5a6d7d" opacity=".55"/>
-        <text x="0" y="-16" style="font:6.5px ui-monospace;fill:#8fbde3;text-anchor:middle">L298N BRIDGE</text>
-        <text x="0" y="-6" style="font:5.4px ui-monospace;fill:#5f8ba8;text-anchor:middle">A · 2 A · 5…35 В</text>
-        <circle class="led" cx="56" cy="24" r="3.4" fill="#3a4b5c"/>
-        <text x="56" y="36" style="font:4.6px ui-monospace;fill:#7d93a6;text-anchor:middle">ON</text>
-        ${[[-80, -30], [-80, -6], [-80, 18], [80, -30], [80, -6]].map(([x, y]) => `<line x1="${x}" y1="${y}" x2="${x > 0 ? 72 : -72}" y2="${y}" stroke="#8aa4b8" stroke-width="1.3"/>`).join('')}
-        <line x1="-26" y1="48" x2="-26" y2="60" stroke="#c0392b" stroke-width="1.4"/>
-        <line x1="26" y1="48" x2="26" y2="60" stroke="#8aa4b8" stroke-width="1.4"/>`);
+        <rect x="-72" y="-52" width="144" height="104" rx="4" fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.2"/>
+        <rect x="-72" y="-52" width="144" height="104" rx="4" fill="none" stroke="rgba(255,255,255,.10)"/>
+        ${[[-66, -46], [66, -46], [-66, 46], [66, 46]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.2" fill="#0a1218" stroke="#cfd8e0" stroke-width=".9"/>`).join('')}
+
+        <!-- радиатор над мостом -->
+        <rect x="-30" y="-42" width="74" height="26" rx="2" fill="url(#sim-heatsink)" stroke="#5e1a14" stroke-width="1"/>
+        ${[0, 1, 2, 3, 4].map((i) => `<rect x="${-28 + i * 14.6}" y="-42" width="4" height="26" fill="rgba(0,0,0,.22)"/>`).join('')}
+        <text x="7" y="-26" style="font:6.4px ui-monospace,monospace;fill:#ffe6df;text-anchor:middle">L298N BRIDGE</text>
+
+        <!-- две микросхемы моста -->
+        <rect x="-24" y="-8" width="26" height="30" rx="2" fill="url(#sim-dip)" stroke="#0b0f13"/>
+        <rect x="8" y="-8" width="26" height="30" rx="2" fill="url(#sim-dip)" stroke="#0b0f13"/>
+        ${[-22, -12, -2].map((x) => `<rect x="${x}" y="22" width="3" height="5" fill="url(#sim-metal-h)"/>`).join('')}
+
+        <!-- клеммники: слева входы, справа выходы -->
+        <rect x="-70" y="-38" width="16" height="62" rx="2" fill="#1d5c3a" stroke="#0b3a25"/>
+        ${[-30, -6, 18].map((y) => `<circle cx="-62" cy="${y}" r="4.4" fill="#0e1519" stroke="#cfd8e0" stroke-width=".9"/>
+          <line x1="-65.4" y1="${y}" x2="-58.6" y2="${y}" stroke="#8d9aa6" stroke-width="1.6"/>`).join('')}
+        <rect x="54" y="-38" width="16" height="44" rx="2" fill="#1d5c3a" stroke="#0b3a25"/>
+        ${[-30, -6].map((y) => `<circle cx="62" cy="${y}" r="4.4" fill="#0e1519" stroke="#cfd8e0" stroke-width=".9"/>
+          <line x1="58.6" y1="${y}" x2="65.4" y2="${y}" stroke="#8d9aa6" stroke-width="1.6"/>`).join('')}
+
+        <!-- питание -->
+        <rect x="-34" y="34" width="68" height="14" rx="2" fill="#1d5c3a" stroke="#0b3a25"/>
+        ${[-26, 26].map((x) => `<circle cx="${x}" cy="41" r="4.6" fill="#0e1519" stroke="#cfd8e0" stroke-width=".9"/>
+          <line x1="${x - 3.4}" y1="41" x2="${x + 3.4}" y2="41" stroke="#8d9aa6" stroke-width="1.6"/>`).join('')}
+        <text x="-26" y="32" style="font:5px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">−</text>
+        <text x="26" y="32" style="font:5px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">+5…35 В</text>
+
+        <circle class="led" cx="47" cy="20" r="3.6" fill="#3a4b5c" stroke="#1b2530"/>
+        <text x="47" y="31" style="font:4.6px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">ON</text>`);
     },
     update(g, comp, env) {
       const led = g.querySelector('.led');
@@ -1196,14 +1255,21 @@ const EXTRA = {
     ],
     render(comp) {
       return partTag(comp, 108, 96, `
-        <line x1="-38" y1="0" x2="-28" y2="0" stroke="#c0392b" stroke-width="1.4"/>
-        <line x1="20" y1="34" x2="20" y2="46" stroke="#8aa4b8" stroke-width="1.4"/>
-        <rect x="-28" y="-24" width="56" height="58" rx="5" fill="#2a3440" stroke="#46586a"/>
-        <circle cx="0" cy="0" r="18" fill="#1a222c" stroke="#3a4b5c"/>
+        <line x1="-38" y1="0" x2="-28" y2="0" stroke="#c0392b" stroke-width="2.4"/>
+        <line x1="20" y1="34" x2="20" y2="46" stroke="#1b1b1b" stroke-width="2.4"/>
+        <rect x="-28" y="-26" width="58" height="62" rx="7" fill="url(#sim-metal)" stroke="#6f7b86" stroke-width="1.2"/>
+        <rect x="-26" y="-24" width="54" height="10" rx="4" fill="rgba(255,255,255,.35)"/>
+        <rect x="-28" y="-26" width="10" height="62" rx="4" fill="rgba(0,0,0,.18)"/>
+        ${[0, 1, 2].map((i) => `<rect x="-24" y="${8 + i * 9}" width="48" height="3" rx="1.5" fill="rgba(0,0,0,.22)"/>`).join('')}
+        <circle cx="0" cy="0" r="19" fill="url(#sim-dark-cell)" stroke="#4a5a67" stroke-width="1.2"/>
+        <circle cx="0" cy="0" r="15" fill="none" stroke="rgba(255,255,255,.10)"/>
         <g class="rotor">
-          <path d="M 0 -14 L 6 0 L 0 14 L -6 0 Z" fill="#8fbde3"/>
+          <path d="M 0 -13 L 5 0 L 0 13 L -5 0 Z" fill="#8fbde3" opacity=".9"/>
+          <circle cx="0" cy="0" r="3" fill="#dfe8ef"/>
         </g>
-        <text x="0" y="26" style="font:5.4px ui-monospace;fill:#7d93a6;text-anchor:middle">DC 3…6 В</text>`);
+        <circle cx="0" cy="0" r="3.4" fill="url(#sim-metal)" stroke="#5a6672"/>
+        <text x="0" y="27" style="font:5.4px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">DC 3…6 В</text>
+        <text class="hint" x="21" y="52" style="font:5.4px ui-monospace,monospace;fill:#8fbde3;text-anchor:middle">0 об/мин</text>`);
     },
     update(g, comp, env) {
       const rotor = g.querySelector('.rotor');
@@ -1227,15 +1293,20 @@ const EXTRA = {
       const cells = keys.map((k, i) => {
         const r = Math.floor(i / 4), c = i % 4;
         const x = -34 + c * 23, y = -42 + r * 23;
-        return `<rect data-role="key" data-key="${i}" x="${x - 9}" y="${y - 9}" width="18" height="18" rx="3"
-                      fill="#22303c" stroke="#3d5566" style="cursor:pointer"/>
-                <text x="${x}" y="${y + 2.4}" style="font:6.5px ui-monospace;fill:#c9d7e3;text-anchor:middle;pointer-events:none">${k}</text>`;
+        return `<g>
+            <rect x="${x - 9}" y="${y - 8.4}" width="18" height="18" rx="4" fill="rgba(0,0,0,.45)"/>
+            <rect data-role="key" data-key="${i}" x="${x - 9}" y="${y - 9.6}" width="18" height="18" rx="4"
+                  fill="#22303c" stroke="#3d5566" stroke-width="1" style="cursor:pointer"/>
+            <rect x="${x - 7.6}" y="${y - 8.4}" width="15.2" height="5.4" rx="2.6" fill="rgba(255,255,255,.12)" pointer-events="none"/>
+            <text x="${x}" y="${y + 2.4}" style="font:7px ui-monospace,monospace;fill:#dfe9f2;text-anchor:middle;pointer-events:none">${k}</text>
+          </g>`;
       }).join('');
       return partTag(comp, 128, 148, `
-        <rect x="-46" y="-54" width="92" height="106" rx="5" fill="#171f28" stroke="#33465a"/>
+        <rect x="-46" y="-56" width="92" height="110" rx="6" fill="url(#sim-dark-cell)" stroke="#33465a" stroke-width="1.2"/>
+        <rect x="-43" y="-53" width="86" height="104" rx="5" fill="#182029" stroke="#243442"/>
         ${cells}
         ${[[-46, -42], [-46, -27], [-46, -12], [-46, 3], [46, -42], [46, -27], [46, -12], [46, 3]]
-          .map(([x, y]) => `<line x1="${x}" y1="${y}" x2="${x > 0 ? 40 : -40}" y2="${y}" stroke="#8aa4b8" stroke-width="1.1"/>`).join('')}`);
+          .map(([x, y]) => `<line x1="${x}" y1="${y}" x2="${x > 0 ? 40 : -40}" y2="${y}" stroke="url(#sim-metal-h)" stroke-width="2.2" stroke-linecap="round"/>`).join('')}`);
     },
     update(g, comp, env) {
       const pressed = comp.props?.pressed;
@@ -1256,17 +1327,16 @@ const EXTRA = {
     },
     render(comp) {
       const outs = 'ABCDEFGH'.split('').map((n, i) => `
-        <line x1="70" y1="${-54 + i * 15}" x2="84" y2="${-54 + i * 15}" stroke="#8aa4b8" stroke-width="1.1"/>
-        <circle class="bit" data-i="${i}" cx="72" cy="${-54 + i * 15}" r="2.6" fill="#2a3440" stroke="#46586a"/>`).join('');
+        <line x1="60" y1="${-54 + i * 15}" x2="84" y2="${-54 + i * 15}" stroke="url(#sim-metal-h)" stroke-width="2.6" stroke-linecap="round"/>
+        <circle class="bit" data-i="${i}" cx="72" cy="${-54 + i * 15}" r="2.8" fill="#2a3440" stroke="#46586a"/>`).join('');
       const ins = ['DS', 'SH', 'ST', 'OE', 'MR'].map((n, i) => `
-        <line x1="-84" y1="${-54 + i * 22}" x2="-58" y2="${-54 + i * 22}" stroke="#8aa4b8" stroke-width="1.1"/>`).join('');
+        <line x1="-84" y1="${-54 + i * 22}" x2="-60" y2="${-54 + i * 22}" stroke="url(#sim-metal-h)" stroke-width="2.6" stroke-linecap="round"/>`).join('');
       return partTag(comp, 156, 158, `
-        <rect x="-60" y="-62" width="132" height="124" rx="3" fill="#1a222c" stroke="#3a4b5c"/>
-        <text x="6" y="-44" style="font:7px ui-monospace;fill:#8fbde3;text-anchor:middle">74HC595</text>
-        <text x="6" y="-33" style="font:5px ui-monospace;fill:#5f8ba8;text-anchor:middle">8-bit shift register</text>
-        <rect x="-52" y="-26" width="42" height="10" rx="2" fill="#0b1a14" stroke="#2c5c46"/>
-        <text class="bind" x="-31" y="-18" style="font:5.5px ui-monospace;fill:#7ef29d;text-anchor:middle">00000000</text>
-        ${ins}${outs}`);
+        ${dipBody({ w: 120, h: 124, label: '74HC595', sub: '8-bit shift register · DIP-16', legs: 8 })}
+        ${ins}${outs}
+        <rect x="-46" y="-24" width="40" height="12" rx="2" fill="#08130d" stroke="#1d3b2a"/>
+        <text class="bind" x="-26" y="-15" style="font:7px ui-monospace,monospace;fill:#3fd07a;text-anchor:middle;letter-spacing:1px">00000000</text>
+        <text x="-26" y="-30" style="font:5px ui-monospace,monospace;fill:#5f8ba8;text-anchor:middle">выходы QA…QH</text>`);
     },
     update(g, comp, env) {
       const bits = env.info?.bits || [0, 0, 0, 0, 0, 0, 0, 0];
@@ -1287,14 +1357,14 @@ const EXTRA = {
       return out;
     },
     render(comp) {
-      const ins = Array.from({ length: 8 }, (_, i) => `<line x1="-84" y1="${-56 + i * 15}" x2="-58" y2="${-56 + i * 15}" stroke="#8aa4b8" stroke-width="1.1"/>`).join('');
-      const outs = [['PL', -56], ['CP', -38], ['CE', -20], ['Q7', -2]].map(([n, y]) => `<line x1="70" y1="${y}" x2="84" y2="${y}" stroke="#8aa4b8" stroke-width="1.1"/>`).join('');
+      const ins = Array.from({ length: 8 }, (_, i) => `
+        <line x1="-84" y1="${-56 + i * 15}" x2="-60" y2="${-56 + i * 15}" stroke="url(#sim-metal-h)" stroke-width="2.6" stroke-linecap="round"/>`).join('');
+      const outs = [['PL', -56], ['CP', -38], ['CE', -20], ['Q7', -2]].map(([n, y]) => `
+        <line x1="60" y1="${y}" x2="84" y2="${y}" stroke="url(#sim-metal-h)" stroke-width="2.6" stroke-linecap="round"/>`).join('');
       return partTag(comp, 156, 150, `
-        <rect x="-60" y="-64" width="132" height="78" rx="3" fill="#1a222c" stroke="#3a4b5c"/>
-        <text x="6" y="-46" style="font:7px ui-monospace;fill:#8fbde3;text-anchor:middle">74HC165</text>
-        <text x="6" y="-35" style="font:5px ui-monospace;fill:#5f8ba8;text-anchor:middle">parallel-in / serial-out</text>
-        <circle class="q" cx="72" cy="-2" r="3" fill="#2a3440" stroke="#46586a"/>
-        ${ins}${outs}`);
+        ${dipBody({ w: 120, h: 118, label: '74HC165', sub: 'parallel-in / serial-out', legs: 8 })}
+        ${ins}${outs}
+        <circle class="q" cx="72" cy="-2" r="3.2" fill="#2a3440" stroke="#46586a"/>`);
     },
     update(g, comp, env) {
       const q = g.querySelector('.q');

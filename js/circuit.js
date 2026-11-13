@@ -166,6 +166,13 @@ export class Circuit {
       if (g !== gnd) push({ type: 'R', n1: g, n2: gnd, value: 0.001 });
       if (board.vccNet && board.vccNet !== g) push({ type: 'V', n1: board.vccNet, n2: g, value: spec.vcc });
       else if (board.vccNet && board.vccNet === g) this.warnings.push({ text: `${spec.name}: питание замкнуто на землю`, level: 'danger' });
+      // дополнительные шины платы: у Raspberry Pi 5 рядом с 3,3 В есть честные 5 В
+      for (const rail of spec.rails || []) {
+        const net = this.pinNet.get(`${board.part.id}:${rail.pin}`);
+        if (!net) continue;
+        if (net !== g) push({ type: 'V', n1: net, n2: g, value: rail.volts });
+        else this.warnings.push({ text: `${spec.name}: шина ${rail.pin} замкнута на землю`, level: 'danger' });
+      }
 
       const rt = runtimes?.get?.(board.part.id) || null;
       for (const pin of spec.pins) {
