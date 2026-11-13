@@ -64,15 +64,15 @@ moodle/
 
 ```sh
 # Ubuntu / Debian / macOS / WSL
-python3 -m http.server 8000 --directory mod/robosim/simulator
-# → http://localhost:8000/
+python3 -m http.server 8080 --directory mod/robosim/simulator
+# → http://localhost:8080/
 ```
 
 ```bat
 :: Windows (PowerShell или cmd)
 cd mod\robosim\simulator
-py -3 -m http.server 8000
-:: → http://localhost:8000/  (остановить: Ctrl+C)
+py -3 -m http.server 8080
+:: → http://localhost:8080/  (остановить: Ctrl+C)
 ```
 
 ### Moodle + плагин на Ubuntu (одна команда)
