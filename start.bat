@@ -1,14 +1,14 @@
 @echo off
 chcp 65001 >nul
-rem Локальный запуск RoboSim — http://localhost:8000
+rem Локальный запуск RoboSim — http://localhost:8080
 rem Нужен Python 3 или Node.js: https://www.python.org/downloads/
 rem
-rem   start.bat            порт 8000
+rem   start.bat            порт 8080
 rem   start.bat 9000       другой порт
 setlocal
 cd /d "%~dp0"
 set PORT=%1
-if "%PORT%"=="" set PORT=8000
+if "%PORT%"=="" set PORT=8080
 set URL=http://localhost:%PORT%/
 
 rem py -3 — самый надёжный вариант; обычный python может оказаться заглушкой

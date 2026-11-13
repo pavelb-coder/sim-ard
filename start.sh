@@ -1,8 +1,8 @@
 #!/bin/sh
-# Локальный запуск RoboSim — http://localhost:8000
+# Локальный запуск RoboSim — http://localhost:8080
 # Нужен только Python 3 (или Node.js). Ничего устанавливать в проект не надо.
 cd "$(dirname "$0")" || exit 1
-PORT="${1:-8000}"
+PORT="${1:-8080}"
 case "$PORT" in
   ''|*[!0-9]*) echo "Порт должен быть числом, например: ./start.sh 9000" >&2; exit 1 ;;
 esac

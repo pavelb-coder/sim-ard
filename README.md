@@ -23,7 +23,7 @@ cd sim-ard
 ./start.sh          # macOS / Linux
 ```
 На Windows — **двойной клик по `start.bat`**: он найдёт Python (или Node.js), поднимет сервер
-в отдельном окне и сам откроет браузер на `http://localhost:8000`. Скрипты понимают и другой
+в отдельном окне и сам откроет браузер на `http://localhost:8080`. Скрипты понимают и другой
 порт: `./start.sh 9000` и `start.bat 9000` (в Windows порт — первым аргументом, а не через `set`).
 
 Без git: на странице репозитория **Code → Download ZIP**, распаковать, запустить `start.bat`/`start.sh`.
@@ -31,15 +31,15 @@ cd sim-ard
 ### 2. Одна команда, если Python уже есть
 
 ```bash
-python3 -m http.server 8000     # Windows: python -m http.server 8000
-# открыть http://localhost:8000
+python3 -m http.server 8080     # Windows: python -m http.server 8080
+# открыть http://localhost:8080
 ```
 
 ### 3. Любой другой статический сервер
 
 ```bash
-npx serve -l 8000 .             # Node.js
-php -S localhost:8000           # PHP
+npx serve -l 8080 .             # Node.js
+php -S localhost:8080           # PHP
 # или «Live Server» в VS Code — правый клик по index.html → Open with Live Server
 ```
 
@@ -55,7 +55,7 @@ php -S localhost:8000           # PHP
 
 Локальная копия весит ~7 МБ, ноль внешних запросов: шрифты системные, иконки — inline SVG.
 Можно положить на флешку и раздать классу, подняв сервер на учительском ноутбуке:
-`python3 -m http.server 8000 --bind 0.0.0.0`, ученики заходят по `http://IP-учителя:8000`.
+`python3 -m http.server 8080 --bind 0.0.0.0`, ученики заходят по `http://IP-учителя:8080`.
 
 Проверки (решатель, транспайлеры, библиотеки, переходные процессы, платы):
 
