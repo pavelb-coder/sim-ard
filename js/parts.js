@@ -39,11 +39,15 @@ function partLabel(comp, type) {
 
 const partTag = (comp, w, h, body, extra = '') => {
   const label = partLabel(comp, comp.type);
+  // подпись — «шильдик» под деталью: провода проходят под ним и не рвут текст
+  const tw = Math.round(label.length * 3.5 + 12);
   return `<g class="part" data-id="${comp.id}">
      <rect class="hit" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" fill="transparent"/>
      <g class="body">${body}</g>${extra}
-     <text class="part-label" x="0" y="${h / 2 + 16}"
-           style="font:6px ui-monospace,monospace;fill:#93a8bb;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#0b1117;stroke-width:2.4;stroke-linejoin:round">${esc(label)}</text>
+     <rect class="part-tag" x="${-tw / 2}" y="${h / 2 + 12}" width="${tw}" height="14" rx="7"
+           fill="#0c141b" stroke="#22323f" stroke-width=".8"/>
+     <text class="part-label" x="0" y="${h / 2 + 22}"
+           style="font:6px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle;pointer-events:none">${esc(label)}</text>
    </g>`;
 };
 

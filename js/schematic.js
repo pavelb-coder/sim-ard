@@ -552,6 +552,46 @@ export class Schematic {
  *
  * lane — «полоса» провода (у каждого своя), aBoard/bBoard — выводы на плате.
  */
+/** Обход платы сбоку: наружу из вывода, по краю корпуса, обратно к цели. */
+function aroundBoard(A, B, a, b, box) {
+  const left = box.x1 - 26;
+  const right = box.x2 + 26;
+  // если вывод уже сбоку от платы — обходим с его стороны
+  const aOutsideX = a.x <= box.x1 || a.x >= box.x2;
+  const costLeft = Math.abs(a.x - left) + Math.abs(b.x - left);
+  const costRight = Math.abs(a.x - right) + Math.abs(b.x - right);
+  const sx = aOutsideX ? (a.x < box.x1 ? left : right) : costLeft <= costRight ? left : right;
+  // если цель тоже сбоку — возвращаемся к ней по свободной стороне
+  const bInsideY = b.y > box.y1 && b.y < box.y2;
+  const sy = !bInsideY ? b.y : b.y < (box.y1 + box.y2) / 2 ? box.y1 - 26 : box.y2 + 26;
+  const pts = [
+    { x: A.x, y: A.y }, a,
+    { x: a.x, y: a.y }, { x: sx, y: a.y },
+    { x: sx, y: sy }, { x: b.x, y: sy },
+  ];
+  if (bInsideY) pts.push({ x: b.x, y: b.y });
+  pts.push(b, { x: B.x, y: B.y });
+  return pts;
+}
+
+/**
+ * Заходит ли ортогональный отрезок внутрь корпуса платы (с отступом pad).
+ * Провода должны обходить плату, а не ложиться на её шелкографию.
+ */
+export function enters(p, q, box, pad = 12) {
+  const x1 = box.x1 + pad, x2 = box.x2 - pad;
+  const y1 = box.y1 + pad, y2 = box.y2 - pad;
+  if (Math.abs(p.y - q.y) < 0.01) {
+    if (p.y <= y1 || p.y >= y2) return false;
+    return Math.max(p.x, q.x) > x1 && Math.min(p.x, q.x) < x2;
+  }
+  if (Math.abs(p.x - q.x) < 0.01) {
+    if (p.x <= x1 || p.x >= x2) return false;
+    return Math.max(p.y, q.y) > y1 && Math.min(p.y, q.y) < y2;
+  }
+  return false;
+}
+
 export function route(A, B, { lane = 0, aBoard = false, bBoard = false, box = null } = {}) {
   const OFF = 22;
   const horiz = (p) => p.dir === 'left' || p.dir === 'right';
@@ -585,20 +625,10 @@ export function route(A, B, { lane = 0, aBoard = false, bBoard = false, box = nu
   if (B.dir) pts.push(b);
   pts.push({ x: B.x, y: B.y });
 
-  // коридор между двумя вертикальными выводами не должен резать плату насквозь —
-  // тогда обходим её сбоку, как настоящий провод в обход корпуса
-  if (box && B.dir && vert(A) && vert(B)) {
-    const crosses = my > box.y1 - 8 && my < box.y2 + 8
-      && Math.min(a.x, b.x) < box.x2 && Math.max(a.x, b.x) > box.x1;
-    if (crosses) {
-      const sx = (a.x + b.x) < 0 ? box.x1 - 22 : box.x2 + 22;
-      pts = [
-        { x: A.x, y: A.y }, a,
-        { x: a.x, y: a.y }, { x: sx, y: a.y },
-        { x: sx, y: b.y }, { x: b.x, y: b.y },
-        b, { x: B.x, y: B.y },
-      ];
-    }
+  // провод не должен резать плату насквозь: если какой-то отрезок заходит
+  // внутрь корпуса, обходим плату сбоку, как настоящий провод в обход
+  if (box && pts.some((p, i) => i && enters(p, pts[i - 1], box))) {
+    pts = aroundBoard(A, B, a, b, box);
   }
 
   return pts.filter((p, i) => i === 0 || Math.abs(p.x - pts[i - 1].x) > 0.01 || Math.abs(p.y - pts[i - 1].y) > 0.01);

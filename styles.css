@@ -476,7 +476,7 @@ body{
 
 /* подписи элементов под деталями */
 .part-label{transition:opacity .12s}
-.no-labels .part-label{display:none}
+.no-labels .part-label,.no-labels .part-tag{display:none}
 .icon-btn.active{border-color:#2f6f8d;color:#9fd8f2;background:#16232e}
 .pin-board{opacity:.8}
 .pin-board:hover{opacity:1}
