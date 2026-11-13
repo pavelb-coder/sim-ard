@@ -187,10 +187,16 @@ foreach ($provided as $name) {
 }
 
 // ------------------------------------------------------------- база -----------
-$xml = @simplexml_load_file("$root/db/install.xml");
-if (!$xml) {
-    fail('db/install.xml не читается как XML');
+if (!function_exists('simplexml_load_file')) {
+    // На сервере без php-xml (например, чистая консоль) проверку схемы пропускаем.
+    warn('расширение simplexml не установлено — db/install.xml не проверен');
+    $xml = null;
 } else {
+    $xml = @simplexml_load_file("$root/db/install.xml");
+}
+if ($xml === null && function_exists('simplexml_load_file')) {
+    fail('db/install.xml не читается как XML');
+} else if ($xml !== null) {
     ok();
     $tables = [];
     foreach ($xml->TABLES->TABLE as $table) {
