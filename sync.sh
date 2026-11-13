@@ -27,3 +27,9 @@ fi
 
 git push -q origin HEAD:main
 echo "✓ синхронизировано $(git rev-parse --short HEAD) → https://github.com/pavelb-coder/sim-ard"
+
+# Ветка moodle живёт вместе с сайтом: плагин Moodle содержит копию симулятора,
+# поэтому после каждого обновления main обновляем и её (SKIP_MOODLE=1 — пропустить).
+if [ "${SKIP_MOODLE:-0}" != "1" ] && [ -x tools/update-moodle.sh ]; then
+  ./tools/update-moodle.sh
+fi
