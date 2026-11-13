@@ -482,3 +482,15 @@ body{
 .icon-btn.active{border-color:#2f6f8d;color:#9fd8f2;background:#16232e}
 .pin-board{opacity:.8}
 .pin-board:hover{opacity:1}
+
+
+/* ---------- сгоревшая деталь: копоть и дым ---------- */
+.burn { pointer-events: none; }
+.burn-smoke { animation: burn-smoke 2.8s ease-in-out infinite; }
+.burn-smoke2 { animation-delay: 1.3s; animation-duration: 3.4s; }
+
+@keyframes burn-smoke {
+  0%   { opacity: .5; transform: translateY(0) scale(.85); }
+  45%  { opacity: .28; }
+  100% { opacity: 0; transform: translateY(-11px) scale(1.3); }
+}

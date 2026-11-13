@@ -1139,6 +1139,36 @@ void loop() {
 `
   },
   {
+    id: 'overvolt',
+    name: 'Перегрузка: 9 В на модуль, рассчитанный на 5 В',
+    autorun: true,
+    schematic: {
+      parts: [
+        { id: 'g1', type: 'battery9', x: -140, y: 40, props: { voltage: 9 } },
+        { id: 'd1', type: 'dht11', x: 60, y: -30, props: {} },
+        { id: 'o1', type: 'multimeter', x: 60, y: 110, props: {} },
+      ],
+      wires: [
+        wire('g1', '+', 'd1', 'VCC'), wire('d1', 'GND', 'g1', '−'),
+        wire('o1', 'VΩ', 'd1', 'VCC'), wire('o1', 'COM', 'g1', '−'),
+      ],
+    },
+    code: `// Напряжение выше паспортного — деталь сгорает.
+// У DHT11 предел 5,5 В, а мы подали 9 В от батарейки.
+// Смотрите монитор порта: симулятор посчитает, когда деталь перегреется,
+// и заменит её кнопкой «Сброс».
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("9 В на модуль 5 В — так делать нельзя");
+}
+
+void loop() {
+  delay(1000);
+}
+`,
+  },
+  {
     id: 'rpi5-led',
     name: 'Raspberry Pi 5: светодиод на GPIO14',
     autorun: true,

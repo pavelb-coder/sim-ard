@@ -48,6 +48,24 @@ export const REF_PREFIX = {
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
 
+/** Вид сгоревшей детали: копоть, дым и перечёркнутая метка сверху. */
+function burnMark(comp, w, h) {
+  if (!comp.props?.burned) return '';
+  const rx = Math.max(7, w * 0.26), ry = Math.max(5, h * 0.26);
+  return `<g class="burn" pointer-events="none">
+     <ellipse cx="0" cy="0" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="#0b0806" opacity=".62"/>
+     <ellipse cx="${(-rx * 0.25).toFixed(1)}" cy="${(-ry * 0.2).toFixed(1)}" rx="${(rx * 0.5).toFixed(1)}" ry="${(ry * 0.5).toFixed(1)}" fill="#1d1310" opacity=".75"/>
+     <path class="burn-smoke" d="M ${(-rx * 0.4).toFixed(1)} ${(-ry * 0.6).toFixed(1)} q 5 -7 0 -14 q -4 -6 2 -11"
+           stroke="#8d949a" stroke-width="1.7" fill="none" stroke-linecap="round" opacity=".55"/>
+     <path class="burn-smoke burn-smoke2" d="M ${(rx * 0.35).toFixed(1)} ${(-ry * 0.5).toFixed(1)} q -5 -6 1 -12 q 5 -6 -1 -10"
+           stroke="#8d949a" stroke-width="1.4" fill="none" stroke-linecap="round" opacity=".4"/>
+     <g transform="translate(${(w / 2 - 6).toFixed(1)} ${(-h / 2 + 5).toFixed(1)})">
+       <circle r="6" fill="#2a0d0d" stroke="#c0392b" stroke-width="1"/>
+       <path d="M -2.6 -2.6 L 2.6 2.6 M 2.6 -2.6 L -2.6 2.6" stroke="#ff6b5e" stroke-width="1.3" stroke-linecap="round"/>
+     </g>
+   </g>`;
+}
+
 /** Подпись под деталью: «R1 · резистор», «A1 · Arduino Uno». */
 function partLabel(comp, type) {
   const name = SHORT_NAME[type] || comp.__def?.name || type;
@@ -63,7 +81,7 @@ const partTag = (comp, w, h, body, extra = '') => {
   const tw = Math.round(label.length * 3.5 + 12);
   return `<g class="part" data-id="${comp.id}">
      <rect class="hit" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" fill="transparent"/>
-     <g class="body">${body}</g>${extra}
+     <g class="body">${body}</g>${extra}${burnMark(comp, w, h)}
      <g class="tag">
        <rect class="part-tag" x="${-tw / 2}" y="${base + 12}" width="${tw}" height="14" rx="7"
              fill="#0c141b" stroke="#22323f" stroke-width=".8"/>
@@ -1374,6 +1392,49 @@ const EXTRA = {
 };
 
 export const PARTS = { ...DISCRETE, ...MODULES, ...POWER, ...EXTRA };
+
+/**
+ * Паспортные номиналы деталей: что деталь выдержит и когда сгорает.
+ *   vMax — максимальное напряжение между любыми двумя выводами, В;
+ *   iMax — максимальный ток через деталь, А;
+ *   pMax — максимальная рассеиваемая мощность, Вт.
+ * Чего нет в таблице — то не горит (провода, кнопки, измерительные приборы).
+ */
+export const RATINGS = {
+  led:        { vMax: 5,   iMax: 0.03,  pMax: 0.1,  hint: 'поставьте резистор 220–330 Ом' },
+  ledBicolor: { vMax: 5,   iMax: 0.03,  pMax: 0.1,  hint: 'на каждый вывод нужен свой резистор' },
+  rgbled:     { vMax: 5,   iMax: 0.03,  pMax: 0.1,  hint: 'на каждый цвет нужен свой резистор' },
+  ledBar:     { vMax: 5,   iMax: 0.03,  pMax: 0.1,  hint: 'на каждый светодиод нужен свой резистор' },
+  traffic:    { vMax: 5,   iMax: 0.03,  pMax: 0.1,  hint: 'на каждый светодиод нужен свой резистор' },
+  seg7:       { vMax: 6,   iMax: 0.03,  pMax: 0.1,  hint: 'на каждый сегмент — резистор 220 Ом' },
+  capacitor:  { vMax: 50,  hint: 'предел плёночного конденсатора — 50 В' },
+  electrolytic: { vMax: 16, hint: 'электролит рассчитан на 16 В' },
+  resistor:   { pMax: 0.25, hint: 'взяли бы резистор мощнее — на 1 Вт' },
+  pot:        { pMax: 0.5,  hint: 'у потенциометра предел 0,5 Вт' },
+  diode:      { vMax: 100, iMax: 1,  pMax: 1,   hint: 'для 1N4007 предел — 1 А' },
+  npn:        { vMax: 45,  iMax: 0.1, pMax: 0.5, hint: 'коллектор держит не больше 100 мА' },
+  pnp:        { vMax: 45,  iMax: 0.1, pMax: 0.5, hint: 'коллектор держит не больше 100 мА' },
+  tip120:     { vMax: 60,  iMax: 5,  pMax: 65,  hint: 'держит 5 А, дальше нужен радиатор' },
+  mosfet:     { vMax: 100, iMax: 30, pMax: 150, hint: '30 А — только с радиатором' },
+  ic555:      { vMax: 16,  hint: 'таймер питается от 4,5 до 16 В' },
+  sr595:      { vMax: 6,   iMax: 0.07, hint: 'микросхема работает от 5 В' },
+  sr165:      { vMax: 6,   iMax: 0.07, hint: 'микросхема работает от 5 В' },
+  buzzer:     { vMax: 5.5, hint: 'рабочее напряжение 3–5 В' },
+  relay:      { vMax: 5.5, hint: 'питание модуля — ровно 5 В' },
+  servo:      { vMax: 6.5, hint: 'питание сервопривода — 4,8–6 В' },
+  dht11:      { vMax: 5.5, hint: 'рабочее напряжение 3–5,5 В' },
+  hcsr04:     { vMax: 5.5, hint: 'дальномер работает только от 5 В' },
+  pir:        { vMax: 6,   hint: 'рабочее напряжение 4,5–6 В' },
+  lcd1602:    { vMax: 5.5, hint: 'экран работает только от 5 В' },
+  oled:       { vMax: 5.5, hint: 'питание модуля — 3,3…5 В' },
+  joystick:   { vMax: 5.5, hint: 'питание — до 5 В' },
+  dcmotor:    { vMax: 6,   iMax: 0.6, hint: 'моторчик рассчитан на 3–6 В' },
+  stepper28byj: { vMax: 6, hint: 'шаговый мотор рассчитан на 5 В' },
+};
+
+for (const [type, rate] of Object.entries(RATINGS)) {
+  if (PARTS[type]) PARTS[type].rating = rate;
+}
 
 for (const spec of Object.values(BOARDS)) {
   PARTS[spec.id] = {

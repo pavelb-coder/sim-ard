@@ -1410,6 +1410,118 @@ console.log('\nПровода: цвета и трассировка');
     && !Object.values(WIRE_COLORS).includes(SIGNAL_COLORS[0]));
 }
 
+console.log('\nНоминалы: детали горят, когда напряжение выше паспортного');
+
+{
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type], ref: id.toUpperCase() });
+  const wire = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  const rt5 = { pins: new Map([[9, { value: 1, pwm: 255, mode: 'OUTPUT' }]]) };
+  const run = (c, frames, pins = { 9: 255 }) => {
+    const m = new Map([['b1', { pins: new Map(Object.entries(pins).map(([n, v]) => [Number(n), { value: v ? 1 : 0, pwm: v, mode: 'OUTPUT' }])) }]]);
+    let r = null;
+    const burned = [], warned = [];
+    for (let i = 0; i < frames; i++) {
+      r = c.solve(m, 1 / 60);
+      if (c.burnedNow?.length) { burned.push(...c.burnedNow.map((b) => b.text)); warned.push(...c.warnings.map((w) => w.text)); }
+    }
+    r.burned = burned;
+    r.warned = warned;
+    return r;
+  };
+
+  // 1. резистор 10 Ом на 5 В — 2,5 Вт при номинале 0,25 Вт
+  {
+    const parts = [mk('uno', 'b1'), mk('resistor', 'r1', { value: 10 })];
+    const wires = [wire(1, 'b1', '5V', 'r1', '1'), wire(2, 'r1', '2', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    const first = run(c, 1);
+    check('резистор 10 Ом на 5 В рассеивает 2,5 Вт', Math.abs((first.partInfo.get('r1').power || 0) - 2.5) < 0.2,
+      `${(first.partInfo.get('r1').power || 0).toFixed(2)} Вт`);
+    const burned = run(c, 20);
+    check('такой резистор сгорает за 0,3 с', parts[1].props.burned === true);
+    check('после перегорания резистор — разрыв', (burned.partInfo.get('r1').current || 0) === 0
+      && burned.partInfo.get('r1').burned === true);
+    check('в монитор уходит сообщение с номиналом',
+      (burned.burned || []).some((t) => /сгорел/.test(t) && /250 мВт/.test(t)) || !!(burned.warned || []).find((t) => /сгорел/.test(t)),
+      (burned.burned || []).join(' | ') || 'нет сообщения');
+  }
+
+  // 2. нормальный светодиод с резистором живёт
+  {
+    const parts = [mk('uno', 'b1'), mk('resistor', 'r1', { value: 220 }), mk('led', 'd1')];
+    const wires = [wire(1, 'b1', 'D9', 'r1', '1'), wire(2, 'r1', '2', 'd1', 'A'), wire(3, 'd1', 'K', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    const res = run(c, 180);
+    check('светодиод с резистором 220 Ом не горит и через 3 с', !parts[2].props.burned && res.partInfo.get('d1').brightness > 0.5,
+      `яркость ${(res.partInfo.get('d1').brightness || 0).toFixed(2)}`);
+  }
+
+  // 3. светодиод напрямую к 5 В — сгорает
+  {
+    const parts = [mk('uno', 'b1'), mk('led', 'd1')];
+    const wires = [wire(1, 'b1', 'D9', 'd1', 'A'), wire(2, 'd1', 'K', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    run(c, 20);
+    check('светодиод без резистора сгорает', parts[1].props.burned === true,
+      c.warnings.map((w) => w.text).join(' | ').slice(0, 90));
+    const off = run(c, 1);
+    check('сгоревший светодиод больше не светит', (off.partInfo.get('d1').brightness || 0) === 0);
+  }
+
+  // 4. электролит на 16 В под напряжением 24 В
+  {
+    const mkSrc = (v) => ({ id: 'g1', type: 'psu', x: 0, y: 0, props: { voltage: v }, __def: PARTS.psu });
+    const ok = [mkSrc(12), mk('electrolytic', 'c1')];
+    const c1 = new Circuit(ok, [{ id: 'w1', a: { compId: 'g1', pin: '+' }, b: { compId: 'c1', pin: '1' } },
+      { id: 'w2', a: { compId: 'c1', pin: '2' }, b: { compId: 'g1', pin: '−' } }]);
+    for (let i = 0; i < 60; i++) c1.solve(new Map(), 1 / 60);
+    check('электролит 16 В спокойно держит 12 В', !ok[1].props.burned);
+
+    const bad = [mkSrc(24), mk('electrolytic', 'c1')];
+    const c2 = new Circuit(bad, [{ id: 'w1', a: { compId: 'g1', pin: '+' }, b: { compId: 'c1', pin: '1' } },
+      { id: 'w2', a: { compId: 'c1', pin: '2' }, b: { compId: 'g1', pin: '−' } }]);
+    let warned = [];
+    for (let i = 0; i < 30; i++) { c2.solve(new Map(), 1 / 60); if (c2.burnedNow?.length) warned = c2.burnedNow.map((b) => b.text); }
+    check('электролит 16 В под 24 В сгорает', bad[1].props.burned === true);
+    check('в сообщении сказано, сколько было и сколько можно',
+      warned.some((t) => /24 В вместо 16 В/.test(t)), warned.join(' | '));
+  }
+
+  // 5. модуль 5 В: от 5 В живёт, от 9 В — нет
+  {
+    const five = [mk('uno', 'b1'), mk('oled', 'ds1')];
+    const c1 = new Circuit(five, [wire(1, 'b1', '5V', 'ds1', 'VCC'), wire(2, 'ds1', 'GND', 'b1', 'GND')]);
+    for (let i = 0; i < 60; i++) c1.solve(new Map(), 1 / 60);
+    check('OLED-модуль спокойно живёт от 5 В', !five[1].props.burned);
+
+    const nine = [{ id: 'g1', type: 'battery9', x: 0, y: 0, props: { voltage: 9 }, __def: PARTS.battery9, ref: 'GB1' },
+      mk('oled', 'ds1')];
+    const c2 = new Circuit(nine, [{ id: 'w1', a: { compId: 'g1', pin: '+' }, b: { compId: 'ds1', pin: 'VCC' } },
+      { id: 'w2', a: { compId: 'ds1', pin: 'GND' }, b: { compId: 'g1', pin: '−' } }]);
+    for (let i = 0; i < 30; i++) c2.solve(new Map(), 1 / 60);
+    check('а от 9 В OLED сгорает', nine[1].props.burned === true,
+      c2.burnedNow.map((b) => b.text).join(' ').slice(0, 80));
+  }
+
+  // 6. замена детали возвращает цепь к жизни
+  {
+    const parts = [mk('uno', 'b1'), mk('led', 'd1')];
+    const wires = [wire(1, 'b1', 'D9', 'd1', 'A'), wire(2, 'd1', 'K', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    run(c, 20);
+    parts[1].props.burned = false;
+    c.setSchematic(parts, wires);
+    const back = run(c, 1);
+    check('новая деталь сразу работает как надо', !parts[1].props.burned && back.partInfo.get('d1').brightness > 1);
+  }
+
+  check('номиналы заданы для светодиодов, резисторов, конденсаторов и модулей',
+    ['led', 'resistor', 'electrolytic', 'oled', 'dht11', 'sr595', 'sr165', 'servo']
+      .every((t) => PARTS[t]?.rating && Object.keys(PARTS[t].rating).length > 0));
+  check('у плат и измерительных приборов номинала нет — они не горят',
+    !PARTS.uno.rating && !PARTS.multimeter.rating && !PARTS.scope.rating);
+}
+
 console.log('\nКомпилятор: наборы «Эвольвектор»');
 
 {

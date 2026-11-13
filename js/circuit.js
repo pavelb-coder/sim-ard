@@ -27,6 +27,11 @@ const METER_MAX_A = 0.5;   // предел 0,5 А (в приборе предо�
 const KE = 0.02;           // В·с/рад у мотора: 5 В без нагрузки ≈ 2400 об/мин
 const HFE = 100;                 // усиление BC547 — для модели ключа
 // последовательность фаз 28BYJ-48 (IN1…IN4): полушаги по кругу
+/** Числа для сообщений: 0,25 Вт, 32 мА, 5,2 В. */
+const ru = (x, d = 2) => String(Number(x.toFixed(d))).replace('.', ',');
+const fmtV = (v) => `${ru(v, v < 10 ? 2 : 1)} В`;
+const fmtA = (a) => (a < 1 ? `${ru(a * 1000, 0)} мА` : `${ru(a, 2)} А`);
+const fmtW = (w) => (w < 1 ? `${Math.round(w * 1000)} мВт` : `${ru(w, 2)} Вт`);
 const STEP_SEQ = ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001'];
 
 export class Circuit {
@@ -38,6 +43,7 @@ export class Circuit {
     this.indState = new Map();   // partId -> { iprev }
     this.stepState = new Map();  // partId -> { idx, angle, steps }  — фазы 28BYJ-48
     this.warnings = [];
+    this.burnedNow = [];         // очередь «кто сгорел» — её забирает интерфейс
     this.time = 0;
     this.rebuild();
   }
@@ -126,6 +132,7 @@ export class Circuit {
     const diodeIdx = new Map();
     const multiIdx = new Map();   // partId -> { канал: индекс диода } для RGB и 7-сегментника
     const sourceIdx = new Map();  // partId -> индекс источника (для тока)
+    const elemIdx = new Map();    // partId -> индекс элемента (для тока через резистор)
     const pwmNets = new Map();
     this.time += dt;
 
@@ -228,6 +235,8 @@ export class Circuit {
       const n = (pin) => this.netOf(p.id, pin);
       const info = { brightness: 0, current: 0, voltage: 0, sounding: false };
       partInfo.set(p.id, info);
+      // сгоревшая деталь — это разрыв: ток через неё не идёт, пока её не заменят
+      if (p.props?.burned) { info.burned = true; continue; }
 
       switch (p.type) {
         case 'led': {
@@ -237,7 +246,11 @@ export class Circuit {
         }
         case 'resistor': {
           const a = n('1'), b = n('2');
-          if (a && b && a !== b) push({ type: 'R', n1: a, n2: b, value: Math.max(0.1, Number(p.props?.value) || 220) });
+          if (a && b && a !== b) {
+            const R = Math.max(0.1, Number(p.props?.value) || 220);
+            elemIdx.set(p.id, push({ type: 'R', n1: a, n2: b, value: R }));
+            info.ohms = R;
+          }
           break;
         }
         case 'ldr': {
@@ -891,6 +904,75 @@ export class Circuit {
       if (info) info.sounding = v > 1.0;
     }
 
+
+    // ---- номиналы: перегрузка и перегорание -------------------------------
+    // У каждой детали есть паспорт (js/parts.js → RATINGS). Считаем, что на ней
+    // реально: напряжение между выводами, ток и мощность. Если больше номинала —
+    // деталь дымится; если перегрузка держится два кадра — сгорает насовсем.
+    for (const p of this.parts) {
+      const def = this.defOf(p);
+      if (!def || def.board) continue;
+      const info = partInfo.get(p.id);
+      if (!info || info.burned) continue;
+
+      const pins = def.pins(p);
+      let vmax = 0;
+      for (let i = 0; i < pins.length; i++) {
+        const a = this.netOf(p.id, pins[i].id);
+        if (!a) continue;
+        for (let j = i + 1; j < pins.length; j++) {
+          const b = this.netOf(p.id, pins[j].id);
+          if (!b) continue;
+          const v = Math.abs((res.v.get(a) ?? 0) - (res.v.get(b) ?? 0));
+          if (v > vmax) vmax = v;
+        }
+      }
+      if (vmax) info.voltage = vmax;
+
+      // ток: у резистора — из элемента, у светодиодов — по самому нагруженному каналу
+      let amps = info.current || 0;
+      const ri = elemIdx.get(p.id);
+      if (ri != null) {
+        amps = Math.abs(res.currents[ri] || 0);
+        info.current = amps;
+        info.power = amps * amps * (info.ohms || 220);
+      }
+      const m = multiIdx.get(p.id);
+      if (m) {
+        const vals = Object.values(m.idx).map((di) => (di == null ? 0 : Math.abs(res.currents[di] || 0)));
+        amps = Math.max(0, ...vals);
+        info.amps = amps;
+      }
+
+      const rate = def.rating;
+      if (!rate) { p.__over = 0; continue; }
+      const over = [];
+      if (rate.vMax && vmax > rate.vMax) {
+        over.push({ ratio: vmax / rate.vMax, txt: `${fmtV(vmax)} вместо ${fmtV(rate.vMax)}` });
+      }
+      if (rate.iMax && amps > rate.iMax) {
+        over.push({ ratio: amps / rate.iMax, txt: `ток ${fmtA(amps)} вместо ${fmtA(rate.iMax)}` });
+      }
+      if (rate.pMax && info.power > rate.pMax) {
+        over.push({ ratio: info.power / rate.pMax, txt: `${fmtW(info.power)} вместо ${fmtW(rate.pMax)}` });
+      }
+      if (!over.length) { p.__over = 0; continue; }
+
+      const worst = p.__burnWorst = over.reduce((a, b) => (b.ratio > a.ratio ? b : a));
+      const time = (p.__over = (p.__over || 0) + dt);
+      if (time < 0.25) continue;          // 0,25 с перегрузки: короткий выброс деталь переживает
+
+      p.props = p.props || {};
+      p.props.burned = true;
+      p.__over = 0;
+      const name = p.ref ? `${def.name} (${p.ref})` : def.name;
+      const msg = `${name} сгорел: ${worst.txt}`
+        + (rate.hint ? ` — ${rate.hint}.` : '.')
+        + ' Замените деталь: кнопка «Сброс» берёт новые.';
+      this.warnings.push({ text: msg, level: 'danger' });
+      this.burnedNow.push({ partId: p.id, text: msg, cause: worst.txt });
+    }
+
     this._last = res.v;
     try { this._duty = dutyOf; } catch { this._duty = null; }
     return { ok: true, voltages: res.v, partInfo, warnings: this.warnings, iterations: res.iterations };
@@ -902,7 +984,9 @@ export class Circuit {
 
   nameOf(partId) {
     const p = this.parts.find((q) => q.id === partId);
-    return p ? (this.defOf(p)?.name || p.type) : partId;
+    if (!p) return partId;
+    if (p.ref && this.defOf(p)?.name) return `${this.defOf(p).name} ${p.ref}`;
+    return this.defOf(p)?.name || p.type;
   }
 
   /** Скважность ШИМ на узле (если узел связан с ШИМ-выводом платы). */

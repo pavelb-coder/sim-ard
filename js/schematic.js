@@ -308,6 +308,11 @@ export class Schematic {
   // ------------------------------------------------------------- динамика ----
   /** Обновляет «физику» на схеме: яркость, нажатия, состояния выводов. */
   applySim(partInfo, runtimes) {
+    // сгорела деталь или её заменили — перерисовываем один раз, а не каждый кадр
+    for (const p of this.parts) {
+      const burned = !!p.props?.burned;
+      if (burned !== !!p.__burnShown) { p.__burnShown = burned; this.refreshPart(p); }
+    }
     for (const p of this.parts) {
       const g = this.layerParts.querySelector(`[data-id="${p.id}"]`)
         || this.layerBoards.querySelector(`[data-id="${p.id}"]`);

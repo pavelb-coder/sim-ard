@@ -345,9 +345,26 @@ function focusLine(line) {
 }
 
 const setStatus = (text, cls = '') => { statusEl.textContent = text; statusEl.className = cls; };
+/** Сгоревшая деталь — сообщение в монитор порта (как «дым» из железа). */
+function reportBurns() {
+  const list = circuit.burnedNow || [];
+  if (!list.length) return;
+  for (const b of list) appendSerial(`\n✗ ${b.text}\n`, 'err', null);
+  burnNotice = list[list.length - 1].text;
+  burnNoticeAt = Date.now();
+  warnEl.textContent = `⚠ ${burnNotice}`;
+  showSerialTab?.();
+  circuit.burnedNow = [];     // забрали — очередь пуста
+}
+
+let burnNotice = null;      // сообщение о сгоревшей детали держим на виду 10 секунд
+let burnNoticeAt = 0;
+
 const updateWarnings = (warnings) => {
   const w = warnings?.find((x) => x.level === 'danger') || warnings?.[0];
-  warnEl.textContent = w ? `⚠ ${w.text}` : '';
+  if (w) { warnEl.textContent = `⚠ ${w.text}`; return; }
+  if (burnNotice && Date.now() - burnNoticeAt < 10000) { warnEl.textContent = `⚠ ${burnNotice}`; return; }
+  warnEl.textContent = '';
 };
 
 // ------------------------------------------------------------- библиотеки ----
@@ -645,6 +662,7 @@ function solveOnce(dt) {
     else if (!buzzing) beep(0, false);
   }
   updateWarnings(res.warnings);
+  reportBurns();
   $('statIter').textContent = res.ok ? `MNA: ${res.iterations ?? '—'} итер.` : 'цепь не решается';
   return res;
 }
@@ -716,6 +734,7 @@ function startDriver() {
     if (res) {
       schematic.applySim(res.partInfo, runtimes);
       updateWarnings(res.warnings);
+      reportBurns();
       $('statIter').textContent = res.ok ? `MNA: ${res.iterations ?? '—'} итер.` : 'цепь не решается';
     }
     updateScopePwm();
@@ -742,8 +761,26 @@ function stopAll() {
   return new Promise((res) => setTimeout(res, 40));
 }
 
+/** Сгоревшие детали заменяем на новые: в симуляторе это кнопка «Сброс». */
+function reviveBurned() {
+  let n = 0;
+  for (const p of schematic.parts) {
+    if (!p.props?.burned) continue;
+    delete p.props.burned;
+    p.__over = 0;
+    schematic.refreshPart(p);
+    n++;
+  }
+  if (n) {
+    burnNotice = null;
+    appendSerial(`\n⌁ заменили сгоревшие детали: ${n}\n`, 'sys', null);
+    circuit.setSchematic(schematic.parts, schematic.wires);
+  }
+}
+
 function reset() {
   stopAll();
+  reviveBurned();
   $('timer').textContent = '00:00.0';
   scope.clear();
   setStatus('Сброшено');
@@ -1031,6 +1068,8 @@ function applyExampleScope(ex) {
 async function loadExample(ex) {
   await stopAll();
   serialEl.innerHTML = '';
+  burnNotice = null;
+  warnEl.textContent = '';
   schematic.fromJSON(ex.schematic);
   schematic.centerBoard();
   circuit.setSchematic(schematic.parts, schematic.wires);
