@@ -11,7 +11,17 @@
 set -e
 
 cd "$(dirname "$0")/.."
-src=${1:-${ROBOSIM_SRC:-../sim}}
+src=${ROBOSIM_SRC:-../sim}
+msg=""
+
+# Первый аргумент — либо путь к сайту (в нём есть index.html), либо сообщение коммита.
+for arg in "$@"; do
+  if [ -f "$arg/index.html" ]; then
+    src=$arg
+  elif [ -z "$msg" ]; then
+    msg=$arg
+  fi
+done
 
 ./tools/sync-simulator.sh "$src"
 
@@ -27,4 +37,4 @@ else
   echo "! php не найден — самопроверка пропущена"
 fi
 
-./tools/release.sh "${2:-simulator: синхронизация с сайтом}"
+./tools/release.sh "${msg:-simulator: синхронизация с сайтом}"

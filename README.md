@@ -54,6 +54,92 @@ moodle/
 Требования: **Moodle 4.0+** (проверялось на 4.x и 5.x), PHP 7.4+, никаких
 расширений сверх обычных. База — MySQL/MariaDB/PostgreSQL, всё через XMLDB.
 
+## Запуск: Ubuntu, Windows и без Moodle
+
+### Только посмотреть симулятор (Moodle не нужен)
+
+Внутри плагина лежит полноценная копия симулятора, её можно открыть локально.
+Нужен любой статический сервер — открывать `index.html` как файл нельзя,
+браузер не загрузит ES-модули из `js/`.
+
+```sh
+# Ubuntu / Debian / macOS / WSL
+python3 -m http.server 8000 --directory mod/robosim/simulator
+# → http://localhost:8000/
+```
+
+```bat
+:: Windows (PowerShell или cmd)
+cd mod\robosim\simulator
+py -3 -m http.server 8000
+:: → http://localhost:8000/  (остановить: Ctrl+C)
+```
+
+### Moodle + плагин на Ubuntu (одна команда)
+
+Нужны Ubuntu 22.04/24.04 или Debian и права root. Скрипт поставит Apache,
+MariaDB, PHP с расширениями, скачает Moodle 4.5 LTS, положит плагин в
+`mod/robosim`, создаст базу и `moodledata` и прогонит установку из консоли.
+
+```sh
+sudo ./tools/install-moodle-ubuntu.sh
+# → Сайт: http://localhost   Администратор: admin / Robosim123!
+```
+
+Что-то поменять — переменными окружения:
+
+```sh
+sudo MOODLE_URL=http://moodle.local ADMIN_PASS='СложныйПароль1!' ./tools/install-moodle-ubuntu.sh
+```
+
+Ручной вариант, если Moodle уже стоит:
+
+```sh
+sudo cp -R mod/robosim /var/www/moodle/mod/robosim
+sudo chown -R www-data:www-data /var/www/moodle/mod/robosim
+sudo -u www-data php /var/www/moodle/admin/cli/upgrade.php --non-interactive
+```
+
+Дальше — вход администратором и «Уведомления»: Moodle сам предложит установить
+новый плагин, если скопировать файлы на уже работающий сайт.
+
+### Moodle + плагин на Windows (XAMPP)
+
+1. Поставьте **XAMPP** с PHP 8.1–8.3 (xampp-windows, версия 8.2 подходит):
+   <https://www.apachefriends.org/download.html>. Запустите **Apache** и **MySQL**
+   из панели XAMPP.
+2. Скачайте Moodle 4.5 LTS: <https://download.moodle.org/download.php/direct/stable405/moodle-latest-405.tgz>
+   (это `.tgz`; Windows откроет его 7-Zip, или возьмите `.zip` из
+   <https://download.moodle.org/windows/>).
+3. Распакуйте в `C:\xampp\htdocs\moodle`.
+4. Скопируйте плагин: каталог `mod\robosim` из этой ветки →
+   `C:\xampp\htdocs\moodle\mod\robosim`
+   (или распакуйте `mod_robosim-1.0.0.zip` туда же).
+5. Создайте папку для данных `C:\xampp\moodledata` (вне `htdocs`).
+6. Откройте <http://localhost/moodle/> и пройдите установку: тип базы
+   **MariaDB**, хост `localhost`, база `moodle`, пользователь `root`, пароль пустой
+   (по умолчанию в XAMPP), каталог данных `C:\xampp\moodledata`.
+7. Плагин попадёт в список автоматически. Если ставите плагин на уже работающий
+   сайт — скопируйте файлы и откройте «Администрирование → Уведомления».
+
+Проверить, что всё на месте, можно так (из каталога Moodle):
+
+```bat
+php admin\cli\upgrade.php --non-interactive
+php admin\cli\purge_caches.php
+```
+
+### Совместимость версий
+
+| Moodle | Плагин |
+|---|---|
+| 4.0 – 4.5 LTS | работает, проверено статически и в браузере |
+| 5.0 | должен работать (та же структура каталогов) |
+| 5.1 и новее | установщик откажет: в `version.php` объявлено `supported = [400, 500]`, а с 5.1 корень сайта переехал в `public/`, и путь к плагину другой |
+
+Для Moodle 5.1+ плагин нужно отдельно переносить в `public/mod/robosim` и
+проверять заново — это отдельная задача, а не «просто скопировать».
+
 ## Как это выглядит в курсе
 
 1. Учитель в курсе нажимает «Добавить элемент или ресурс» → **Симулятор RoboSim**.
