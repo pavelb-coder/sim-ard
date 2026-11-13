@@ -7,48 +7,49 @@
  */
 
 import { BOARDS } from './boards.js';
+import { renderBoardArt } from './board-art.js';
 
 export const GRID = 10;
 
 const pinLabelStyle = 'font:6px ui-monospace,monospace;fill:#cfe6ff;text-anchor:middle';
 
-const partTag = (comp, w, h, body, extra = '') =>
-  `<g class="part" data-id="${comp.id}">
+/**
+ * Короткие подписи под деталями и префиксы позиционных обозначений.
+ * Обозначения (R1, D2, A1) присваивает schematic.js по порядку деталей.
+ */
+export const SHORT_NAME = {
+  led: 'светодиод', resistor: 'резистор', capacitor: 'конденсатор', electrolytic: 'электролит',
+  inductor: 'катушка', button: 'кнопка', pot: 'потенциометр', servo: 'сервопривод',
+  lcd1602: 'LCD 1602', oled: 'OLED 128×64', buzzer: 'зуммер', ldr: 'фоторезистор',
+  pir: 'PIR', dht11: 'DHT11', hcsr04: 'HC-SR04',
+  uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico',
+};
+
+export const REF_PREFIX = {
+  led: 'D', resistor: 'R', capacitor: 'C', electrolytic: 'C', inductor: 'L', button: 'S',
+  pot: 'RV', servo: 'M', lcd1602: 'LCD', oled: 'DS', buzzer: 'BZ', ldr: 'R', pir: 'PIR',
+  dht11: 'DHT', hcsr04: 'SR', uno: 'A', esp32: 'A', pico: 'A',
+};
+
+/** Подпись под деталью: «R1 · резистор», «A1 · Arduino Uno». */
+function partLabel(comp, type) {
+  const name = SHORT_NAME[type] || comp.__def?.name || type;
+  return comp.ref ? `${comp.ref} · ${name}` : name;
+}
+
+const partTag = (comp, w, h, body, extra = '') => {
+  const label = partLabel(comp, comp.type);
+  return `<g class="part" data-id="${comp.id}">
      <rect class="hit" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" fill="transparent"/>
      <g class="body">${body}</g>${extra}
+     <text class="part-label" x="0" y="${h / 2 + 16}"
+           style="font:6px ui-monospace,monospace;fill:#93a8bb;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#0b1117;stroke-width:2.4;stroke-linejoin:round">${esc(label)}</text>
    </g>`;
+};
 
 // ------------------------------------------------------------- платы ----
 function renderBoard(comp, spec) {
-  const W = spec.w, H = spec.h;
-  const holes = (pins) => pins.filter((p) => p.kind !== 'none').map((p) => `
-      <rect x="${p.x - 4.5}" y="${p.y - 4}" width="9" height="8" rx="1" fill="#0c141c" stroke="#2b3a4a"/>`).join('');
-  const labels = spec.pins.map((p) => {
-    const top = p.y < 0;
-    const ly = top ? p.y + 13 : p.y - 7;
-    return `<text x="${p.x}" y="${ly}" transform="rotate(-90 ${p.x} ${ly})" style="${pinLabelStyle}">${p.label}</text>`;
-  }).join('');
-
-  const body = `
-    <defs><linearGradient id="grad-${spec.id}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${spec.body[0]}"/><stop offset="1" stop-color="${spec.body[1]}"/>
-    </linearGradient></defs>
-    <rect x="${-W / 2}" y="${-H / 2}" width="${W}" height="${H}" rx="9"
-          fill="url(#grad-${spec.id})" stroke="rgba(0,0,0,.45)"/>
-    ${holes(spec.pins)}
-    <rect x="-38" y="-15" width="76" height="30" rx="4" fill="rgba(0,0,0,.22)" stroke="rgba(255,255,255,.18)"/>
-    <text x="0" y="1" style="font:700 10px ui-sans-serif;fill:#f0f7ff;text-anchor:middle">${spec.short.toUpperCase()}</text>
-    <text x="0" y="11" style="font:6px ui-sans-serif;fill:rgba(255,255,255,.6);text-anchor:middle">${spec.chip || ''}</text>
-    <rect x="${-W / 2 + 14}" y="${H / 2 - 34}" width="${Math.min(74, W / 3)}" height="24" rx="2"
-          fill="rgba(0,0,0,.25)" stroke="rgba(255,255,255,.12)"/>
-    <g class="led-on">
-      <circle cx="${spec.led.x}" cy="${spec.led.y}" r="4.5" fill="#0e2231" stroke="#1b4358"/>
-      <circle class="builtin-glow" cx="${spec.led.x}" cy="${spec.led.y}" r="4.5" fill="#ffd166" opacity="0"/>
-      <text x="${spec.led.x}" y="${spec.led.y + 12}" style="font:5px ui-monospace;fill:rgba(255,255,255,.7);text-anchor:middle">L</text>
-    </g>
-    <circle cx="${spec.led.x + 16}" cy="${spec.led.y}" r="4.5" fill="#7ef29d" opacity=".5"/>
-    ${labels}`;
-  return partTag(comp, W, H, body);
+  return partTag(comp, spec.w, spec.h, renderBoardArt(spec));
 }
 
 // ------------------------------------------------------- дискретные ----
@@ -194,14 +195,14 @@ const DISCRETE = {
         <rect x="-18" y="8" width="36" height="4" fill="#1a222b"/>
         <rect data-role="knob" x="-22" y="-6" width="44" height="26" fill="transparent" style="cursor:ew-resize"/>
         <polygon class="wiper" points="${wx},-2 ${wx - 4},4 ${wx + 4},4" fill="#e6c07b"/>
-        <text x="0" y="-12" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">${Math.round(a * 100)}%</text>`);
+        <text class="pot-value" x="0" y="-12" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">${Math.round(a * 100)}%</text>`);
     },
     update(g, comp) {
       const a = comp.props?.value ?? 0.5;
       const wx = -18 + 36 * a;
       const w = g.querySelector('.wiper');
       if (w) w.setAttribute('points', `${wx},-2 ${wx - 4},4 ${wx + 4},4`);
-      const t = [...g.querySelectorAll('text')][1];
+      const t = g.querySelector('.pot-value');
       if (t) t.textContent = `${Math.round(a * 100)}%`;
     },
   },
@@ -223,7 +224,7 @@ const DISCRETE = {
         <rect data-role="knob" x="-13" y="-13" width="26" height="26" fill="transparent" style="cursor:ew-resize"/>`);
     },
     update(g, comp) {
-      const t = g.querySelector('text');
+      const t = g.querySelector('.body text');
       if (t) t.textContent = `свет ${Math.round((comp.props?.light ?? 0.5) * 100)}%`;
     },
   },
@@ -265,7 +266,7 @@ const DISCRETE = {
         <line x1="20" y1="20" x2="20" y2="22" stroke="#8aa4b8" stroke-width="1.4"/>`);
     },
     update(g, comp) {
-      const t = g.querySelector('text');
+      const t = g.querySelector('.body text');
       if (t) t.textContent = `${(comp.props?.temp ?? 24).toFixed(0)}°C ${(comp.props?.hum ?? 45).toFixed(0)}%`;
     },
   },
@@ -288,7 +289,7 @@ const DISCRETE = {
         <text x="0" y="12" style="font:6px ui-monospace;fill:#5f8ba8;text-anchor:middle">HC-SR04</text>`);
     },
     update(g, comp) {
-      const t = g.querySelector('text');
+      const t = g.querySelector('.body text');
       if (t) t.textContent = `${Math.round(comp.props?.distance ?? 50)} см`;
     },
   },
@@ -321,7 +322,7 @@ const MODULES = {
       const a = comp.props?.angle ?? 90;
       const horn = g.querySelector('g[transform]');
       if (horn) horn.setAttribute('transform', `rotate(${a - 90} 0 -4)`);
-      const t = g.querySelector('text');
+      const t = g.querySelector('.body text');
       if (t) t.textContent = `${Math.round(a)}°`;
     },
   },

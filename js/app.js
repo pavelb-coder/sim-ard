@@ -717,6 +717,11 @@ $('sendBtn').addEventListener('click', () => { $('serialInput').value = ''; });
 $('serialInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); appendSerial(`> ${e.target.value}\n`); e.target.value = ''; }
 });
+$('labelsBtn').addEventListener('click', () => {
+  const on = schematic.toggleLabels();
+  $('labelsBtn').classList.toggle('active', on);
+  setStatus(on ? 'Подписи элементов включены' : 'Подписи элементов скрыты');
+});
 $('deleteBtn').addEventListener('click', () => schematic.removeSelected());
 $('clearBtn').addEventListener('click', () => { if (confirm('Очистить схему?')) schematic.clear(); });
 
@@ -1141,6 +1146,7 @@ function keepCentered() {
 
 function boot() {
   buildScopeControls();
+  $('labelsBtn').classList.toggle('active', schematic.showLabels !== false);
   initTasks();
 
   // схема из ссылки (#p=…) важнее локального автосохранения

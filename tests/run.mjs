@@ -18,6 +18,8 @@ import { OccupancyGrid } from '../js/ros/slam.js';
 import { RosBus } from '../js/ros/bus.js';
 import { execute, splitArgs, parseTwist, formatMessage } from '../js/ros/terminal.js';
 import { ROS_TASKS } from '../js/ros/app.js';
+import { renderBoardArt } from '../js/board-art.js';
+import { PARTS, SHORT_NAME, REF_PREFIX } from '../js/parts.js';
 
 let passed = 0, failed = 0;
 const near = (a, b, eps = 1e-3) => Math.abs(a - b) < eps;
@@ -551,6 +553,32 @@ console.log('\nROS 2: задания');
     && byId['ros-home'].check({ ...base, collected: 1, atDock: true, stopped: true }) === false);
   check('у каждого задания есть прогресс в процентах или штуках',
     ROS_TASKS.every((t) => typeof t.progress({ coverage: 0.5, collected: 2, total: 6, atDock: true, stopped: false }) === 'string'));
+}
+
+
+console.log('\nОтрисовка плат и подписи элементов');
+
+{
+  const uno = renderBoardArt(BOARDS.uno);
+  check('Uno: микросхема, логотип и разъёмы', uno.includes('ATmega328P') && uno.includes('ARDUINO') && uno.includes('ICSP'));
+  check('Uno: подписи выводов на шелкографии', uno.includes('>D13<') && uno.includes('>GND<') && uno.includes('>5V<'));
+  check('Uno: у каждого вывода есть золотая площадка',
+    (uno.match(/d4af37/g) || []).length >= BOARDS.uno.pins.length, `площадок ${(uno.match(/d4af37/g) || []).length}`);
+
+  const esp = renderBoardArt(BOARDS.esp32);
+  check('ESP32: модуль WROOM-32 и кнопки EN/BOOT', esp.includes('ESP32-WROOM-32') && esp.includes('BOOT'));
+  check('ESP32: подписи GPIO на плате', esp.includes('>G26<') && esp.includes('>G32<'));
+
+  const pico = renderBoardArt(BOARDS.pico);
+  check('Pico: RP2040, BOOTSEL и логотип', pico.includes('RP2040') && pico.includes('BOOTSEL') && pico.includes('Raspberry Pi'));
+  check('Pico: подписи GP и зубчатые полуотверстия', pico.includes('>GP0<') && pico.includes('>GP28<'));
+
+  check('неизвестная плата рисуется заглушкой', renderBoardArt({ id: 'nano', short: 'NANO', w: 100, h: 60, pins: [] }).includes('NANO'));
+  check('у каждой детали есть короткое имя и префикс обозначения',
+    Object.keys(PARTS).every((t) => SHORT_NAME[t] && REF_PREFIX[t]),
+    Object.keys(PARTS).filter((t) => !SHORT_NAME[t] || !REF_PREFIX[t]).join(','));
+  check('платы обозначаются как A1, A2 (не как U)',
+    REF_PREFIX.uno === 'A' && REF_PREFIX.esp32 === 'A' && REF_PREFIX.pico === 'A');
 }
 
 console.log(`\nИтого: ${passed} ок, ${failed} провалено\n`);

@@ -11,6 +11,8 @@
  *   languages  — какие языки доступны, defaultLang — какой открывается
  */
 
+import { BOARD_LED } from './board-art.js';
+
 const d = (id, num, label = id) => ({ id, num, label, kind: 'digital' });
 const an = (id, num, label = String(id)) => ({ id, num, label, kind: 'analog' });
 const pwr = (id, label, kind, aliasOf) => ({ id, label, kind, aliasOf });
@@ -37,7 +39,7 @@ export const BOARDS = {
     h: 160,
     body: ['#1276b0', '#0a5786'],
     chip: 'ATmega328P',
-    led: { x: 70, y: 36 },
+    led: { ...BOARD_LED.uno },
     pins: [
       ...row(14, -102, -80, 14, 'up', (i) => d(`D${i}`, i)),
       { ...pwr('GND2', 'GND', 'gnd', 'GND'), x: 96, y: -80, dir: 'up' },
@@ -64,7 +66,7 @@ export const BOARDS = {
     h: 170,
     body: ['#2f3b46', '#1c242c'],
     chip: 'ESP32-WROOM',
-    led: { x: 92, y: 40 },
+    led: { ...BOARD_LED.esp32 },
     pins: [
       // верхний ряд — «обычные» GPIO, нижний — выводы с АЦП (ADC1)
       ...row(16, -97, -85, 13, 'up', (i) => { const n = [2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26][i]; return d(n, n, `G${n}`); }),
@@ -90,7 +92,7 @@ export const BOARDS = {
     h: 170,
     body: ['#1f4d3a', '#12301f'],
     chip: 'RP2040',
-    led: { x: 80, y: 34 },
+    led: { ...BOARD_LED.pico },
     pins: [
       // GP0…GP12, а четырнадцатым — GP25 (встроенный светодиод, есть у каждого Pico)
       ...row(14, -92, -85, 12, 'up', (i) => { const n = i < 13 ? i : 25; return d(n, n, `GP${n}`); }),

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<title>Платы — проверка отрисовки</title>
+<style>
+  body{margin:0;background:#0d1218;color:#cfe0ee;font:13px system-ui,sans-serif}
+  h1{font-size:14px;padding:10px 14px;margin:0;border-bottom:1px solid #1d2630}
+  .row{display:flex;flex-wrap:wrap;gap:26px;padding:16px}
+  figure{margin:0}
+  figcaption{font-size:11px;color:#7d93a6;padding-top:6px}
+  svg{background:#111a22;border:1px solid #1d2630;border-radius:10px}
+</style>
+</head>
+<body>
+<h1>Платы: реальная отрисовка (2× масштаб)</h1>
+<div class="row" id="row"></div>
+<script type="module">
+import { PARTS } from '../js/parts.js';
+import { BOARDS_LIST } from '../js/parts.js';
+
+const row = document.getElementById('row');
+let i = 0;
+const counts = {};
+for (const spec of BOARDS_LIST) {
+  i++;
+  const NS = 'http://www.w3.org/2000/svg';
+  const w = spec.w + 40, h = spec.h + 44;
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `${-w / 2} ${-h / 2} ${w} ${h}`);
+  svg.setAttribute('width', w * 1.6);
+  svg.setAttribute('height', h * 1.6);
+  const comp = { id: `p${i}`, type: spec.id, ref: `A${i}`, props: {} };
+  svg.innerHTML = `<g transform="translate(0 0)">${PARTS[spec.id].render({ ...comp, __def: PARTS[spec.id] })}</g>`;
+  const fig = document.createElement('figure');
+  fig.appendChild(svg);
+  const cap = document.createElement('figcaption');
+  cap.textContent = `${spec.name} — ${spec.pins.length} выводов`;
+  fig.appendChild(cap);
+  row.appendChild(fig);
+}
+</script>
+</body>
+</html>

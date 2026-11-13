@@ -7,7 +7,7 @@
  * Состояние сериализуется в JSON (файл .robosim) без DOM-мусора.
  */
 
-import { PARTS, pinWorld, allPins } from './parts.js';
+import { PARTS, pinWorld, allPins, REF_PREFIX } from './parts.js';
 
 const snap = (v) => Math.round(v / 5) * 5;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -21,6 +21,7 @@ export class Schematic {
     this.seq = 1;
     this.view = { x: 0, y: 0, s: 1.45 };
     this.selected = null;         // {kind:'part'|'wire', id}
+    this.showLabels = loadLabelPref();   // подписи элементов под деталями
     this.pending = null;          // {compId, pin}
     this.drag = null;
     this.pan = null;
@@ -111,6 +112,15 @@ export class Schematic {
   // -------------------------------------------------------------- отрисовка ----
   render() {
     this.world.setAttribute('transform', `translate(${this.view.x} ${this.view.y}) scale(${this.view.s})`);
+    this.svg.classList.toggle('no-labels', this.showLabels === false);
+
+    // позиционные обозначения: R1, R2, D1… — по порядку появления на схеме
+    const counts = {};
+    for (const p of this.parts) {
+      const prefix = REF_PREFIX[p.type] || 'X';
+      counts[prefix] = (counts[prefix] || 0) + 1;
+      p.ref = `${prefix}${counts[prefix]}`;
+    }
 
     // провода
     let wsvg = '';
@@ -137,7 +147,8 @@ export class Schematic {
       for (const pin of allPins(p)) {
         const key = `${pin.compId}:${pin.pin}`;
         const active = this.pending && this.pending.compId === pin.compId && this.pending.pin === pin.pin ? ' active' : '';
-        pinsvg += `<circle class="pin${active}" data-key="${key}" data-pin="${pin.compId}|${pin.pin}" cx="${pin.x}" cy="${pin.y}" r="4.2"/>`;
+        const r = p.__def.board ? 3.2 : 4.2;
+        pinsvg += `<circle class="pin${p.__def.board ? ' pin-board' : ''}${active}" data-key="${key}" data-pin="${pin.compId}|${pin.pin}" cx="${pin.x}" cy="${pin.y}" r="${r}"/>`;
         // у платы подписи выводов уже нарисованы на корпусе — не дублируем
         if (this.view.s > 0.75 && !p.__def.board) {
           pinsvg += `<text x="${pin.x}" y="${pin.y - 7}" style="font:6px ui-monospace;fill:#6f869a;text-anchor:middle;pointer-events:none">${pin.label}</text>`;
@@ -151,6 +162,14 @@ export class Schematic {
 
     if (this.pending) this.drawPending(this.pointerWorld);
     else this.layerPending.innerHTML = '';
+  }
+
+  /** Показать/скрыть подписи элементов (выбор запоминается). */
+  toggleLabels(on) {
+    this.showLabels = typeof on === 'boolean' ? on : !this.showLabels;
+    try { localStorage.setItem('robosim:labels', this.showLabels ? '1' : '0'); } catch { /* приватный режим */ }
+    this.render();
+    return this.showLabels;
   }
 
   wirePath(w) {
@@ -478,4 +497,9 @@ function pinNumber(pinId) {
   const a = /^A(\d)$/.exec(pinId);
   if (a) return 14 + Number(a[1]);
   return null;
+}
+
+/** Подписи элементов включены по умолчанию. */
+function loadLabelPref() {
+  try { return localStorage.getItem('robosim:labels') !== '0'; } catch { return true; }
 }

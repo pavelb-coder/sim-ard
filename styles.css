@@ -464,3 +464,10 @@ body{
   .ros-stage{flex:0 0 auto;height:min(78vw,360px)}
   .ros-hintline{font-size:10px;right:10px;left:10px}
 }
+
+/* подписи элементов под деталями */
+.part-label{transition:opacity .12s}
+.no-labels .part-label{display:none}
+.icon-btn.active{border-color:#2f6f8d;color:#9fd8f2;background:#16232e}
+.pin-board{opacity:.8}
+.pin-board:hover{opacity:1}
