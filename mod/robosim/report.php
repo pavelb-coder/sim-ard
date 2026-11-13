@@ -99,7 +99,9 @@ $table->attributes['class'] = 'generaltable robosim-report';
 
 foreach ($attempts as $userid => $list) {
     $user = $DB->get_record('user', ['id' => $userid], '*', MUST_EXIST);
-    $last = $list[0];
+    // get_records_sql возвращает записи с ключом по id, поэтому первую берём через reset():
+    // сортировка attempt DESC — это последняя попытка ученика.
+    $last = reset($list);
     $best = 0;
     foreach ($list as $item) {
         $best = max($best, (int) $item->score);
@@ -111,8 +113,8 @@ foreach ($attempts as $userid => $list) {
     $statusitems = [];
     foreach ($list as $item) {
         $badge = $item->passed
-            ? html_writer::span(get_string('passed', 'mod_robosim'), 'badge badge-success robosim-badge')
-            : html_writer::span(get_string('failed', 'mod_robosim'), 'badge badge-secondary robosim-badge');
+            ? html_writer::span(get_string('passed', 'mod_robosim'), 'badge bg-success robosim-badge')
+            : html_writer::span(get_string('failed', 'mod_robosim'), 'badge bg-secondary robosim-badge');
         $statusitems[] = html_writer::div(
             html_writer::link($viewurl->out(false), get_string('attempt', 'mod_robosim') . ' ' . $item->attempt)
             . ' — ' . (int) $item->score . '% ' . $badge

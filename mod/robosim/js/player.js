@@ -24,7 +24,9 @@
         sending: 'Отправляем…',
         error: 'Не удалось отправить работу: ',
         noframe: 'Симулятор ещё не загрузился — подождите пару секунд.',
-        offline: 'Страница симулятора недоступна.'
+        offline: 'Страница симулятора недоступна.',
+        needrun: 'Сначала нажмите «Старт» в симуляторе и дайте схеме поработать пару секунд: ' +
+            'часть проверок смотрит на работающую схему. Нажмите кнопку ещё раз, чтобы всё равно сдать.'
     };
 
     function ready(fn) {
@@ -50,6 +52,9 @@
         var wwwroot = (root.getAttribute('data-wwwroot') || '').replace(/\/$/, '');
         var external = root.getAttribute('data-external') === '1';
         var loaded = false;
+        // Нажатие «Сдать», когда схема ни разу не запускалась: первый раз
+        // предупреждаем, второе нажатие отправляет работу как есть.
+        var needRunWarned = false;
 
         function setStatus(text, kind) {
             if (!statusEl) {
@@ -71,8 +76,9 @@
             list.className = 'robosim-checklist';
             items.forEach(function(item) {
                 var li = document.createElement('li');
-                li.className = item.ok ? 'robosim-check ok' : 'robosim-check fail';
-                li.textContent = (item.ok ? '✓ ' : '✗ ') + (item.text || '');
+                var mark = item.ok ? '✓ ' : (item.skipped ? '· ' : '✗ ');
+                li.className = 'robosim-check ' + (item.ok ? 'ok' : (item.skipped ? 'skip' : 'fail'));
+                li.textContent = mark + (item.text || '');
                 if (!item.ok && item.hint) {
                     var hint = document.createElement('span');
                     hint.className = 'robosim-check-hint';
@@ -120,6 +126,7 @@
                     if (res) {
                         result.score = Math.round(res.score || 0);
                         result.passed = !!res.passed;
+                        result.needRun = !!res.needRun;
                         result.checks = JSON.stringify((res.items || []).map(function(i) {
                             return {text: i.text, ok: !!i.ok, hint: i.hint || '', skipped: !!i.skipped};
                         }));
@@ -145,6 +152,13 @@
                 data.passed = true;
                 renderChecks([]);
             }
+            if (data.needRun && action === 'submit' && !needRunWarned) {
+                // Проверки, которые смотрят на работающую схему, ещё не выполнялись.
+                needRunWarned = true;
+                setStatus(STR.needrun, 'warn');
+                return Promise.resolve(null);
+            }
+            needRunWarned = false;
             setStatus(STR.sending, 'busy');
             var body = new URLSearchParams();
             body.set('id', cmid);

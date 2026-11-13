@@ -85,6 +85,10 @@
     color: var(--robosim-fail);
 }
 
+.mod-robosim .robosim-check.skip {
+    color: #6b7b89;
+}
+
 .mod-robosim .robosim-check-hint {
     color: #6b7b89;
 }

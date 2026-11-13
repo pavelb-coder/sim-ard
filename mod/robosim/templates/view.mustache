@@ -10,7 +10,7 @@
 
     Context variables required for this template:
     * cmid, name, intro, hasintro, prompt, hasprompt
-    * playerurl, playerurlplain, external, task, hastask, source
+    * playerurl, playerurlplain, external, taskid, task, hastask, source
     * sesskey, wwwroot, cansubmit, cangrade, isstaff, autograde, maxgrade, hasgrade
     * reporturl, attempts, maxattempts, attemptsleft, limited, maxreached
     * best, hasbest, lasttime, lastscore, lastpassed, viewingsubmission
@@ -19,7 +19,7 @@
      data-cmid="{{cmid}}"
      data-sesskey="{{sesskey}}"
      data-wwwroot="{{wwwroot}}"
-     data-task="{{task}}"
+     data-task="{{taskid}}"
      data-external="{{#external}}1{{/external}}{{^external}}0{{/external}}"
      data-cansubmit="{{#cansubmit}}1{{/cansubmit}}{{^cansubmit}}0{{/cansubmit}}"
      data-maxgrade="{{maxgrade}}">

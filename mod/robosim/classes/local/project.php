@@ -332,6 +332,20 @@ class project {
     }
 
     /**
+     * Название задания по его id (для подписи на странице).
+     *
+     * @param string $id идентификатор задания
+     * @return string
+     */
+    public static function task_title(string $id): string {
+        if ($id === '') {
+            return '';
+        }
+        $tasks = self::tasks();
+        return (string) ($tasks[$id]['title'] ?? $id);
+    }
+
+    /**
      * Человеческое название источника проекта.
      *
      * @param string $source строка вида example:blink, task:led-first, file:…

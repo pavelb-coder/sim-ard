@@ -52,8 +52,18 @@ $project = project::normalise($rawschematic);
 if (!$project) {
     robosim_json_response(['error' => true, 'message' => get_string('error_badproject', 'mod_robosim')]);
 }
-if (core_text::strlen($code) > 200000) {
+if (core_text::strlen($code) > 200000 || strlen($rawschematic) > project::MAX_JSON) {
     robosim_json_response(['error' => true, 'message' => get_string('error_toolong', 'mod_robosim')]);
+}
+
+// Подробности проверки приходят строкой JSON: битый или огромный ответ не храним.
+$checks = trim($checks);
+if ($checks !== '') {
+    $decoded = json_decode($checks, true);
+    $checks = is_array($decoded) ? json_encode($decoded, JSON_UNESCAPED_UNICODE) : '[]';
+    if (core_text::strlen($checks) > 20000) {
+        $checks = '[]';
+    }
 }
 
 $score = max(0, min(100, $score));
@@ -94,12 +104,15 @@ if ($action === 'check') {
 
 $record->id = $DB->insert_record('robosim_submissions', $record);
 
-// Оценка в журнал: при автопроверке — сразу, иначе работу проверит учитель.
-robosim_apply_grade($robosim, (int) $USER->id, $score, $passed);
+// Оценка в журнал: при автопроверке — сразу и по лучшей попытке,
+// иначе работу проверит учитель (в отчёте).
+$best = robosim_best_score((int) $robosim->id, (int) $USER->id);
+$best = $best === null ? (float) $score : $best;
+robosim_apply_grade($robosim, (int) $USER->id, $best, $best >= 100);
 
 $grade = null;
-if ($robosim->grade && ($robosim->autograde && $passed)) {
-    $grade = round($robosim->grade * $score / 100, 2);
+if ($robosim->grade && !empty($robosim->autograde) && $best >= 100) {
+    $grade = round($robosim->grade * $best / 100, 2);
     $DB->set_field('robosim_submissions', 'status', 'graded', ['id' => $record->id]);
     $DB->set_field('robosim_submissions', 'grade', $grade, ['id' => $record->id]);
 }
