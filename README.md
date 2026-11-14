@@ -114,7 +114,7 @@ sudo -u www-data php /var/www/moodle/admin/cli/upgrade.php --non-interactive
 3. Распакуйте в `C:\xampp\htdocs\moodle`.
 4. Скопируйте плагин: каталог `mod\robosim` из этой ветки →
    `C:\xampp\htdocs\moodle\mod\robosim`
-   (или распакуйте `mod_robosim-1.0.7.zip` туда же).
+   (или распакуйте `mod_robosim-1.0.8.zip` туда же).
 5. Создайте папку для данных `C:\xampp\moodledata` (вне `htdocs`).
 6. Откройте <http://localhost/moodle/> и пройдите установку: тип базы
    **MariaDB**, хост `localhost`, база `moodle`, пользователь `root`, пароль пустой
@@ -300,8 +300,8 @@ node tools/extract-examples.mjs ../sim         # примеры и задани�
 | Ручная оценка | отчёт → 6.5 → «Grade saved», оценка в журнале 6.5 |
 | Отчёт учителя | попытки, лучший результат, статус, кнопки Open / Download / Delete |
 | Ученик | своя страница, свои попытки, своя оценка |
-| Форма настроек элемента (1.0.7) | `course/modedit.php` → списки 54 примеров и 37 заданий, задания сгруппированы по уровню (`1 · Первый светодиод` …) |
-| Симулятор 1.0.7 внутри Moodle | 37 заданий и 54 примера в `iframe`, элемент курса сам открывает настроенное задание (`__sim.tasksPanel.currentId`), `__sim.checkTask('ev-relay')` отвечает, `allow="fullscreen; serial"` (Web Serial) |
+| Форма настроек элемента (1.0.8) | `course/modedit.php` → списки 57 примеров и 39 заданий, задания сгруппированы по уровню (`1 · Первый светодиод` …) |
+| Симулятор 1.0.8 внутри Moodle | 39 заданий и 57 примеров в `iframe`, элемент курса сам открывает настроенное задание (`__sim.tasksPanel.currentId`), `__sim.checkTask('ev-relay')` отвечает, `allow="fullscreen; serial"` (Web Serial) |
 
 ![Страница элемента курса в Moodle](docs/moodle-activity.png)
 
