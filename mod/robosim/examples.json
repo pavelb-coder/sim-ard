@@ -489,6 +489,142 @@
    }
   },
   {
+   "id": "lcd-parallel",
+   "name": "LCD 1602 без I2C (4 бита)",
+   "board": "uno",
+   "code": "// LCD 1602 без I2C-переходника: RS, E и четыре линии данных.\n// Выводы: RS — D12, E — D11, D4…D7 — D5, D4, D3, D2, RW — на землю.\n\n#include <LiquidCrystal.h>\n\nLiquidCrystal lcd(12, 11, 5, 4, 3, 2);\n\nvoid setup() {\n  lcd.begin(16, 2);\n  lcd.backlight();\n  lcd.setCursor(0, 0);\n  lcd.print(\"RoboSim 1602\");\n  lcd.setCursor(0, 1);\n  lcd.print(\"bez I2C\");\n  Serial.begin(9600);\n  Serial.println(\"Экран подключён по четырём проводам данных\");\n}\n\nvoid loop() {\n  // вторая строка — счётчик секунд; хвост затираем пробелами,\n  // чтобы на экране не оставались старые цифры\n  lcd.setCursor(0, 1);\n  lcd.print(\"sek: \");\n  lcd.print(millis() / 1000);\n  lcd.print(\"    \");\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "lcd",
+      "type": "lcd1602p",
+      "x": 0,
+      "y": 250,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "VSS"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "VDD"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "K"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "RW"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D12"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "RS"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D11"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "E"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D5"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "D4"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D4"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "D5"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D3"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "D6"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "D7"
+      }
+     }
+    ]
+   }
+  },
+  {
    "id": "oled",
    "name": "OLED 128×64 (SSD1306)",
    "board": "uno",

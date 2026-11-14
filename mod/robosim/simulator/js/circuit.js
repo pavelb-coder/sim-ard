@@ -349,6 +349,21 @@ export class Circuit {
           if (data && vcc && data !== vcc) push({ type: 'R', n1: data, n2: vcc, value: 4700 });
           break;
         }
+        // Параллельный LCD 1602: логика — обычные КМОП-входы (высокий импеданс,
+        // на цепь не влияют), а светодиод подсветки A/K светится как настоящий.
+        // В модуле уже стоит ограничительный резистор, поэтому 5 В на A и K —
+        // это нормальные 18 мА, а не сгоревший светодиод.
+        case 'lcd1602p': {
+          const vdd = n('VDD') || this.vccNet(), vss = n('VSS') || gnd;
+          if (vdd && vss && vdd !== vss) push({ type: 'R', n1: vdd, n2: vss, value: 2500 });  // сам модуль: ~2 мА
+          const a = n('A'), k = n('K');
+          if (a && k && a !== k) diodeIdx.set(p.id, push({ type: 'D', n1: a, n2: k, vf: effVf(a, 3.2), ron: 100, roff: 1e7 }));
+          for (const id of ['RS', 'RW', 'E', 'V0', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7']) {
+            const pin = n(id);
+            if (pin && vss && pin !== vss) push({ type: 'R', n1: pin, n2: vss, value: 1e7 });
+          }
+          break;
+        }
         case 'servo': {
           const a = n('VCC'), b = n('GND');
           const pwm = n('PWM');

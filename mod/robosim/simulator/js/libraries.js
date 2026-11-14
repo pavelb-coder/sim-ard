@@ -26,6 +26,7 @@ export const INCLUDES = new Map([
   ['dallastemperature.h', ['DallasTemperature']],
   ['bh1750.h', ['BH1750']],
   ['liquidcrystal_i2c.h', ['LiquidCrystal_I2C']],
+  ['liquidcrystal.h', ['LiquidCrystal']],
   ['adafruit_ssd1306.h', ['Adafruit_SSD1306']],
   ['adafruit_gfx.h', []],
   ['spi.h', []],
@@ -124,6 +125,127 @@ export function createLibraries(bus) {
       const part = this._find();
       if (!part) return;
       part.props.lines = this._buf.slice(0, 2).map((row) => row.join(''));
+      part.props.backlight = this._on;
+      bus.changed(part);
+    }
+  }
+
+  /**
+   * LCD 1602 по параллельному интерфейсу (HD44780) — библиотека LiquidCrystal.
+   *
+   * Конструктор, как в настоящей библиотеке, принимает номера выводов платы:
+   *   LiquidCrystal lcd(12, 11, 5, 4, 3, 2);                  // 4 бита
+   *   LiquidCrystal lcd(12, 11, 10, 5, 4, 3, 2);             // 4 бита + RW
+   *   LiquidCrystal lcd(12, 11, 10, 5, 4, 3, 2, 1, 0, 7, 6); // 8 бит
+   *
+   * Экран библиотека находит по схеме: берёт деталь, у которой RS, E и линии
+   * данных сидят на тех же выводах, — поэтому два экрана на одной схеме
+   * не путаются между собой. Нет питания на VDD/VSS или RW поднят в «чтение» —
+   * экран остаётся пустым, ровно как в железе.
+   */
+  class LiquidCrystal {
+    constructor(...args) {
+      const nums = args.map((x) => Number(x));
+      this.rs = nums[0] ?? null;
+      this.en = nums[1] ?? null;
+      this.rw = null;
+      this.data = [];
+      this.bits = 4;
+      if (nums.length >= 10) {                 // rs, rw, en, d0…d7
+        this.rw = nums[1]; this.en = nums[2]; this.data = nums.slice(3, 11); this.bits = 8;
+      } else if (nums.length === 7) {           // rs, rw, en, d4…d7
+        this.rw = nums[1]; this.en = nums[2]; this.data = nums.slice(3, 7);
+      } else {                                  // rs, en, d4…d7
+        this.data = nums.slice(2, 6);
+      }
+      this.cols = 16; this.rows = 2;
+      this._buf = Array.from({ length: 2 }, () => Array(16).fill(' '));
+      this._col = 0; this._row = 0; this._on = true;
+      this._part = null;
+    }
+
+    /** Выводы данных по именам: D4…D7 в 4-битном режиме, D0…D7 в 8-битном. */
+    _dataIds() {
+      const first = this.bits === 8 ? 0 : 4;
+      return this.data.map((_, i) => `D${first + i}`);
+    }
+
+    /** Сколько выводов библиотеки реально попали на выводы этой детали. */
+    _score(part) {
+      const can = (name) => typeof bus.sameNet === 'function';
+      if (!can()) return 0;
+      let n = 0;
+      if (this.rs != null && bus.sameNet(this.rs, part, 'RS')) n++;
+      if (this.en != null && bus.sameNet(this.en, part, 'E')) n++;
+      this._dataIds().forEach((id, i) => { if (this.data[i] != null && bus.sameNet(this.data[i], part, id)) n++; });
+      return n;
+    }
+
+    _find() {
+      if (this._part) return this._part;
+      if (typeof bus.partsOfType !== 'function') return null;
+      let best = null;
+      let bestScore = 0;
+      for (const part of bus.partsOfType('lcd1602p')) {
+        const sc = this._score(part);
+        if (sc > bestScore) { best = part; bestScore = sc; }
+      }
+      // одного случайного провода мало: нужны RS, E и хотя бы две линии данных
+      if (best && bestScore >= 4) { this._part = best; return best; }
+      return null;
+    }
+
+    /** Экран получает питание: VDD на 5 В и VSS на земле платы. */
+    _powered(part) {
+      if (typeof bus.poweredOn !== 'function') return true;
+      return bus.poweredOn(part, 'VDD', 'VSS');
+    }
+
+    /**
+     * RW, поднятый в высокий уровень, переводит HD44780 в режим чтения:
+     * запись в него не проходит, и на экране ничего не меняется.
+     */
+    _writeAllowed(part) {
+      if (this.rw == null || typeof bus.sameNet !== 'function' || typeof bus.voltageOfPin !== 'function') return true;
+      if (!bus.sameNet(this.rw, part, 'RW')) return true;      // RW никуда не подключён — можно писать
+      return (bus.voltageOfPin(this.rw) || 0) < 2.5;
+    }
+
+    begin(cols, rows) {
+      if (cols && rows) {
+        this.cols = cols; this.rows = rows;
+        this._buf = Array.from({ length: rows }, () => Array(cols).fill(' '));
+      }
+      this._part = null;          // могли переподключить провода — ищем экран заново
+      this._find();
+      this._push();
+    }
+    init() { this.begin(); }
+    clear() { this._buf = Array.from({ length: this.rows }, () => Array(this.cols).fill(' ')); this._push(); }
+    home() { this._col = 0; this._row = 0; }
+    setCursor(c, r) { this._col = Math.max(0, c | 0); this._row = Math.max(0, r | 0); }
+    cursor() {} noCursor() {} blink() {} noBlink() {} display() {} noDisplay() {}
+    scrollDisplayLeft() {} scrollDisplayRight() {} autoscroll() {} noAutoscroll() {}
+    leftToRight() {} rightToLeft() {}
+    createChar() {}
+    backlight() { this._on = true; this._push(); }
+    noBacklight() { this._on = false; this._push(); }
+    print(v) {
+      const part = this._find();
+      if (part && !this._writeAllowed(part)) return;      // RW = HIGH: дисплей молчит
+      for (const ch of String(v)) {
+        if (this._row < this.rows && this._col < this.cols) this._buf[this._row][this._col] = ch;
+        this._col++;
+        if (this._col >= this.cols) { this._col = 0; this._row++; if (this._row >= this.rows) this._row = 0; }
+      }
+      this._push();
+    }
+    write(code) { this.print(typeof code === 'number' ? String.fromCharCode(code) : code); }
+    _push() {
+      const part = this._find();
+      if (!part) return;
+      const live = this._powered(part);
+      part.props.lines = live ? this._buf.slice(0, 2).map((row) => row.join('')) : ['', ''];
       part.props.backlight = this._on;
       bus.changed(part);
     }
@@ -317,7 +439,7 @@ export function createLibraries(bus) {
   }
 
   return {
-    Servo, DHT, DHT11, Stepper, LiquidCrystal_I2C, Adafruit_SSD1306,
+    Servo, DHT, DHT11, Stepper, LiquidCrystal, LiquidCrystal_I2C, Adafruit_SSD1306,
     MPU6050, Adafruit_MPU6050, Adafruit_BMP280, OneWire, DallasTemperature, BH1750,
     Wire: { begin() {}, setClock() {} },
   };

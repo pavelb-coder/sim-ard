@@ -18,6 +18,17 @@ const board = (type = 'uno', x = 0, y = 0, id = 'b1') => ({ id, type, x, y, prop
 const wire = (ac, ap, bc, bp) => ({ a: { compId: ac, pin: ap }, b: { compId: bc, pin: bp } });
 
 /** Минимальный стартовый скетч: setup/loop уже на месте, писать есть куда. */
+/** Цифровой вывод платы, на котором сидит вывод детали (D2…D13) или null. */
+const digitalPinOf = (cx, part, pinId) => {
+  const net = cx.netOf(part.id, pinId);
+  if (!net) return null;
+  for (let n = 2; n <= 13; n++) {
+    const bp = cx.boardPin(`D${n}`);
+    if (bp && bp.net === net) return `D${n}`;
+  }
+  return null;
+};
+
 const SKELETON_CPP = `// Задание: соберите схему и допишите скетч.
 // Подсказка появится в панели «Проблемы», если что-то забыли.
 
@@ -1805,6 +1816,78 @@ export const TASKS = [
       },
     ],
     solutionExample: 'soil-watering',
+  },
+
+  // --------------------------------------------------------------- 37 ----
+  {
+    id: 'ev-lcd-parallel',
+    title: 'LCD 1602 по проводам, без I2C',
+    level: 3,
+    topic: 'Дисплеи',
+    minutes: 25,
+    brief: 'Подключите LCD 1602 напрямую, как в наборе «Эвольвектор»: RS, E и четыре линии данных на цифровые выводы, RW — на землю. I2C-переходника нет, все провода видно.',
+    goals: [
+      'VSS и VDD — на землю и 5 В, RW — на землю (режим записи)',
+      'RS, E и D4…D7 — на цифровые выводы платы',
+      'LiquidCrystal lcd(12, 11, 5, 4, 3, 2), begin(16, 2) и print()',
+    ],
+    start: { parts: [board()], wires: [], code: SKELETON_CPP },
+    checks: [
+      {
+        id: 'display', kind: 'schema', text: 'На схеме есть LCD 1602 с параллельным интерфейсом',
+        hint: 'В палитре он называется «LCD 1602 (параллельный)» и стоит рядом с I2C-версией.',
+        test: (cx) => ({ ok: cx.partsOf('lcd1602p').length > 0, detail: '' }),
+      },
+      {
+        id: 'power', kind: 'schema', text: 'Питание по паспорту: VDD (вывод 2) на 5 В, VSS (вывод 1) на земле',
+        hint: 'Провода 5 В и GND идут на выводы VDD и VSS — перепутаете, и экран сгорит.',
+        test: (cx) => ({ ok: cx.partsOf('lcd1602p').some((l) => cx.toVcc(l.id, 'VDD') && cx.toGround(l.id, 'VSS')), detail: '' }),
+      },
+      {
+        id: 'write-mode', kind: 'schema', text: 'RW (вывод 5) на земле — дисплей работает на запись',
+        hint: 'Пока RW в высоком уровне, HD44780 читает шину и не принимает текст: посадите RW на GND.',
+        test: (cx) => ({ ok: cx.partsOf('lcd1602p').some((l) => cx.toGround(l.id, 'RW')), detail: '' }),
+      },
+      {
+        id: 'control', kind: 'schema', text: 'RS и E подключены к цифровым выводам платы',
+        hint: 'Например, RS → D12, E → D11: это те же номера выводов, что в конструкторе LiquidCrystal.',
+        test: (cx) => cx.partsOf('lcd1602p').some((l) => {
+          const rs = digitalPinOf(cx, l, 'RS');
+          const en = digitalPinOf(cx, l, 'E');
+          return Boolean(rs && en && rs !== en);
+        }),
+      },
+      {
+        id: 'data', kind: 'schema', text: 'Все четыре линии данных D4…D7 — на разных цифровых выводах',
+        hint: 'В 4-битном режиме хватает D4…D7: четыре провода вместо восьми.',
+        test: (cx) => cx.partsOf('lcd1602p').some((l) => {
+          const used = ['D4', 'D5', 'D6', 'D7'].map((id) => digitalPinOf(cx, l, id));
+          return used.every(Boolean) && new Set(used).size === 4;
+        }),
+      },
+      {
+        id: 'library', kind: 'code', text: 'Подключена библиотека LiquidCrystal и создан объект с выводами',
+        hint: '#include <LiquidCrystal.h>  и  LiquidCrystal lcd(12, 11, 5, 4, 3, 2);',
+        test: (cx) => cx.codeHas(/#include\s*<LiquidCrystal\.h>/)
+          && cx.codeHas(/LiquidCrystal\s+\w+\s*\(\s*\d+\s*,/),
+      },
+      {
+        id: 'begin', kind: 'code', text: 'Экран инициализирован: begin(16, 2)',
+        test: (cx) => cx.codeHas(/\.begin\s*\(\s*16\s*,\s*2\s*\)/),
+      },
+      {
+        id: 'text', kind: 'behavior', text: 'На экране появился текст, и в нём есть число',
+        hint: 'Запустите скетч: экран на схеме — настоящий, на нём правда появляются буквы.',
+        test: (cx) => {
+          const lines = Object.values(cx.trace.lcd || {})[0] || [];
+          const text = lines.join(' ');
+          const letters = (text.match(/[A-Za-zА-Яа-я]/g) || []).length;
+          const digits = (text.match(/\d/g) || []).length;
+          return { ok: letters >= 3 && digits >= 1, detail: `«${text.trim()}»` };
+        },
+      },
+    ],
+    solutionExample: 'lcd-parallel',
   },
 
 ];

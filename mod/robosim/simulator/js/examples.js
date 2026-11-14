@@ -281,6 +281,57 @@ void loop() {
   },
 
   {
+    id: 'lcd-parallel',
+    name: 'LCD 1602 без I2C (4 бита)',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'lcd', type: 'lcd1602p', x: 0, y: 250, props: {} },
+      ],
+      wires: [
+        // питание и «земля» — выводы 1, 2, 15, 16
+        wire('b1', 'GND2', 'lcd', 'VSS'), wire('b1', '5V2', 'lcd', 'VDD'),
+        wire('b1', '5V2', 'lcd', 'A'), wire('b1', 'GND2', 'lcd', 'K'),
+        // режим записи: RW (вывод 5) сажаем на землю
+        wire('b1', 'GND2', 'lcd', 'RW'),
+        // управление и четыре линии данных — как в учебных наборах
+        wire('b1', 'D12', 'lcd', 'RS'), wire('b1', 'D11', 'lcd', 'E'),
+        wire('b1', 'D5', 'lcd', 'D4'), wire('b1', 'D4', 'lcd', 'D5'),
+        wire('b1', 'D3', 'lcd', 'D6'), wire('b1', 'D2', 'lcd', 'D7'),
+      ],
+    },
+    code: `// LCD 1602 без I2C-переходника: RS, E и четыре линии данных.
+// Выводы: RS — D12, E — D11, D4…D7 — D5, D4, D3, D2, RW — на землю.
+
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+void setup() {
+  lcd.begin(16, 2);
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("RoboSim 1602");
+  lcd.setCursor(0, 1);
+  lcd.print("bez I2C");
+  Serial.begin(9600);
+  Serial.println("Экран подключён по четырём проводам данных");
+}
+
+void loop() {
+  // вторая строка — счётчик секунд; хвост затираем пробелами,
+  // чтобы на экране не оставались старые цифры
+  lcd.setCursor(0, 1);
+  lcd.print("sek: ");
+  lcd.print(millis() / 1000);
+  lcd.print("    ");
+  delay(500);
+}
+`,
+  },
+
+  {
     id: 'oled',
     name: 'OLED 128×64 (SSD1306)',
     autorun: true,

@@ -23,7 +23,7 @@ const pinLabelStyle = 'font:6px ui-monospace,monospace;fill:#cfe6ff;text-anchor:
 export const SHORT_NAME = {
   led: 'светодиод', resistor: 'резистор', capacitor: 'конденсатор', electrolytic: 'электролит',
   inductor: 'катушка', button: 'кнопка', pot: 'потенциометр', servo: 'сервопривод',
-  lcd1602: 'LCD 1602', oled: 'OLED 128×64', buzzer: 'зуммер', ldr: 'фоторезистор',
+  lcd1602: 'LCD 1602', lcd1602p: 'LCD 1602 (параллельный)', oled: 'OLED 128×64', buzzer: 'зуммер', ldr: 'фоторезистор',
   pir: 'PIR', dht11: 'DHT11', hcsr04: 'HC-SR04',
   diode: 'диод', npn: 'транзистор', rgbled: 'светодиод RGB', toggle: 'тумблер',
   battery9: 'батарейка 9 В', batteryAA: 'отсек 4×AA', psu: 'источник питания', scope: 'осциллограф',
@@ -42,7 +42,7 @@ export const SHORT_NAME = {
 
 export const REF_PREFIX = {
   led: 'D', resistor: 'R', capacitor: 'C', electrolytic: 'C', inductor: 'L', button: 'S',
-  pot: 'RV', servo: 'M', lcd1602: 'LCD', oled: 'DS', buzzer: 'BZ', ldr: 'R', pir: 'PIR',
+  pot: 'RV', servo: 'M', lcd1602: 'LCD', lcd1602p: 'LCD', oled: 'DS', buzzer: 'BZ', ldr: 'R', pir: 'PIR',
   dht11: 'DHT', hcsr04: 'SR', uno: 'A', esp32: 'A', pico: 'A', rpi5: 'A',
   diode: 'VD', npn: 'VT', rgbled: 'D', toggle: 'S', seg7: 'HG', relay: 'K', joystick: 'RV', stepper28byj: 'M',
   battery9: 'GB', batteryAA: 'GB', psu: 'G', scope: 'OS', multimeter: 'PA', logicprobe: 'PL',
@@ -811,6 +811,60 @@ const MODULES = {
         <text x="0" y="22" style="font:4.8px ui-monospace,monospace;fill:#cfe9dc;text-anchor:middle">1602 · I2C · PCF8574</text>`);
     },
     update() {},
+  },
+
+  /**
+   * LCD 1602 без I2C-переходника: настоящий HD44780 с 16-контактным разъёмом.
+   * Выводы идут как в паспорте: 1 VSS, 2 VDD, 3 V0, 4 RS, 5 RW, 6 E,
+   * 7…14 D0…D7, 15 A, 16 K. Шина данных подключается к выводам платы
+   * напрямую — по 4 проводам (D4…D7) или по восьми, как в железе.
+   */
+  lcd1602p: {
+    name: 'LCD 1602 (параллельный)', category: 'Модули', w: 252, h: 92,
+    pins: () => {
+      // имена выводов написаны на шелкографии (VSS, VDD, V0, RS, RW, E, D0…D7, A, K),
+      // поэтому автоматические подписи у площадок не дублируем
+      const ids = ['VSS', 'VDD', 'V0', 'RS', 'RW', 'E', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'A', 'K'];
+      return ids.map((id, i) => ({ id, label: '', x: -105 + i * 14, y: -40, dir: 'up' }));
+    },
+    render(comp) {
+      const lines = comp.props?.lines || ['', ' '];
+      const on = comp.props?.backlight !== false;
+      const cells = (i) => esc(String(lines[i] || '').padEnd(16).slice(0, 16)).replace(/ /g, '\u00a0');
+      const row = (i) => `<text class="lcd-row" x="-104" y="${-5 + i * 15}"
+        style="font:11px ui-monospace,monospace;fill:${on ? '#0a2b1d' : '#0d1712'};letter-spacing:1.3px">${cells(i)}</text>`;
+      const pads = Array.from({ length: 16 }, (_, i) => {
+        const x = -105 + i * 14;
+        return `<rect x="${x - 4}" y="-45" width="8" height="7" rx="1" fill="#d9b44a" stroke="#8a6f22" stroke-width=".5"/>
+          <line x1="${x}" y1="-45" x2="${x}" y2="-49" stroke="url(#sim-metal-h)" stroke-width="2" stroke-linecap="round"/>
+          <text x="${x}" y="-31" style="font:4.4px ui-monospace,monospace;fill:#dff2e6;text-anchor:middle">${
+            ['VSS', 'VDD', 'V0', 'RS', 'RW', 'E', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'A', 'K'][i]}</text>
+          <text x="${x}" y="-25" style="font:3.6px ui-monospace,monospace;fill:#7fae95;text-anchor:middle">${i + 1}</text>`;
+      }).join('');
+      return partTag(comp, 252, 92, `
+        <rect x="-126" y="-38" width="252" height="78" rx="3" fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.1"/>
+        ${pads}
+        <circle cx="-119" cy="-33" r="2.1" fill="#0a1c14" stroke="#2f5c45" stroke-width=".6"/>
+        <circle cx="119" cy="-33" r="2.1" fill="#0a1c14" stroke="#2f5c45" stroke-width=".6"/>
+        <rect x="-110" y="-19" width="220" height="40" rx="2" fill="#151c23" stroke="#2b3945"/>
+        <rect class="lcd-glass" x="-107" y="-16" width="214" height="34" rx="1.5" fill="${on ? '#8ce8a4' : '#4d8a60'}" stroke="#0d3a1f"/>
+        <rect class="lcd-glow" x="-107" y="-16" width="214" height="34" rx="1.5" fill="#d8ffe6" opacity="0"/>
+        <rect x="-107" y="-16" width="214" height="10" rx="1.5" fill="rgba(255,255,255,.16)"/>
+        ${row(0)}${row(1)}
+        <text x="0" y="31" style="font:4.8px ui-monospace,monospace;fill:#cfe9dc;text-anchor:middle">1602 · HD44780 · параллельный · RS/E/D4…D7 · подсветка A/K</text>`);
+    },
+    update(g, comp, env) {
+      // Подсветка честная: яркость берётся из тока через A/K, а «выключить свет»
+      // может и скетч (noBacklight). Без тока стекло просто зеленоватое, как у
+      // настоящего экрана без подсветки, — буквы на нём всё равно видны.
+      const b = Math.min(1, env.brightness || 0);
+      const lit = b > 0.05 && comp.props?.backlight !== false;
+      const glow = g.querySelector('.lcd-glow');
+      if (glow) glow.setAttribute('opacity', String(Math.min(0.5, b * 0.5)));
+      const glass = g.querySelector('.lcd-glass');
+      if (glass) glass.setAttribute('fill', lit ? '#8ce8a4' : '#4d8a60');
+      g.querySelectorAll('.lcd-row').forEach((t) => t.setAttribute('fill', lit ? '#0a2b1d' : '#12351f'));
+    },
   },
 
   oled: {
@@ -1723,6 +1777,9 @@ export const RATINGS = {
   hcsr04:     { vMax: 5.5, hint: 'дальномер работает только от 5 В', ...MODULE_POL },
   pir:        { vMax: 6,   hint: 'рабочее напряжение 4,5–6 В', ...MODULE_POL },
   lcd1602:    { vMax: 5.5, hint: 'экран работает только от 5 В', ...MODULE_POL },
+  lcd1602p:   { vMax: 5.5, vMin: -0.6, plus: 'VDD', minus: 'VSS',
+                hint: 'экран работает только от 5 В (VDD — вывод 2, VSS — вывод 1)',
+                revHint: 'плюс питания идёт на VDD (вывод 2), минус — на VSS (вывод 1)' },
   oled:       { vMax: 5.5, hint: 'питание модуля — 3,3…5 В', ...MODULE_POL },
   joystick:   { vMax: 5.5, hint: 'питание — до 5 В' },
   dcmotor:    { vMax: 6,   iMax: 0.6, hint: 'моторчик рассчитан на 3–6 В' },
