@@ -7,6 +7,7 @@
  */
 
 import { BOARDS } from './boards.js';
+import { ARENA, TRACK, CAR, newPose } from './linecar.js';
 import { renderBoardArt } from './board-art.js';
 import {
   lead, resistorBody, ledLens, electrolyticCan, diodeBody, to92, to220, dipBody, pcbModule, shade,
@@ -32,6 +33,7 @@ export const SHORT_NAME = {
   pnp: 'транзистор PNP', mosfet: 'MOSFET', tip120: 'Дарлингтон TIP120',
   l298n: 'драйвер L298N', dcmotor: 'мотор постоянного тока', keypad: 'клавиатура 4×4',
   ws2812: 'лента WS2812', ws2812m: 'матрица WS2812', ws2812r: 'кольцо WS2812',
+  linecar: 'робот-тележка (по линии)',
   sr595: 'сдвиговый регистр 74HC595', sr165: 'сдвиговый регистр 74HC165',
   seg7: 'индикатор', relay: 'реле', joystick: 'джойстик', stepper28byj: 'шаговый двигатель',
   uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico', rpi5: 'Raspberry Pi 5',
@@ -51,7 +53,7 @@ export const REF_PREFIX = {
   usbcable: 'X',
   mpu6050: 'MPU', bmp280: 'BMP', ds18b20: 'T', bh1750: 'LX', mq2: 'GAS', soil: 'SM', sound: 'MIC',
   l298n: 'DA', dcmotor: 'M', keypad: 'SB', sr595: 'DD', sr165: 'DD',
-  ws2812: 'D', ws2812m: 'D', ws2812r: 'D',
+  ws2812: 'D', ws2812m: 'D', ws2812r: 'D', linecar: 'RB',
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
 
@@ -97,7 +99,7 @@ const sensorBoard = (comp, w, h, body) => partTag(comp, w, h, `
   <circle cx="${w / 2 - 11}" cy="${-h / 2 + 11}" r="2.2" fill="#0d2a1d" stroke="#2c5c46" stroke-width=".6"/>
   ${body}`);
 
-const partTag = (comp, w, h, body, extra = '') => {
+const partTag = (comp, w, h, body, extra = '', readout = '') => {
   const label = partLabel(comp, comp.type);
   // шильдик стоит ниже самой нижней подписи вывода, чтобы они не наезжали
   const pins = comp.__def?.pins ? comp.__def.pins(comp) : [];
@@ -112,6 +114,13 @@ const partTag = (comp, w, h, body, extra = '') => {
              fill="#0c141b" stroke="#22323f" stroke-width=".8"/>
        <text class="part-label" x="0" y="${base + 22}"
              style="font:6px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle;pointer-events:none">${esc(label)}</text>
+       ${readout ? `<g class="readout">
+         <rect x="${-Math.round(String(readout).length * 3.1 + 10) / 2}" y="${base + 28}"
+               width="${Math.round(String(readout).length * 3.1 + 10)}" height="13" rx="6.5"
+               fill="#08161d" stroke="#1c4a3a" stroke-width=".8"/>
+         <text x="0" y="${base + 37.2}"
+               style="font:6px ui-monospace,monospace;fill:#5ee0a0;text-anchor:middle;pointer-events:none">${esc(readout)}</text>
+       </g>` : ''}
      </g>
    </g>`;
 };
@@ -1577,49 +1586,61 @@ const EXTRA = {
   },
 
   l298n: {
-    name: 'Драйвер двигателя L298N', category: 'Модули', w: 148, h: 116,
+    name: 'Драйвер двигателя L298N', category: 'Модули', w: 160, h: 124,
+    // У модуля два канала: IN1/IN2 через ENA — мотор A, IN3/IN4 через ENB — мотор B.
     pins: () => [
-      { id: 'IN1', label: 'IN1', x: -80, y: -30, dir: 'left' },
-      { id: 'IN2', label: 'IN2', x: -80, y: -6, dir: 'left' },
-      { id: 'ENA', label: 'ENA', x: -80, y: 18, dir: 'left' },
-      { id: 'OUT1', label: 'OUT1', x: 80, y: -30, dir: 'right' },
-      { id: 'OUT2', label: 'OUT2', x: 80, y: -6, dir: 'right' },
-      { id: 'VCC', label: '5V', x: -26, y: 60, dir: 'down' },
-      { id: 'GND', label: '−', x: 26, y: 60, dir: 'down' },
+      { id: 'ENA', label: 'ENA', x: -86, y: -46, dir: 'left' },
+      { id: 'IN1', label: 'IN1', x: -86, y: -28, dir: 'left' },
+      { id: 'IN2', label: 'IN2', x: -86, y: -10, dir: 'left' },
+      { id: 'IN3', label: 'IN3', x: -86, y: 8, dir: 'left' },
+      { id: 'IN4', label: 'IN4', x: -86, y: 26, dir: 'left' },
+      { id: 'ENB', label: 'ENB', x: -86, y: 44, dir: 'left' },
+      { id: 'OUT1', label: 'OUT1', x: 86, y: -40, dir: 'right' },
+      { id: 'OUT2', label: 'OUT2', x: 86, y: -22, dir: 'right' },
+      { id: 'OUT3', label: 'OUT3', x: 86, y: 2, dir: 'right' },
+      { id: 'OUT4', label: 'OUT4', x: 86, y: 20, dir: 'right' },
+      { id: 'VCC', label: '5V', x: -28, y: 66, dir: 'down' },
+      { id: 'GND', label: '−', x: 28, y: 66, dir: 'down' },
     ],
     render(comp) {
-      return partTag(comp, 148, 116, `
-        <rect x="-72" y="-52" width="144" height="104" rx="4" fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.2"/>
-        <rect x="-72" y="-52" width="144" height="104" rx="4" fill="none" stroke="rgba(255,255,255,.10)"/>
-        ${[[-66, -46], [66, -46], [-66, 46], [66, 46]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.2" fill="#0a1218" stroke="#cfd8e0" stroke-width=".9"/>`).join('')}
+      const holes = [[-70, -54], [70, -54], [-70, 54], [70, 54]];
+      const header = Array.from({ length: 6 }, (_, i) => `
+        <rect x="-76" y="${-52 + i * 18}" width="12" height="14" rx="1.5" fill="#0d1319"/>
+        <circle cx="-70" cy="${-45 + i * 18}" r="3" fill="url(#sim-gold)"/>
+        <circle cx="-70" cy="${-45 + i * 18}" r="1.2" fill="#0a0f14"/>`).join('');
+      const terminal = (x, y, n) => Array.from({ length: n }, (_, i) => `
+        <rect x="${x}" y="${y + i * 15}" width="18" height="13" rx="1.5" fill="#126b3f"/>
+        <circle cx="${x + 9}" cy="${y + i * 15 + 6.5}" r="4.2" fill="#0e1519" stroke="#cfd8e0" stroke-width=".8"/>
+        <line x1="${x + 5.4}" y1="${y + i * 15 + 6.5}" x2="${x + 12.6}" y2="${y + i * 15 + 6.5}" stroke="#8d9aa6" stroke-width="1.6"/>`).join('');
+      return partTag(comp, 160, 124, `
+        <rect x="-80" y="-62" width="160" height="124" rx="4" fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.2"/>
+        ${holes.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.2" fill="#0a1218" stroke="#cfd8e0" stroke-width=".9"/>`).join('')}
 
-        <!-- радиатор над мостом -->
-        <rect x="-30" y="-42" width="74" height="26" rx="2" fill="url(#sim-heatsink)" stroke="#5e1a14" stroke-width="1"/>
-        ${[0, 1, 2, 3, 4].map((i) => `<rect x="${-28 + i * 14.6}" y="-42" width="4" height="26" fill="rgba(0,0,0,.22)"/>`).join('')}
-        <text x="7" y="-26" style="font:6.4px ui-monospace,monospace;fill:#ffe6df;text-anchor:middle">L298N BRIDGE</text>
+        <!-- радиатор: под ним силовая микросхема моста -->
+        <rect x="-30" y="-54" width="78" height="42" rx="2" fill="url(#sim-heatsink)" stroke="#5e1a14" stroke-width="1"/>
+        ${[0, 1, 2, 3, 4, 5].map((i) => `<rect x="${-28 + i * 13}" y="-54" width="4" height="42" fill="rgba(0,0,0,.24)"/>`).join('')}
+        <text x="9" y="-38" style="font:7px ui-monospace,monospace;fill:#ffe6df;text-anchor:middle">L298N</text>
+        <text x="9" y="-28" style="font:4.6px ui-monospace,monospace;fill:#f3c9c1;text-anchor:middle">DUAL H-BRIDGE</text>
 
-        <!-- две микросхемы моста -->
-        <rect x="-24" y="-8" width="26" height="30" rx="2" fill="url(#sim-dip)" stroke="#0b0f13"/>
-        <rect x="8" y="-8" width="26" height="30" rx="2" fill="url(#sim-dip)" stroke="#0b0f13"/>
-        ${[-22, -12, -2].map((x) => `<rect x="${x}" y="22" width="3" height="5" fill="url(#sim-metal-h)"/>`).join('')}
+        <!-- гребёнка входов: ENA, IN1…IN4, ENB -->
+        <rect x="-77" y="-54" width="14" height="106" rx="2" fill="#10171d" stroke="#22303c" stroke-width=".7"/>
+        ${header}
 
-        <!-- клеммники: слева входы, справа выходы -->
-        <rect x="-70" y="-38" width="16" height="62" rx="2" fill="#1d5c3a" stroke="#0b3a25"/>
-        ${[-30, -6, 18].map((y) => `<circle cx="-62" cy="${y}" r="4.4" fill="#0e1519" stroke="#cfd8e0" stroke-width=".9"/>
-          <line x1="-65.4" y1="${y}" x2="-58.6" y2="${y}" stroke="#8d9aa6" stroke-width="1.6"/>`).join('')}
-        <rect x="54" y="-38" width="16" height="44" rx="2" fill="#1d5c3a" stroke="#0b3a25"/>
-        ${[-30, -6].map((y) => `<circle cx="62" cy="${y}" r="4.4" fill="#0e1519" stroke="#cfd8e0" stroke-width=".9"/>
-          <line x1="58.6" y1="${y}" x2="65.4" y2="${y}" stroke="#8d9aa6" stroke-width="1.6"/>`).join('')}
+        <!-- клеммники выходов: два канала -->
+        ${terminal(56, -50, 2)}
+        ${terminal(56, -6, 2)}
+        <text x="65" y="-54" style="font:4.6px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">MOTOR A</text>
+        <text x="65" y="-10" style="font:4.6px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">MOTOR B</text>
 
-        <!-- питание -->
-        <rect x="-34" y="34" width="68" height="14" rx="2" fill="#1d5c3a" stroke="#0b3a25"/>
-        ${[-26, 26].map((x) => `<circle cx="${x}" cy="41" r="4.6" fill="#0e1519" stroke="#cfd8e0" stroke-width=".9"/>
-          <line x1="${x - 3.4}" y1="41" x2="${x + 3.4}" y2="41" stroke="#8d9aa6" stroke-width="1.6"/>`).join('')}
-        <text x="-26" y="32" style="font:5px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">−</text>
-        <text x="26" y="32" style="font:5px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">+5…35 В</text>
+        <!-- питание: +5…35 В и земля -->
+        <rect x="-42" y="46" width="84" height="16" rx="2" fill="#126b3f" stroke="#0b3a25" stroke-width=".8"/>
+        ${[-28, 28].map((x) => `<circle cx="${x}" cy="54" r="5" fill="#0e1519" stroke="#cfd8e0" stroke-width=".9"/>
+          <line x1="${x - 3.8}" y1="54" x2="${x + 3.8}" y2="54" stroke="#8d9aa6" stroke-width="1.7"/>`).join('')}
+        <text x="-28" y="42" style="font:5px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">−</text>
+        <text x="28" y="42" style="font:5px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">+5…35 В</text>
 
-        <circle class="led" cx="47" cy="20" r="3.6" fill="#3a4b5c" stroke="#1b2530"/>
-        <text x="47" y="31" style="font:4.6px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">ON</text>`);
+        <circle class="led" cx="44" cy="30" r="3.6" fill="#3a4b5c" stroke="#1b2530"/>
+        <text x="44" y="41" style="font:4.6px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">ON</text>`);
     },
     update(g, comp, env) {
       const led = g.querySelector('.led');
@@ -1906,7 +1927,162 @@ const WS2812 = {
   },
 };
 
-export const PARTS = { ...DISCRETE, ...MODULES, ...POWER, ...EXTRA, ...WS2812 };
+
+/* --------------------------------------------------------------------------
+ * Робот-тележка «Эвольвектор» — езда по линии.
+ *
+ * Деталь — это маленький полигон: поле с напечатанной замкнутой линией и
+ * тележка на двух моторах с двумя датчиками линии. Тележка правда едет:
+ * колесо тянет редуктор 1:48, положение считается по оборотам колёс
+ * (linecar.js), а датчики видят линию по геометрии поля. Выводы — как у
+ * настоящей тележки: четыре провода к датчикам и четыре к обмоткам моторов.
+ * ------------------------------------------------------------------------ */
+
+/** Один модуль TCRT5000 на плате датчиков: ИК-светодиод, фотоприёмник и индикатор. */
+const lineSensor = (x, y, side) => `
+  <rect x="${x - 8}" y="${y - 5}" width="16" height="10" rx="1.4" fill="#101820" stroke="#243240" stroke-width=".6"/>
+  <rect x="${x - 6}" y="${y - 2.8}" width="4" height="5.6" rx="1" fill="#0a0f14"/>
+  <rect x="${x + 2}" y="${y - 2.8}" width="4" height="5.6" rx="1" fill="#0a0f14"/>
+  <circle class="senled" data-side="${side}" cx="${x - 6}" cy="${y - 4.6}" r="1.7" fill="#3a1a1a" stroke="#0b0f14" stroke-width=".4"/>`;
+
+/** Колесо сверху: покрышка с протектором; рисунок «бежит», когда тележка едет. */
+const lineWheel = (comp, side) => {
+  const cid = `wcl-${comp.id}-${side > 0 ? 'R' : 'L'}`;
+  const y = (side * CAR.trackW) / 2;
+  const half = CAR.wheelR;
+  return `
+    <clipPath id="${cid}"><rect x="${-half}" y="-8" width="${half * 2}" height="16" rx="7"/></clipPath>
+    <g transform="translate(0 ${y})">
+      <rect x="${-half}" y="-8" width="${half * 2}" height="16" rx="7" fill="#141619" stroke="#33393f" stroke-width=".9"/>
+      <g clip-path="url(#${cid})">
+        <g class="tread" data-side="${side > 0 ? 'R' : 'L'}">
+          ${Array.from({ length: 12 }, (_, i) => `<line x1="${-half + i * 6}" y1="-8.5" x2="${-half + i * 6}" y2="8.5"
+            stroke="#2f353b" stroke-width="2.4"/>`).join('')}
+        </g>
+      </g>
+      <rect x="${-half + 4}" y="-7" width="${half * 2 - 8}" height="2" rx="1" fill="rgba(255,255,255,.07)"/>
+      <circle cx="0" cy="0" r="4.6" fill="#3d444c" stroke="#151a1e" stroke-width=".9"/>
+      <circle cx="0" cy="0" r="1.7" fill="#1d2227"/>
+    </g>`;
+};
+
+/** Тележка сверху: рама, отсек батареек, редукторы, колёса и плата датчиков. */
+const lineCarBody = (comp) => {
+  const bW = CAR.bodyW / 2, bH = CAR.bodyH / 2;
+  const nose = bW - 8;
+  return `
+    <ellipse cx="2" cy="6" rx="${bW + 3}" ry="${bH + 8}" fill="rgba(0,0,0,.22)"/>
+
+    <!-- рама из чёрного акрила -->
+    <rect x="${-bW}" y="${-bH}" width="${bW * 2}" height="${bH * 2}" rx="8" fill="#23282e" stroke="#101316" stroke-width="1.3"/>
+    <rect x="${-bW + 3}" y="${-bH + 3}" width="${bW * 2 - 6}" height="9" rx="4.5" fill="rgba(255,255,255,.08)"/>
+    <rect x="${-bW}" y="${-bH}" width="${bW * 2}" height="${bH * 2}" rx="8" fill="url(#sim-gloss)" opacity=".3"/>
+    ${[[-bW + 7, -bH + 7], [bW - 7, -bH + 7], [-bW + 7, bH - 7], [bW - 7, bH - 7]]
+    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.2" fill="#4a525a" stroke="#14181c" stroke-width=".6"/>`).join('')}
+
+    <!-- отсек с четырьмя батарейками AA -->
+    <rect x="${-bW + 6}" y="${-bH + 12}" width="58" height="${bH * 2 - 24}" rx="3" fill="#15191d" stroke="#0d1013" stroke-width=".8"/>
+    ${[0, 1].map((r) => [0, 1].map((c) => `<rect x="${-bW + 10 + c * 26}" y="${-bH + 16 + r * 22}"
+        width="24" height="18" rx="7" fill="url(#sim-metal-h)" stroke="#5a6672" stroke-width=".7"/>
+      <rect x="${-bW + 10 + c * 26}" y="${-bH + 22 + r * 22}" width="24" height="4" rx="2" fill="rgba(0,0,0,.22)"/>`).join('')).join('')}
+    <text x="${-bW + 35}" y="${bH - 6}" style="font:4.4px ui-monospace,monospace;fill:#8fa4b6;text-anchor:middle">4×AA</text>
+
+    <!-- редукторы TT: жёлтый корпус рядом с колесом -->
+    ${[-1, 1].map((side) => `<rect x="${-17}" y="${side * 21 - 11}" width="36" height="22" rx="3"
+        fill="#d9b52a" stroke="#8a7014" stroke-width=".9"/>
+      <rect x="${-14}" y="${side * 21 - 8}" width="30" height="5" rx="2" fill="rgba(255,255,255,.3)"/>
+      <circle cx="-4" cy="${side * 27}" r="6" fill="#b8971f" stroke="#8a7014" stroke-width=".7"/>
+      <circle cx="-4" cy="${side * 27}" r="2" fill="#6d5c14"/>`).join('')}
+
+    <!-- плата датчиков линии на носу -->
+    <rect x="26" y="${-bH + 5}" width="32" height="${bH * 2 - 10}" rx="2.5"
+          fill="url(#sim-pcb-blue)" stroke="#0d3350" stroke-width=".9"/>
+    <rect x="28.5" y="${-bH + 8}" width="27" height="${bH * 2 - 16}" rx="1.5" fill="rgba(255,255,255,.05)"/>
+    ${lineSensor(CAR.sensorAhead, -CAR.sensorSpread, 'L')}
+    ${lineSensor(CAR.sensorAhead, CAR.sensorSpread, 'R')}
+    <text x="52" y="${bH - 6}" style="font:3.8px ui-monospace,monospace;fill:#d6ebff;text-anchor:middle">TCRT5000</text>
+
+    <!-- клеммник, с которого провода уходят на схему -->
+    <rect x="${-bW + 70}" y="${-13}" width="26" height="26" rx="2" fill="#126b3f" stroke="#0b3a25" stroke-width=".8"/>
+    ${[-7, 0, 7].map((yy) => `<circle cx="${-bW + 78}" cy="${yy}" r="3" fill="#0e1519" stroke="#cfd8e0" stroke-width=".7"/>`).join('')}
+
+    <!-- опорное колесо сзади -->
+    <circle cx="${-bW + 3}" cy="0" r="7" fill="#2c3238" stroke="#12161a" stroke-width="1"/>
+    <circle cx="${-bW + 3}" cy="0" r="2.8" fill="#8d9aa6"/>
+
+    <!-- нос и подпись -->
+    <path d="M ${bW - 16} 0 l 8 -5 v 10 z" fill="#e8eef4" opacity=".8"/>
+    <text x="18" y="${bH - 6}" style="font:4.8px ui-monospace,monospace;fill:#9db2c5;text-anchor:middle">Эвольвектор</text>
+    ${lineWheel(comp, -1)}${lineWheel(comp, 1)}`;
+};
+
+const LINECAR = {
+  linecar: {
+    name: 'Робот-тележка «Эвольвектор»', category: 'Модули', w: ARENA.w, h: ARENA.h,
+    pins: () => [
+      { id: '5V', label: '+5В', x: -150, y: ARENA.h / 2, dir: 'down' },
+      { id: 'GND', label: '−', x: -122, y: ARENA.h / 2, dir: 'down' },
+      { id: 'SL', label: 'SL', x: -94, y: ARENA.h / 2, dir: 'down' },
+      { id: 'SR', label: 'SR', x: -66, y: ARENA.h / 2, dir: 'down' },
+      { id: 'M1+', label: 'M1+', x: 44, y: ARENA.h / 2, dir: 'down' },
+      { id: 'M1-', label: 'M1−', x: 74, y: ARENA.h / 2, dir: 'down' },
+      { id: 'M2+', label: 'M2+', x: 104, y: ARENA.h / 2, dir: 'down' },
+      { id: 'M2-', label: 'M2−', x: 134, y: ARENA.h / 2, dir: 'down' },
+    ],
+    render(comp) {
+      const pose = comp.props?.pose || newPose();
+      const deg = (pose.th * 180) / Math.PI;
+      const floorW = ARENA.w - ARENA.pad * 2, floorH = ARENA.h - ARENA.pad * 2;
+      const gridLines = [];
+      for (let x = -floorW / 2 + 20; x < floorW / 2; x += 20) {
+        gridLines.push(`<line x1="${x}" y1="${-floorH / 2}" x2="${x}" y2="${floorH / 2}" stroke="#e2e6ea" stroke-width=".6"/>`);
+      }
+      for (let y = -floorH / 2 + 20; y < floorH / 2; y += 20) {
+        gridLines.push(`<line x1="${-floorW / 2}" y1="${y}" x2="${floorW / 2}" y2="${y}" stroke="#e2e6ea" stroke-width=".6"/>`);
+      }
+      return partTag(comp, ARENA.w, ARENA.h, `
+        <rect x="${-ARENA.w / 2}" y="${-ARENA.h / 2}" width="${ARENA.w}" height="${ARENA.h}" rx="10"
+              fill="#2b3138" stroke="#14181c" stroke-width="1.6"/>
+        <rect x="${-floorW / 2}" y="${-floorH / 2}" width="${floorW}" height="${floorH}" rx="4"
+              fill="#eef0f3" stroke="#c3c9d0" stroke-width=".8"/>
+        <g opacity=".6">${gridLines.join('')}</g>
+        <ellipse cx="${TRACK.cx}" cy="${TRACK.cy}" rx="${TRACK.a}" ry="${TRACK.b}" fill="none"
+                 stroke="#191d21" stroke-width="${TRACK.width}" stroke-linecap="round"/>
+        <ellipse cx="${TRACK.cx}" cy="${TRACK.cy}" rx="${TRACK.a}" ry="${TRACK.b}" fill="none"
+                 stroke="#3d434a" stroke-width="${TRACK.width - 10}" opacity=".3"/>
+        <rect x="${TRACK.cx - TRACK.a - 13}" y="${TRACK.cy - 11}" width="26" height="5" rx="1" fill="#eef0f3"/>
+        <text x="${TRACK.cx - TRACK.a}" y="${TRACK.cy + TRACK.b + 34}" style="font:6.4px ui-monospace,monospace;fill:#5a6470;text-anchor:middle;letter-spacing:.6px">СТАРТ</text>
+        <path d="M ${TRACK.cx - TRACK.a} ${TRACK.cy + TRACK.b + 24} l -4 -8 h 8 z" fill="#5a6470"/>
+        <text x="${ARENA.w / 2 - 12}" y="${-ARENA.h / 2 + 16}" style="font:5.2px ui-monospace,monospace;fill:#7c8794;text-anchor:end">поле 44 × 34 см</text>
+        <g class="car" transform="translate(${pose.x.toFixed(1)} ${pose.y.toFixed(1)}) rotate(${deg.toFixed(1)})">
+          ${lineCarBody(comp)}
+        </g>`, '', '');
+    },
+    update(g, comp, env) {
+      const pose = comp.props?.pose || newPose();
+      const car = g.querySelector('.car');
+      if (car) car.setAttribute('transform',
+        `translate(${pose.x.toFixed(1)} ${pose.y.toFixed(1)}) rotate(${((pose.th * 180) / Math.PI).toFixed(1)})`);
+      // протектор «бежит» по колесу: сдвиг на длину дуги, остаток по модулю шага
+      for (const side of ['L', 'R']) {
+        const tread = g.querySelector(`.tread[data-side="${side}"]`);
+        const angle = Number(env?.info?.[side === 'L' ? 'angleL' : 'angleR']) || 0;
+        if (tread) {
+          const arc = ((angle * Math.PI) / 180) * CAR.wheelR;
+          tread.setAttribute('transform', `translate(${(-((arc % 6) + 6) % 6).toFixed(2)} 0)`);
+        }
+      }
+      // индикаторы на плате датчиков: горит тот, под которым линия
+      const on = Array.isArray(comp.props?.sensors) ? comp.props.sensors : [false, false];
+      for (const el of g.querySelectorAll('.senled')) {
+        const i = el.getAttribute('data-side') === 'L' ? 0 : 1;
+        el.setAttribute('fill', on[i] ? '#ff4d4d' : '#3a1a1a');
+      }
+    },
+  },
+};
+
+export const PARTS = { ...DISCRETE, ...MODULES, ...POWER, ...EXTRA, ...WS2812, ...LINECAR };
 
 /**
  * Полярность у готовых модулей: плюс питания — на выводе VCC, минус — на GND.

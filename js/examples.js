@@ -2479,6 +2479,263 @@ void loop() {
 `,
   },
 
+  {
+    id: 'linecar-line',
+    name: 'Робот-тележка «Эвольвектор»: езда по линии',
+    autorun: true,
+    schematic: {
+      parts: [
+      { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+      { id: 'da1', type: 'l298n', x: 90, y: 235, props: {} },
+      { id: 'rb1', type: 'linecar', x: -40, y: 600, props: {} },
+    ],
+      wires: [
+      { a: { compId: 'b1', pin: '5V' }, b: { compId: 'da1', pin: 'VCC' } },
+      { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'da1', pin: 'GND' } },
+      // ENA/ENB — на выводы ШИМ: скважность задаёт мощность мотора
+      { a: { compId: 'b1', pin: 'D5' }, b: { compId: 'da1', pin: 'ENA' } },
+      { a: { compId: 'b1', pin: 'D10' }, b: { compId: 'da1', pin: 'ENB' } },
+      { a: { compId: 'b1', pin: 'D6' }, b: { compId: 'da1', pin: 'IN1' } },
+      { a: { compId: 'b1', pin: 'D7' }, b: { compId: 'da1', pin: 'IN2' } },
+      { a: { compId: 'b1', pin: 'D8' }, b: { compId: 'da1', pin: 'IN3' } },
+      { a: { compId: 'b1', pin: 'D9' }, b: { compId: 'da1', pin: 'IN4' } },
+      // питание тележки и датчики линии
+      { a: { compId: 'b1', pin: '5V' }, b: { compId: 'rb1', pin: '5V' } },
+      { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'rb1', pin: 'GND' } },
+      { a: { compId: 'b1', pin: 'D2' }, b: { compId: 'rb1', pin: 'SL' } },
+      { a: { compId: 'b1', pin: 'D3' }, b: { compId: 'rb1', pin: 'SR' } },
+      // обмотки моторов: канал A — левое колесо, канал B — правое
+      { a: { compId: 'da1', pin: 'OUT1' }, b: { compId: 'rb1', pin: 'M1+' } },
+      { a: { compId: 'da1', pin: 'OUT2' }, b: { compId: 'rb1', pin: 'M1-' } },
+      { a: { compId: 'da1', pin: 'OUT3' }, b: { compId: 'rb1', pin: 'M2+' } },
+      { a: { compId: 'da1', pin: 'OUT4' }, b: { compId: 'rb1', pin: 'M2-' } },
+    ],
+    },
+    code: `// Робот-тележка «Эвольвектор»: езда по линии.
+// Поле с чёрной линией нарисовано вместе с тележкой; датчики линии — это два
+// TCRT5000 спереди: над белым полем выход HIGH, над чёрной полосой — LOW.
+// Моторы подключены через драйвер L298N (два канала: A — левое колесо, B — правое).
+
+const int SL = 2;           // датчик линии слева
+const int SR = 3;           // датчик линии справа
+const int ENA = 5, IN1 = 6, IN2 = 7;   // канал A — левое колесо
+const int IN3 = 8, IN4 = 9, ENB = 10;  // канал B — правое колесо
+const int SPEED = 200;      // 0…255 — насколько быстро едем
+
+void setup() {
+  pinMode(SL, INPUT);
+  pinMode(SR, INPUT);
+  pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);
+  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Тележка на старте: ищу линию");
+}
+
+// left и right — от −255 до 255: знак задаёт направление, число — скорость
+void motors(int left, int right) {
+  digitalWrite(IN1, left > 0 ? HIGH : LOW);
+  digitalWrite(IN2, left > 0 ? LOW : HIGH);
+  analogWrite(ENA, abs(left));
+  digitalWrite(IN3, right > 0 ? HIGH : LOW);
+  digitalWrite(IN4, right > 0 ? LOW : HIGH);
+  analogWrite(ENB, abs(right));
+}
+
+void loop() {
+  bool l = digitalRead(SL) == LOW;    // под левым датчиком чёрная полоса
+  bool r = digitalRead(SR) == LOW;
+
+  if (l && r) {
+    motors(SPEED, SPEED);             // линия под обоими — едем прямо
+  } else if (l) {
+    motors(0, SPEED);                 // полоса ушла влево — подтормаживаем левое колесо
+  } else if (r) {
+    motors(SPEED, 0);                 // полоса справа — подтормаживаем правое
+  } else {
+    motors(SPEED, 0);                 // оба на белом — доворачиваем и ищем линию
+  }
+  delay(5);
+}
+`,
+  },
+
+  {
+    id: 'linecar-pwm',
+    name: 'Робот-тележка «Эвольвектор»: плавная езда на ШИМ',
+    autorun: true,
+    schematic: {
+      parts: [
+      { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+      { id: 'da1', type: 'l298n', x: 90, y: 235, props: {} },
+      { id: 'rb1', type: 'linecar', x: -40, y: 600, props: {} },
+    ],
+      wires: [
+      { a: { compId: 'b1', pin: '5V' }, b: { compId: 'da1', pin: 'VCC' } },
+      { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'da1', pin: 'GND' } },
+      // ENA/ENB — на выводы ШИМ: скважность задаёт мощность мотора
+      { a: { compId: 'b1', pin: 'D5' }, b: { compId: 'da1', pin: 'ENA' } },
+      { a: { compId: 'b1', pin: 'D10' }, b: { compId: 'da1', pin: 'ENB' } },
+      { a: { compId: 'b1', pin: 'D6' }, b: { compId: 'da1', pin: 'IN1' } },
+      { a: { compId: 'b1', pin: 'D7' }, b: { compId: 'da1', pin: 'IN2' } },
+      { a: { compId: 'b1', pin: 'D8' }, b: { compId: 'da1', pin: 'IN3' } },
+      { a: { compId: 'b1', pin: 'D9' }, b: { compId: 'da1', pin: 'IN4' } },
+      // питание тележки и датчики линии
+      { a: { compId: 'b1', pin: '5V' }, b: { compId: 'rb1', pin: '5V' } },
+      { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'rb1', pin: 'GND' } },
+      { a: { compId: 'b1', pin: 'D2' }, b: { compId: 'rb1', pin: 'SL' } },
+      { a: { compId: 'b1', pin: 'D3' }, b: { compId: 'rb1', pin: 'SR' } },
+      // обмотки моторов: канал A — левое колесо, канал B — правое
+      { a: { compId: 'da1', pin: 'OUT1' }, b: { compId: 'rb1', pin: 'M1+' } },
+      { a: { compId: 'da1', pin: 'OUT2' }, b: { compId: 'rb1', pin: 'M1-' } },
+      { a: { compId: 'da1', pin: 'OUT3' }, b: { compId: 'rb1', pin: 'M2+' } },
+      { a: { compId: 'da1', pin: 'OUT4' }, b: { compId: 'rb1', pin: 'M2-' } },
+    ],
+    },
+
+    code: `// Робот-тележка «Эвольвектор»: плавная езда на ШИМ.
+// Драйвер L298N умеет не только «полный ход / стоп»: выводы ENA и ENB включают
+// ШИМ, и скважность задаёт мощность на моторе. Скорость становится управляемой,
+// а подруливание — мягким: тележка не дёргается на каждом повороте.
+
+const int SL = 2, SR = 3;                 // датчики линии
+const int ENA = 5, IN1 = 6, IN2 = 7;      // канал A — левое колесо
+const int IN3 = 8, IN4 = 9, ENB = 10;     // канал B — правое колесо
+const int SPEED = 130;                     // 0…255: примерно половина мощности
+const int SLOW = 60;                       // «подтормаживание» внутреннего колеса
+
+void setup() {
+  pinMode(SL, INPUT);
+  pinMode(SR, INPUT);
+  pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);
+  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Плавный ход: ШИМ 130 из 255");
+}
+
+void motors(int left, int right) {
+  digitalWrite(IN1, left > 0 ? HIGH : LOW);
+  digitalWrite(IN2, left > 0 ? LOW : HIGH);
+  analogWrite(ENA, abs(left));
+  digitalWrite(IN3, right > 0 ? HIGH : LOW);
+  digitalWrite(IN4, right > 0 ? LOW : HIGH);
+  analogWrite(ENB, abs(right));
+}
+
+void loop() {
+  bool l = digitalRead(SL) == LOW;
+  bool r = digitalRead(SR) == LOW;
+
+  if (l && r) {
+    motors(SPEED, SPEED);        // полоса под обоими датчиками
+  } else if (l) {
+    motors(SLOW, SPEED);         // полоса слева: внутреннее колесо медленнее
+  } else if (r) {
+    motors(SPEED, SLOW);         // полоса справа
+  } else {
+    motors(SPEED, 0);            // потеряли линию — доворачиваем на месте
+  }
+  delay(5);
+}
+`,
+  },
+
+  {
+    id: 'linecar-laps',
+    name: 'Робот-тележка «Эвольвектор»: круг и остановка на старте',
+    autorun: true,
+    schematic: {
+      parts: [
+      { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+      { id: 'da1', type: 'l298n', x: 90, y: 235, props: {} },
+      { id: 'rb1', type: 'linecar', x: -40, y: 600, props: {} },
+    ],
+      wires: [
+      { a: { compId: 'b1', pin: '5V' }, b: { compId: 'da1', pin: 'VCC' } },
+      { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'da1', pin: 'GND' } },
+      // ENA/ENB — на выводы ШИМ: скважность задаёт мощность мотора
+      { a: { compId: 'b1', pin: 'D5' }, b: { compId: 'da1', pin: 'ENA' } },
+      { a: { compId: 'b1', pin: 'D10' }, b: { compId: 'da1', pin: 'ENB' } },
+      { a: { compId: 'b1', pin: 'D6' }, b: { compId: 'da1', pin: 'IN1' } },
+      { a: { compId: 'b1', pin: 'D7' }, b: { compId: 'da1', pin: 'IN2' } },
+      { a: { compId: 'b1', pin: 'D8' }, b: { compId: 'da1', pin: 'IN3' } },
+      { a: { compId: 'b1', pin: 'D9' }, b: { compId: 'da1', pin: 'IN4' } },
+      // питание тележки и датчики линии
+      { a: { compId: 'b1', pin: '5V' }, b: { compId: 'rb1', pin: '5V' } },
+      { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'rb1', pin: 'GND' } },
+      { a: { compId: 'b1', pin: 'D2' }, b: { compId: 'rb1', pin: 'SL' } },
+      { a: { compId: 'b1', pin: 'D3' }, b: { compId: 'rb1', pin: 'SR' } },
+      // обмотки моторов: канал A — левое колесо, канал B — правое
+      { a: { compId: 'da1', pin: 'OUT1' }, b: { compId: 'rb1', pin: 'M1+' } },
+      { a: { compId: 'da1', pin: 'OUT2' }, b: { compId: 'rb1', pin: 'M1-' } },
+      { a: { compId: 'da1', pin: 'OUT3' }, b: { compId: 'rb1', pin: 'M2+' } },
+      { a: { compId: 'da1', pin: 'OUT4' }, b: { compId: 'rb1', pin: 'M2-' } },
+    ],
+    },
+
+    code: `// Робот-тележка «Эвольвектор»: круг и остановка на старте.
+// Одометра у тележки нет, поэтому круг отмеряем по времени: секундомером
+// измеряем, сколько идёт один круг (у нас ~16 с при полной мощности),
+// и останавливаем моторы, когда время вышло.
+// Попробуйте измерить своё время круга и подставить его в LAP_MS.
+
+const int SL = 2, SR = 3;
+const int ENA = 5, IN1 = 6, IN2 = 7;
+const int IN3 = 8, IN4 = 9, ENB = 10;
+const int SPEED = 255;
+const unsigned long LAP_MS = 15800;   // время одного круга, мс
+const int LAPS = 1;                   // сколько кругов проехать
+
+unsigned long t0 = 0;
+
+void setup() {
+  pinMode(SL, INPUT);
+  pinMode(SR, INPUT);
+  pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);
+  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
+  Serial.begin(9600);
+  Serial.print("Едем ");
+  Serial.print(LAPS);
+  Serial.println(" круга");
+}
+
+void motors(int left, int right) {
+  digitalWrite(IN1, left > 0 ? HIGH : LOW);
+  digitalWrite(IN2, left > 0 ? LOW : HIGH);
+  analogWrite(ENA, abs(left));
+  digitalWrite(IN3, right > 0 ? HIGH : LOW);
+  digitalWrite(IN4, right > 0 ? LOW : HIGH);
+  analogWrite(ENB, abs(right));
+}
+
+void loop() {
+  if (t0 == 0) t0 = millis();
+
+  // круги кончились — стоп и ждём (моторы обесточены)
+  if (millis() - t0 > LAP_MS * LAPS) {
+    motors(0, 0);
+    return;
+  }
+
+  bool l = digitalRead(SL) == LOW;
+  bool r = digitalRead(SR) == LOW;
+
+  if (l && r) {
+    motors(SPEED, SPEED);
+  } else if (l) {
+    motors(0, SPEED);
+  } else if (r) {
+    motors(SPEED, 0);
+  } else {
+    motors(SPEED, 0);
+  }
+  delay(5);
+}
+`,
+  },
+
 ];
 
 /** Стартовый скетч для платы, добавленной из палитры. */

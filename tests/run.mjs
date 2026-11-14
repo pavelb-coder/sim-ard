@@ -1760,8 +1760,8 @@ console.log('\nЗадания «Эвольвектора»: эталоны пр�
   const examples = EXAMPLES;
   const byId = Object.fromEntries(examples.map((e) => [e.id, e]));
 
-  check('в курсе 39 заданий: 8 базовых, 25 из наборов «Эвольвектор», 5 датчиков, экран и лента WS2812',
-    TASKS.length === 39 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 31,
+  check('в курсе 42 задания: 8 базовых, 28 из наборов «Эвольвектор», 5 датчиков, экран, лента WS2812 и тележка',
+    TASKS.length === 42 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 34,
     `всего ${TASKS.length}`);
   check('у заданий уникальные id и заполнены уровень, тема, минуты, цели и проверки',
     new Set(TASKS.map((t) => t.id)).size === TASKS.length

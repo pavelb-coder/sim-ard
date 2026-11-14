@@ -21,7 +21,8 @@ IDS = ["blink", "led", "button", "pot", "rc", "servo", "lcd", "oled",
        "serial-echo", "string-cmd", "random-dice", "millis-blink", "servo-pot",
        "mpu-tilt", "bmp-altimeter", "ds18b20-thermo", "bh1750-lux", "mq2-gas",
        "soil-watering", "sound-clap", "lcd-parallel",
-       "ws2812-rainbow", "ws2812-matrix", "ws2812-ring"]
+       "ws2812-rainbow", "ws2812-matrix", "ws2812-ring",
+       "linecar-line", "linecar-pwm", "linecar-laps"]
 
 
 async def main():

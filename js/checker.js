@@ -306,6 +306,25 @@ export class CheckContext {
     return this.trace.analog?.[`${bp.part.id}:${bp.pin.num}`] || null;
   }
 
+  // ------------------------------------------------------------- тележка ----
+  /** Наблюдения за роботом-тележкой: пробег, время на линии, круги, скорость. */
+  car(partId = null) {
+    const cars = this.trace.linecar || {};
+    const empty = {
+      distance: 0, onLine: 0, offLine: 0, changes: 0, laps: 0, seconds: 0,
+      avgSpeed: 0, speed: 0, pose: null, sensors: [false, false],
+    };
+    const entry = partId ? cars[partId] : Object.values(cars)[0];
+    return entry ? { ...empty, ...entry } : empty;
+  }
+
+  /** Какая доля времени тележка видела линию (0…1). */
+  carLineShare(partId = null) {
+    const c = this.car(partId);
+    const t = c.onLine + c.offLine;
+    return t > 0.2 ? c.onLine / t : 0;
+  }
+
   serialText() { return (this.trace.serial || []).join('\n'); }
   ran() { return Boolean(this.trace.hasRun); }
 }
