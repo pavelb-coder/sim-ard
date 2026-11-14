@@ -5534,6 +5534,174 @@
      }
     ]
    }
+  },
+  {
+   "id": "ws2812-rainbow",
+   "name": "Лента WS2812: радуга по адресам",
+   "board": "uno",
+   "code": "// Адресная лента WS2812B: с платы идёт ОДИН провод данных,\n// а цвет у каждого светодиода свой — он задаётся по номеру.\n// Питание: 5 В и GND. Вход DIN — на цифровой вывод D6.\n\n#include <Adafruit_NeoPixel.h>\n\n#define LEDS 8\n#define PIN 6\n\nAdafruit_NeoPixel strip(LEDS, PIN, NEO_GRB + NEO_KHZ800);\n\nint step = 0;\n\nvoid setup() {\n  strip.begin();\n  strip.setBrightness(120);     // 0…255 — общая яркость ленты\n  strip.show();                 // без show() на ленте ничего не меняется\n  Serial.begin(9600);\n  Serial.println(\"Лента на 8 светодиодов готова\");\n}\n\nvoid loop() {\n  for (int i = 0; i < LEDS; i++) {\n    int hue = (i * 24 + step) % 192;      // у соседей разный оттенок\n    strip.setPixelColor(i, hueColor(hue));\n  }\n  strip.show();\n  step = (step + 6) % 192;\n  delay(60);\n}\n\n// Плавный переход красный → зелёный → синий → красный\nint hueColor(int h) {\n  if (h < 64) return strip.Color(255 - h * 4, h * 4, 0);\n  if (h < 128) return strip.Color(0, 255 - (h - 64) * 4, (h - 64) * 4);\n  return strip.Color((h - 128) * 4, 0, 255 - (h - 128) * 4);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "ws",
+      "type": "ws2812",
+      "x": 0,
+      "y": 250,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "ws",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "ws",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D6"
+      },
+      "b": {
+       "compId": "ws",
+       "pin": "DIN"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "ws2812-matrix",
+   "name": "Матрица WS2812 8×8: бегущая волна",
+   "board": "uno",
+   "code": "// Матрица WS2812 8×8 — это 64 адресных светодиода в одной цепочке.\n// Номер светодиода считается так: номер = строка * 8 + столбец.\n// Внимание: 64 светодиода на полной яркости — это почти 4 А,\n// поэтому яркость держим небольшой, а лучше питать матрицу отдельно.\n\n#include <Adafruit_NeoPixel.h>\n\nAdafruit_NeoPixel matrix(64, 6, NEO_GRB + NEO_KHZ800);\n\nint step = 0;\n\nvoid setup() {\n  matrix.begin();\n  matrix.setBrightness(90);\n  matrix.show();\n  Serial.begin(9600);\n  Serial.println(\"Матрица 8x8: 64 светодиода\");\n}\n\nvoid loop() {\n  for (int row = 0; row < 8; row++) {\n    for (int col = 0; col < 8; col++) {\n      // фаза волны: у каждой диагонали своя, поэтому по матрице бежит «горб»\n      int phase = (row * 2 + col * 2 + step) % 24;\n      int level = phase < 12 ? phase : 24 - phase;      // 0…12\n      int v = level * 21;                               // 0…252\n      matrix.setPixelColor(row * 8 + col, matrix.Color(v, v / 2, 255 - v));\n    }\n  }\n  matrix.show();\n  step = (step + 2) % 24;\n  delay(70);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "mx",
+      "type": "ws2812m",
+      "x": 0,
+      "y": 260,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "mx",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "mx",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D6"
+      },
+      "b": {
+       "compId": "mx",
+       "pin": "DIN"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "ws2812-ring",
+   "name": "Кольцо WS2812: «поворотник»",
+   "board": "uno",
+   "code": "// Кольцо из 12 адресных светодиодов. По кольцу бежит «поворотник»:\n// три светодиода подряд горят ярко, остальные — притушены.\n\n#include <Adafruit_NeoPixel.h>\n\nAdafruit_NeoPixel ring(12, 5, NEO_GRB + NEO_KHZ800);\n\nint head = 0;\n\nvoid setup() {\n  ring.begin();\n  ring.setBrightness(110);\n  ring.show();\n  Serial.begin(9600);\n  Serial.println(\"Кольцо на 12 светодиодов готово\");\n}\n\nvoid loop() {\n  for (int i = 0; i < 12; i++) {\n    int dist = (i - head + 12) % 12;      // насколько светодиод позади «головы»\n    if (dist == 0) ring.setPixelColor(i, ring.Color(255, 120, 0));\n    else if (dist == 1) ring.setPixelColor(i, ring.Color(150, 60, 0));\n    else if (dist == 2) ring.setPixelColor(i, ring.Color(60, 24, 0));\n    else ring.setPixelColor(i, ring.Color(0, 0, 0));\n  }\n  ring.show();\n  head = (head + 1) % 12;\n  delay(120);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "rg",
+      "type": "ws2812r",
+      "x": 0,
+      "y": 250,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "rg",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "rg",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D5"
+      },
+      "b": {
+       "compId": "rg",
+       "pin": "DIN"
+      }
+     }
+    ]
+   }
   }
  ]
 }

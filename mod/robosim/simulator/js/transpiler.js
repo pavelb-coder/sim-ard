@@ -39,6 +39,7 @@ const LIB_CLASSES = new Set([
   'Servo', 'DHT', 'DHT11', 'Stepper', 'LiquidCrystal', 'LiquidCrystal_I2C', 'Adafruit_SSD1306', 'Wire', 'TwoWire',
   // датчики-модули: у каждого своя библиотека
   'MPU6050', 'Adafruit_MPU6050', 'Adafruit_BMP280', 'OneWire', 'DallasTemperature', 'BH1750',
+  'Adafruit_NeoPixel',
 ]);
 
 /** new Array(m).fill(0) для последней размерности. */

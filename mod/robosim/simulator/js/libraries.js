@@ -29,6 +29,7 @@ export const INCLUDES = new Map([
   ['liquidcrystal.h', ['LiquidCrystal']],
   ['adafruit_ssd1306.h', ['Adafruit_SSD1306']],
   ['adafruit_gfx.h', []],
+  ['adafruit_neopixel.h', ['Adafruit_NeoPixel']],
   ['spi.h', []],
   ['stepper.h', ['Stepper']],
   ['math.h', []],
@@ -438,9 +439,84 @@ export function createLibraries(bus) {
     }
   }
 
+  /**
+   * WS2812 / NeoPixel: адресная лента, матрица или кольцо.
+   *
+   * Как в настоящей библиотеке: цвет задаётся setPixelColor() по адресу, а на
+   * ленту попадает только после show() — до этого на ней горит прежняя картинка.
+   * Яркость (setBrightness) общая для всех светодиодов и пересчитывается при
+   * каждом show(), как в железе.
+   */
+  const clamp8 = (v) => Math.max(0, Math.min(255, Math.round(Number(v) || 0)));
+  const unpackColor = (c) => {
+    if (Array.isArray(c)) return [clamp8(c[0]), clamp8(c[1]), clamp8(c[2])];
+    if (c && typeof c === 'object') return [clamp8(c.r), clamp8(c.g), clamp8(c.b)];
+    const v = Math.max(0, Math.min(0xffffff, Math.round(Number(c) || 0)));
+    return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+  };
+  const packColor = ([r, g, b]) => ((clamp8(r) << 16) | (clamp8(g) << 8) | clamp8(b)) >>> 0;
+
+  class Adafruit_NeoPixel {
+    constructor(count = 8, pin = 6, type = 0) {
+      this.pin = Number(pin) || 0;
+      this.numLEDs = Math.max(1, Math.min(256, Number(count) || 8));
+      this.type = type;
+      this.brightness = 255;
+      this._buf = Array.from({ length: this.numLEDs }, () => [0, 0, 0]);   // что готовим
+      this._onStrip = Array.from({ length: this.numLEDs }, () => [0, 0, 0]); // что уже на ленте
+      this._part = null;
+      this._begun = false;
+    }
+    /** лента ищется по проводу: конструктор получает номер вывода платы */
+    _find() {
+      if (!this._part) {
+        this._part = bus.partOnPin(this.pin, 'ws2812')
+          || bus.partOnPin(this.pin, 'ws2812m')
+          || bus.partOnPin(this.pin, 'ws2812r');
+      }
+      return this._part;
+    }
+    begin() { this._begun = true; this._push(true); }
+    show() { this._onStrip = this._buf.map((c) => [...c]); this._push(); }
+    clear() { this._buf = Array.from({ length: this.numLEDs }, () => [0, 0, 0]); }
+    setPixelColor(i, r, g, b) {
+      const idx = Math.floor(Number(i) || 0);
+      if (idx < 0 || idx >= this.numLEDs) return;
+      this._buf[idx] = (g === undefined && b === undefined) ? unpackColor(r) : [clamp8(r), clamp8(g), clamp8(b)];
+    }
+    getPixelColor(i) { return packColor(this._buf[Math.floor(Number(i) || 0)] || [0, 0, 0]); }
+    setBrightness(v) { this.brightness = clamp8(v); this._push(true); }
+    getBrightness() { return this.brightness; }
+    fill(color, first = 0, count = this.numLEDs) {
+      const c = unpackColor(color);
+      const from = Math.max(0, Math.floor(Number(first) || 0));
+      const to = Math.min(this.numLEDs, from + Math.max(0, Math.floor(Number(count) || 0)));
+      for (let i = from; i < to; i++) this._buf[i] = [...c];
+    }
+    numPixels() { return this.numLEDs; }
+    canShow() { return true; }
+    updateLength(n) {
+      this.numLEDs = Math.max(1, Math.min(256, Number(n) || this.numLEDs));
+      this._buf = Array.from({ length: this.numLEDs }, (_, i) => this._buf[i] || [0, 0, 0]);
+      this._onStrip = Array.from({ length: this.numLEDs }, (_, i) => this._onStrip[i] || [0, 0, 0]);
+    }
+    setPin(p) { this.pin = Number(p) || 0; this._part = null; }
+    Color(r, g, b) { return packColor([clamp8(r), clamp8(g), clamp8(b)]); }
+    gamma32(c) { return c; }
+    _push(force = false) {
+      const part = this._find();
+      if (!part) return;
+      part.props.pixels = this._onStrip.map((c) => [...c]);
+      part.props.brightness = this.brightness;
+      part.props.active = this._begun;
+      bus.changed(part);
+    }
+  }
+
   return {
     Servo, DHT, DHT11, Stepper, LiquidCrystal, LiquidCrystal_I2C, Adafruit_SSD1306,
     MPU6050, Adafruit_MPU6050, Adafruit_BMP280, OneWire, DallasTemperature, BH1750,
+    Adafruit_NeoPixel,
     Wire: { begin() {}, setClock() {} },
   };
 }

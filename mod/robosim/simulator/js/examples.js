@@ -2328,6 +2328,157 @@ void loop() {
 }
 `,
   },
+
+  {
+    id: 'ws2812-rainbow',
+    name: 'Лента WS2812: радуга по адресам',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'ws', type: 'ws2812', x: 0, y: 250, props: {} },
+      ],
+      wires: [
+        wire('b1', '5V2', 'ws', '5V'), wire('b1', 'GND2', 'ws', 'GND'),
+        wire('b1', 'D6', 'ws', 'DIN'),
+      ],
+    },
+    code: `// Адресная лента WS2812B: с платы идёт ОДИН провод данных,
+// а цвет у каждого светодиода свой — он задаётся по номеру.
+// Питание: 5 В и GND. Вход DIN — на цифровой вывод D6.
+
+#include <Adafruit_NeoPixel.h>
+
+#define LEDS 8
+#define PIN 6
+
+Adafruit_NeoPixel strip(LEDS, PIN, NEO_GRB + NEO_KHZ800);
+
+int step = 0;
+
+void setup() {
+  strip.begin();
+  strip.setBrightness(120);     // 0…255 — общая яркость ленты
+  strip.show();                 // без show() на ленте ничего не меняется
+  Serial.begin(9600);
+  Serial.println("Лента на 8 светодиодов готова");
+}
+
+void loop() {
+  for (int i = 0; i < LEDS; i++) {
+    int hue = (i * 24 + step) % 192;      // у соседей разный оттенок
+    strip.setPixelColor(i, hueColor(hue));
+  }
+  strip.show();
+  step = (step + 6) % 192;
+  delay(60);
+}
+
+// Плавный переход красный → зелёный → синий → красный
+int hueColor(int h) {
+  if (h < 64) return strip.Color(255 - h * 4, h * 4, 0);
+  if (h < 128) return strip.Color(0, 255 - (h - 64) * 4, (h - 64) * 4);
+  return strip.Color((h - 128) * 4, 0, 255 - (h - 128) * 4);
+}
+`,
+  },
+
+  {
+    id: 'ws2812-matrix',
+    name: 'Матрица WS2812 8×8: бегущая волна',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'mx', type: 'ws2812m', x: 0, y: 260, props: {} },
+      ],
+      wires: [
+        wire('b1', '5V2', 'mx', '5V'), wire('b1', 'GND2', 'mx', 'GND'),
+        wire('b1', 'D6', 'mx', 'DIN'),
+      ],
+    },
+    code: `// Матрица WS2812 8×8 — это 64 адресных светодиода в одной цепочке.
+// Номер светодиода считается так: номер = строка * 8 + столбец.
+// Внимание: 64 светодиода на полной яркости — это почти 4 А,
+// поэтому яркость держим небольшой, а лучше питать матрицу отдельно.
+
+#include <Adafruit_NeoPixel.h>
+
+Adafruit_NeoPixel matrix(64, 6, NEO_GRB + NEO_KHZ800);
+
+int step = 0;
+
+void setup() {
+  matrix.begin();
+  matrix.setBrightness(90);
+  matrix.show();
+  Serial.begin(9600);
+  Serial.println("Матрица 8x8: 64 светодиода");
+}
+
+void loop() {
+  for (int row = 0; row < 8; row++) {
+    for (int col = 0; col < 8; col++) {
+      // фаза волны: у каждой диагонали своя, поэтому по матрице бежит «горб»
+      int phase = (row * 2 + col * 2 + step) % 24;
+      int level = phase < 12 ? phase : 24 - phase;      // 0…12
+      int v = level * 21;                               // 0…252
+      matrix.setPixelColor(row * 8 + col, matrix.Color(v, v / 2, 255 - v));
+    }
+  }
+  matrix.show();
+  step = (step + 2) % 24;
+  delay(70);
+}
+`,
+  },
+
+  {
+    id: 'ws2812-ring',
+    name: 'Кольцо WS2812: «поворотник»',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'rg', type: 'ws2812r', x: 0, y: 250, props: {} },
+      ],
+      wires: [
+        wire('b1', '5V2', 'rg', '5V'), wire('b1', 'GND2', 'rg', 'GND'),
+        wire('b1', 'D5', 'rg', 'DIN'),
+      ],
+    },
+    code: `// Кольцо из 12 адресных светодиодов. По кольцу бежит «поворотник»:
+// три светодиода подряд горят ярко, остальные — притушены.
+
+#include <Adafruit_NeoPixel.h>
+
+Adafruit_NeoPixel ring(12, 5, NEO_GRB + NEO_KHZ800);
+
+int head = 0;
+
+void setup() {
+  ring.begin();
+  ring.setBrightness(110);
+  ring.show();
+  Serial.begin(9600);
+  Serial.println("Кольцо на 12 светодиодов готово");
+}
+
+void loop() {
+  for (int i = 0; i < 12; i++) {
+    int dist = (i - head + 12) % 12;      // насколько светодиод позади «головы»
+    if (dist == 0) ring.setPixelColor(i, ring.Color(255, 120, 0));
+    else if (dist == 1) ring.setPixelColor(i, ring.Color(150, 60, 0));
+    else if (dist == 2) ring.setPixelColor(i, ring.Color(60, 24, 0));
+    else ring.setPixelColor(i, ring.Color(0, 0, 0));
+  }
+  ring.show();
+  head = (head + 1) % 12;
+  delay(120);
+}
+`,
+  },
+
 ];
 
 /** Стартовый скетч для платы, добавленной из палитры. */
