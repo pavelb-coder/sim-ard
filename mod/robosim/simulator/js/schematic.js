@@ -234,7 +234,7 @@ export class Schematic {
       for (const pin of allPins(p)) {
         const key = `${pin.compId}:${pin.pin}`;
         const active = this.pending && this.pending.compId === pin.compId && this.pending.pin === pin.pin ? ' active' : '';
-        const r = p.__def.board ? 3.2 : 4.2;
+        const r = p.__def.board ? 2.9 : 4.2;
         const link = linked.has(key) ? ' linked' : '';
         pinsvg += `<circle class="pin${p.__def.board ? ' pin-board' : ''}${active}${link}" data-key="${key}" data-pin="${pin.compId}|${pin.pin}" cx="${pin.x}" cy="${pin.y}" r="${r}"/>`;
         // у платы подписи выводов уже нарисованы на корпусе — не дублируем

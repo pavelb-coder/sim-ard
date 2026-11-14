@@ -188,6 +188,69 @@
             <filter id="sim-soft" x="-20%" y="-20%" width="140%" height="140%">
               <feDropShadow dx="0" dy="1.4" stdDeviation="1.6" flood-color="#000" flood-opacity=".45"/>
             </filter>
+            <!-- ===== реализм плат: стеклотекстолит, дорожки под маской, золото площадок ===== -->
+            <linearGradient id="sim-face-light" x1="0" y1="0" x2=".55" y2="1">
+              <stop offset="0" stop-color="#ffffff" stop-opacity=".13"/>
+              <stop offset=".42" stop-color="#ffffff" stop-opacity="0"/>
+              <stop offset="1" stop-color="#000000" stop-opacity=".17"/>
+            </linearGradient>
+            <pattern id="sim-fiber" width="7" height="7" patternUnits="userSpaceOnUse">
+              <path d="M0 7 L7 0" stroke="#ffffff" stroke-width=".55" opacity=".045"/>
+              <path d="M0 0 L7 7" stroke="#000000" stroke-width=".55" opacity=".05"/>
+            </pattern>
+            <pattern id="sim-traces" width="103" height="89" patternUnits="userSpaceOnUse">
+              <g fill="none" stroke="#8ff7c4" stroke-width="1.05" stroke-linecap="round" stroke-linejoin="round" opacity=".05">
+                <path d="M-4 13 H21 L27 19 H48 L54 25 H74"/>
+                <path d="M0 41 H15 L23 33 H41 L47 39 H63 L69 33 H90"/>
+                <path d="M-4 68 H19 L25 62 H44"/>
+                <path d="M31 -4 V11 L37 17"/>
+                <path d="M61 -4 V8 L55 14 H44"/>
+                <path d="M88 -4 V26 L82 32 H70"/>
+                <path d="M8 92 V78 L14 72 H34"/>
+                <path d="M58 92 V80 L64 74 H84 L90 68 V52"/>
+                <path d="M20 13 V26 L26 32"/>
+              </g>
+              <g fill="#8ff7c4" opacity=".14">
+                <circle cx="27" cy="19" r="1.4"/><circle cx="47" cy="39" r="1.4"/>
+                <circle cx="37" cy="17" r="1.3"/><circle cx="55" cy="14" r="1.3"/>
+                <circle cx="82" cy="32" r="1.3"/><circle cx="64" cy="74" r="1.3"/>
+                <circle cx="26" cy="32" r="1.3"/>
+              </g>
+            </pattern>
+            <pattern id="sim-traces2" width="71" height="59" patternUnits="userSpaceOnUse">
+              <g fill="none" stroke="#a9ffd6" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".045">
+                <path d="M-3 7 H13 L19 13 H38 L44 7 H60"/>
+                <path d="M4 52 H20 L26 46 H47"/>
+                <path d="M33 -4 V17 L39 23 H58 L64 29"/>
+                <path d="M-3 33 H9 L15 27"/>
+                <path d="M60 62 V44 L54 38"/>
+              </g>
+              <g fill="#a9ffd6" opacity=".10">
+                <circle cx="19" cy="13" r="1.3"/><circle cx="39" cy="23" r="1.3"/><circle cx="26" cy="46" r="1.2"/>
+              </g>
+            </pattern>
+            <linearGradient id="sim-ceramic" x1="0" y1="0" x2=".3" y2="1">
+              <stop offset="0" stop-color="#ffc06a"/><stop offset=".45" stop-color="#e8963a"/>
+              <stop offset="1" stop-color="#b96a1c"/>
+            </linearGradient>
+            <linearGradient id="sim-copper" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#8a4a1e"/><stop offset=".35" stop-color="#ffd8a3"/>
+              <stop offset=".62" stop-color="#d08a3e"/><stop offset="1" stop-color="#7a3f18"/>
+            </linearGradient>
+            <radialGradient id="sim-gold" cx=".35" cy=".3" r=".85">
+              <stop offset="0" stop-color="#fff2c0"/><stop offset=".45" stop-color="#f0cd5e"/>
+              <stop offset=".82" stop-color="#cfa832"/><stop offset="1" stop-color="#a9871f"/>
+            </radialGradient>
+            <radialGradient id="sim-drill" cx=".4" cy=".35" r=".8">
+              <stop offset="0" stop-color="#04070a"/><stop offset=".72" stop-color="#0a1014"/>
+              <stop offset="1" stop-color="#22303a"/>
+            </radialGradient>
+            <filter id="sim-raise" x="-35%" y="-35%" width="170%" height="170%">
+              <feDropShadow dx=".5" dy="1.2" stdDeviation="1" flood-color="#000" flood-opacity=".45"/>
+            </filter>
+            <filter id="sim-raise-big" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx=".8" dy="2" stdDeviation="1.7" flood-color="#000" flood-opacity=".5"/>
+            </filter>
             <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
               <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#1b2530" stroke-width="1"/>
             </pattern>
