@@ -448,8 +448,8 @@ void loop() {
         { id: 'r1', type: 'resistor', x: 250, y: -200, props: { value: 220 } },
       ],
       wires: [
-        wire('b1', '3V3', 'rv1', 'A'), wire('b1', 'GND', 'rv1', 'B'), wire('rv1', 'W', 'b1', '32'),
-        wire('b1', '4', 'l1', 'A'), wire('l1', 'K', 'r1', '1'), wire('r1', '2', 'b1', 'GND'),
+        wire('b1', '3V3', 'rv1', 'A'), wire('b1', 'GND', 'rv1', 'B'), wire('rv1', 'W', 'b1', 'G32'),
+        wire('b1', 'G4', 'l1', 'A'), wire('l1', 'K', 'r1', '1'), wire('r1', '2', 'b1', 'GND'),
       ],
     },
     code: `// ESP32: питание 3,3 В, АЦП от 0 до 4095, встроенный светодиод на GPIO2.
@@ -518,8 +518,8 @@ while True:
         { id: 'r1', type: 'resistor', x: 250, y: -200, props: { value: 220 } },
       ],
       wires: [
-        wire('b1', '3V3', 'rv1', 'A'), wire('b1', 'GND', 'rv1', 'B'), wire('rv1', 'W', 'b1', '26'),
-        wire('b1', '11', 'l1', 'A'), wire('l1', 'K', 'r1', '1'), wire('r1', '2', 'b1', 'GND'),
+        wire('b1', '3V3', 'rv1', 'A'), wire('b1', 'GND', 'rv1', 'B'), wire('rv1', 'W', 'b1', 'GP26'),
+        wire('b1', 'GP11', 'l1', 'A'), wire('l1', 'K', 'r1', '1'), wire('r1', '2', 'b1', 'GND'),
       ],
     },
     code: `# MicroPython: ADC читает 0…65535, ШИМ задаётся через duty_u16.
@@ -1198,6 +1198,57 @@ void loop() {
   },
 
   {
+    id: 'usb-uno-pi',
+    name: 'USB: Arduino и Raspberry Pi 5 обмениваются данными',
+    autorun: true,
+    schematic: {
+      parts: [
+        board('uno', 10, -160, 'b1'),
+        { id: 'rv1', type: 'pot', x: -230, y: 40, props: {} },
+        board('rpi5', 10, 200, 'b2'),
+        { id: 'x1', type: 'usbcable', x: 160, y: 20, props: {} },
+      ],
+      wires: [
+        wire('b1', 'USB', 'x1', 'A'),
+        wire('x1', 'B', 'b2', 'USB'),
+        wire('rv1', 'W', 'b1', 'A0'),
+        wire('rv1', 'A', 'b1', '5V'),
+        wire('rv1', 'B', 'b1', 'GND'),
+      ],
+    },
+    code: `// Arduino меряет напряжение на A0 и отправляет его в USB.
+// Всё, что уходит в Serial, на второй плате выглядит как данные,
+// которые пришли с /dev/ttyACM0 — как у настоящей Arduino.
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Uno готова, шлю показания A0");
+}
+
+void loop() {
+  int v = analogRead(A0);
+  Serial.print("A0=");
+  Serial.println(v);
+  delay(500);
+}
+`,
+    extraCode: {
+      b2: `# Raspberry Pi 5 читает Arduino, воткнутую в USB-порт.
+# На настоящей малине Arduino появится как /dev/ttyACM0 (или ttyUSB0).
+import serial, time
+
+port = serial.Serial('/dev/ttyACM0', 9600)
+
+while True:
+    line = port.readline()
+    if line:
+        print("от Arduino:", line.strip())
+    time.sleep(0.2)
+`,
+    },
+  },
+
+  {
     id: 'rpi5-led',
     name: 'Raspberry Pi 5: светодиод на GPIO14',
     autorun: true,
@@ -1233,6 +1284,627 @@ while True:
         print("миганий:", count)
 `,
   },
+  {
+    id: 'two-leds',
+    name: 'Два светодиода мигают по очереди',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -150, y: -180, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: 40, y: -180, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: -150, y: -70, props: { color: '#ff5544' } },
+        { id: 'l2', type: 'led', x: 40, y: -70, props: { color: '#3fd07a' } },
+      ],
+      wires: [
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2'),
+        wire('b1', 'D10', 'r2', '1'), wire('r2', '2', 'l2', 'A'), wire('l2', 'K', 'b1', 'GND'),
+      ],
+    },
+    code: `// Два светодиода на D9 и D10 мигают по очереди — «перекрёсток».
+// Каждому светодиоду нужен свой резистор: 220 Ом.
+
+void setup() {
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(9, HIGH);
+  digitalWrite(10, LOW);
+  delay(400);
+
+  digitalWrite(9, LOW);
+  digitalWrite(10, HIGH);
+  delay(400);
+}
+`,
+  },
+
+  {
+    id: 'button-toggle',
+    name: 'Кнопка-переключатель: нажал — включил',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'sw1', type: 'button', x: -170, y: -170, props: {} },
+        { id: 'r1', type: 'resistor', x: -40, y: -170, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: -40, y: -70, props: { color: '#3fd07a' } },
+      ],
+      wires: [
+        wire('b1', 'D2', 'sw1', '1'), wire('sw1', '2', 'b1', 'GND2'),
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2'),
+      ],
+    },
+    code: `// Одно нажатие включает светодиод, второе — выключает.
+// Состояние храним в переменной, а «дребезг» гасим паузой 30 мс.
+
+int state = HIGH;      // с чего начинаем
+int last = HIGH;       // что было на выводе в прошлый раз
+
+void setup() {
+  pinMode(2, INPUT_PULLUP);
+  pinMode(9, OUTPUT);
+  digitalWrite(9, state);
+  Serial.begin(9600);
+  Serial.println("нажмите кнопку");
+}
+
+void loop() {
+  int now = digitalRead(2);
+  if (last == HIGH && now == LOW) {      // поймали момент нажатия
+    state = !state;
+    digitalWrite(9, state);
+    Serial.println(state ? "включено" : "выключено");
+  }
+  last = now;
+  delay(30);
+}
+`,
+  },
+
+  {
+    id: 'fade',
+    name: 'ШИМ: плавное затухание светодиода',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: 30, y: -180, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: 30, y: -70, props: { color: '#ffd23f' } },
+      ],
+      wires: [wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2')],
+    },
+    code: `// ШИМ (analogWrite) — это быстрое включение-выключение вывода.
+// Меняем скважность от 0 до 255 и обратно: светодиод «дышит».
+
+int brightness = 0;
+int step = 5;
+
+void setup() {
+  pinMode(9, OUTPUT);
+}
+
+void loop() {
+  analogWrite(9, brightness);
+  brightness = brightness + step;
+  if (brightness >= 255) step = -5;
+  if (brightness <= 0) step = 5;
+  delay(20);
+}
+`,
+  },
+
+  {
+    id: 'ldr-nightlight',
+    name: 'Фоторезистор: ночник включается в темноте',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'ldr1', type: 'ldr', x: -200, y: -180, props: { light: 0.3 } },
+        { id: 'r1', type: 'resistor', x: -200, y: -60, props: { value: 10000 } },
+        { id: 'r2', type: 'resistor', x: 60, y: -180, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: 60, y: -70, props: { color: '#ffd23f' } },
+      ],
+      wires: [
+        wire('b1', '5V2', 'ldr1', '1'), wire('ldr1', '2', 'b1', 'A0'), wire('b1', 'A0', 'r1', '1'),
+        wire('r1', '2', 'b1', 'GND2'),
+        wire('b1', 'D9', 'r2', '1'), wire('r2', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND'),
+      ],
+    },
+    code: `// Делитель напряжения: фоторезистор сверху, резистор 10 кОм снизу.
+// Чем темнее — тем больше сопротивление фоторезистора и меньше напряжение на A0.
+
+void setup() {
+  pinMode(9, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  int light = analogRead(A0);          // 0 — темно, 1023 — ярко
+  int level = map(light, 0, 1023, 255, 0);   // в темноте светим сильнее
+  analogWrite(9, constrain(level, 0, 255));
+  Serial.print("свет=");
+  Serial.println(light);
+  delay(300);
+}
+`,
+  },
+
+  {
+    id: 'buzzer-button',
+    name: 'Зуммер: пищалка по кнопке',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'sw1', type: 'button', x: -190, y: -170, props: {} },
+        { id: 'bz1', type: 'buzzer', x: 90, y: -150, props: {} },
+      ],
+      wires: [
+        wire('b1', 'D2', 'sw1', '1'), wire('sw1', '2', 'b1', 'GND2'),
+        wire('b1', 'D8', 'bz1', '1'), wire('bz1', '2', 'b1', 'GND'),
+      ],
+    },
+    code: `// Пока кнопка нажата — зуммер пищит на 880 Гц (нота «ля» второй октавы).
+// tone() работает на любом цифровом выводе.
+
+void setup() {
+  pinMode(2, INPUT_PULLUP);
+  pinMode(8, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  if (digitalRead(2) == LOW) {
+    tone(8, 880);
+    Serial.println("пищим");
+  } else {
+    noTone(8);
+  }
+  delay(100);
+}
+`,
+  },
+
+  {
+    id: 'transistor-motor',
+    name: 'Транзистор-ключ: кнопка управляет моторчиком',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'sw1', type: 'button', x: -210, y: -170, props: {} },
+        { id: 'r1', type: 'resistor', x: 40, y: -150, props: { value: 1000 } },
+        { id: 'vt1', type: 'npn', x: 40, y: 20, props: {} },
+        { id: 'm1', type: 'dcmotor', x: -150, y: 60, props: {} },
+      ],
+      wires: [
+        wire('b1', 'D2', 'sw1', '1'), wire('sw1', '2', 'b1', 'GND2'),
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'vt1', 'B'),
+        wire('vt1', 'E', 'b1', 'GND2'),
+        wire('b1', '5V2', 'm1', 'M+'), wire('m1', 'M-', 'vt1', 'C'),
+      ],
+    },
+    code: `// Моторчик нельзя подключать к выводу напрямую: он берёт больше 100 мА.
+// Вывод управляет базой транзистора, а ток мотора идёт от 5 В через ключ.
+
+void setup() {
+  pinMode(2, INPUT_PULLUP);
+  pinMode(9, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  bool pressed = digitalRead(2) == LOW;
+  digitalWrite(9, pressed ? HIGH : LOW);
+  if (pressed) Serial.println("мотор крутится");
+  delay(200);
+}
+`,
+  },
+
+  {
+    id: 'for-loop',
+    name: 'Цикл for: бегущий огонь на трёх светодиодах',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -170, y: -180, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: -40, y: -180, props: { value: 220 } },
+        { id: 'r3', type: 'resistor', x: 90, y: -180, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: -170, y: -70, props: { color: '#ff5544' } },
+        { id: 'l2', type: 'led', x: -40, y: -70, props: { color: '#ffd23f' } },
+        { id: 'l3', type: 'led', x: 90, y: -70, props: { color: '#3fd07a' } },
+      ],
+      wires: [
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2'),
+        wire('b1', 'D10', 'r2', '1'), wire('r2', '2', 'l2', 'A'), wire('l2', 'K', 'b1', 'GND2'),
+        wire('b1', 'D11', 'r3', '1'), wire('r3', '2', 'l3', 'A'), wire('l3', 'K', 'b1', 'GND2'),
+      ],
+    },
+    code: `// Массив выводов + цикл for: три строки кода вместо девяти.
+// Так делают бегущий огонь, гирлянды и светодиодные матрицы.
+
+const int PINS[] = {9, 10, 11};
+const int COUNT = 3;
+
+void setup() {
+  for (int i = 0; i < COUNT; i++) {
+    pinMode(PINS[i], OUTPUT);
+  }
+  Serial.begin(9600);
+  Serial.println("бегущий огонь");
+}
+
+void loop() {
+  for (int i = 0; i < COUNT; i++) {
+    digitalWrite(PINS[i], HIGH);
+    delay(150);
+    digitalWrite(PINS[i], LOW);
+  }
+}
+`,
+  },
+
+  {
+    id: 'array-pattern',
+    name: 'Массив и биты: узор из трёх светодиодов',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -170, y: -180, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: -40, y: -180, props: { value: 220 } },
+        { id: 'r3', type: 'resistor', x: 90, y: -180, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: -170, y: -70, props: { color: '#ff5544' } },
+        { id: 'l2', type: 'led', x: -40, y: -70, props: { color: '#ffd23f' } },
+        { id: 'l3', type: 'led', x: 90, y: -70, props: { color: '#3fd07a' } },
+      ],
+      wires: [
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2'),
+        wire('b1', 'D10', 'r2', '1'), wire('r2', '2', 'l2', 'A'), wire('l2', 'K', 'b1', 'GND2'),
+        wire('b1', 'D11', 'r3', '1'), wire('r3', '2', 'l3', 'A'), wire('l3', 'K', 'b1', 'GND2'),
+      ],
+    },
+    code: `// Узор храним числом: каждый бит — свой светодиод.
+// 0b001 — горит первый, 0b010 — второй, 0b111 — все три.
+
+const int PINS[] = {9, 10, 11};
+const int COUNT = 3;
+const int PATTERN[] = {0b001, 0b010, 0b100, 0b111, 0b000};
+const int STEPS = 5;
+
+void setup() {
+  for (int i = 0; i < COUNT; i++) pinMode(PINS[i], OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  for (int s = 0; s < STEPS; s++) {
+    for (int i = 0; i < COUNT; i++) {
+      int bit = (PATTERN[s] >> i) & 1;
+      digitalWrite(PINS[i], bit);
+    }
+    Serial.println(PATTERN[s]);
+    delay(300);
+  }
+}
+`,
+  },
+
+  {
+    id: 'functions',
+    name: 'Своя функция: blinkPin()',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -150, y: -180, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: 40, y: -180, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: -150, y: -70, props: { color: '#ff5544' } },
+        { id: 'l2', type: 'led', x: 40, y: -70, props: { color: '#3fd07a' } },
+      ],
+      wires: [
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2'),
+        wire('b1', 'D10', 'r2', '1'), wire('r2', '2', 'l2', 'A'), wire('l2', 'K', 'b1', 'GND'),
+      ],
+    },
+    code: `// Своя функция прячет повторяющийся код. blinkPin(9, 100) — быстро,
+// blinkPin(10, 600) — медленно. Один и тот же код, разные параметры.
+
+void blinkPin(int pin, int ms) {
+  digitalWrite(pin, HIGH);
+  delay(ms);
+  digitalWrite(pin, LOW);
+  delay(ms);
+}
+
+void setup() {
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("два ритма");
+}
+
+void loop() {
+  blinkPin(9, 100);
+  blinkPin(10, 600);
+}
+`,
+  },
+
+  {
+    id: 'switch-menu',
+    name: 'switch/case: команды из монитора порта',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -170, y: -180, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: -40, y: -180, props: { value: 220 } },
+        { id: 'r3', type: 'resistor', x: 90, y: -180, props: { value: 220 } },
+        { id: 'd1', type: 'rgbled', x: 10, y: -60, props: {} },
+      ],
+      wires: [
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'd1', 'R'),
+        wire('b1', 'D10', 'r2', '1'), wire('r2', '2', 'd1', 'G'),
+        wire('b1', 'D11', 'r3', '1'), wire('r3', '2', 'd1', 'B'),
+        wire('d1', 'K', 'b1', 'GND2'),
+      ],
+    },
+    code: `// Напишите в монитор порта одну букву и нажмите Enter:
+//   r — красный, g — зелёный, b — синий, x — погасить.
+
+void setup() {
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+  pinMode(11, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("r/g/b — цвет, x — погасить");
+}
+
+void loop() {
+  if (Serial.available() == 0) return;
+  char c = Serial.read();
+  if (c == '\\n' || c == '\\r') return;      // перевод строки — не команда
+  switch (c) {
+    case 'r':
+      digitalWrite(9, HIGH); digitalWrite(10, LOW); digitalWrite(11, LOW);
+      Serial.println("красный");
+      break;
+    case 'g':
+      digitalWrite(9, LOW); digitalWrite(10, HIGH); digitalWrite(11, LOW);
+      Serial.println("зелёный");
+      break;
+    case 'b':
+      digitalWrite(9, LOW); digitalWrite(10, LOW); digitalWrite(11, HIGH);
+      Serial.println("синий");
+      break;
+    case 'x':
+      digitalWrite(9, LOW); digitalWrite(10, LOW); digitalWrite(11, LOW);
+      Serial.println("погашено");
+      break;
+    default:
+      Serial.println("не понимаю: r, g, b или x");
+  }
+  delay(20);
+}
+`,
+  },
+
+  {
+    id: 'serial-echo',
+    name: 'Serial: эхо — плата повторяет введённое',
+    autorun: true,
+    schematic: { parts: [board()], wires: [] },
+    code: `// Что бы вы ни написали в монитор порта, плата повторит это с приставкой.
+// readStringUntil ждёт перевод строки — так удобнее, чем читать по байту.
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("напишите что-нибудь — я повторю");
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    String line = Serial.readStringUntil('\\n');
+    Serial.println("эхо: " + line);
+  }
+  delay(20);
+}
+`,
+  },
+
+  {
+    id: 'string-cmd',
+    name: 'String: разбор команды «LED 9 1»',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -150, y: -180, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: 40, y: -180, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: -150, y: -70, props: { color: '#ff5544' } },
+        { id: 'l2', type: 'led', x: 40, y: -70, props: { color: '#3fd07a' } },
+      ],
+      wires: [
+        wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2'),
+        wire('b1', 'D10', 'r2', '1'), wire('r2', '2', 'l2', 'A'), wire('l2', 'K', 'b1', 'GND'),
+      ],
+    },
+    code: `// Команда из трёх частей: «LED 9 1» — включить светодиод на D9.
+// String умеет substring, indexOf и toInt — этого хватает для разбора.
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+  Serial.println("формат команды: LED 9 1");
+}
+
+void loop() {
+  if (Serial.available() == 0) return;
+  String cmd = Serial.readStringUntil('\\n');
+  int p1 = cmd.indexOf(' ');
+  int p2 = cmd.indexOf(' ', p1 + 1);
+  if (p1 < 0 || p2 < 0) {
+    Serial.println("формат: LED 9 1");
+    return;
+  }
+  String what = cmd.substring(0, p1);
+  int pin = cmd.substring(p1 + 1, p2).toInt();
+  int level = cmd.substring(p2 + 1).toInt();
+  if (what == "LED") {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, level);
+    Serial.print("вывод ");
+    Serial.print(pin);
+    Serial.println(level ? " включён" : " выключен");
+  } else {
+    Serial.println("не знаю такой команды");
+  }
+}
+`,
+  },
+
+  {
+    id: 'random-dice',
+    name: 'Случайные числа: электронный кубик',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: -170, y: -180, props: { value: 220 } },
+        { id: 'r2', type: 'resistor', x: -110, y: -180, props: { value: 220 } },
+        { id: 'r3', type: 'resistor', x: -50, y: -180, props: { value: 220 } },
+        { id: 'r4', type: 'resistor', x: 10, y: -180, props: { value: 220 } },
+        { id: 'r5', type: 'resistor', x: 70, y: -180, props: { value: 220 } },
+        { id: 'r6', type: 'resistor', x: 130, y: -180, props: { value: 220 } },
+        { id: 'r7', type: 'resistor', x: 190, y: -180, props: { value: 220 } },
+        { id: 'hg1', type: 'seg7', x: 10, y: 60, props: {} },
+      ],
+      wires: [
+        wire('b1', 'D2', 'r1', '1'), wire('r1', '2', 'hg1', 'A'),
+        wire('b1', 'D3', 'r2', '1'), wire('r2', '2', 'hg1', 'B'),
+        wire('b1', 'D4', 'r3', '1'), wire('r3', '2', 'hg1', 'C'),
+        wire('b1', 'D5', 'r4', '1'), wire('r4', '2', 'hg1', 'D'),
+        wire('b1', 'D6', 'r5', '1'), wire('r5', '2', 'hg1', 'E'),
+        wire('b1', 'D7', 'r6', '1'), wire('r6', '2', 'hg1', 'F'),
+        wire('b1', 'D8', 'r7', '1'), wire('r7', '2', 'hg1', 'G'),
+        wire('hg1', 'COM', 'b1', 'GND2'),
+      ],
+    },
+    code: `// Кубик: random(1, 7) даёт 1…6. Семь сегментов — семь бит маски:
+// старший бит — сегмент A, младший — G.
+
+const int SEG[] = {2, 3, 4, 5, 6, 7, 8};
+const int DIGITS[] = {0b1111110, 0b0110000, 0b1101101, 0b1111001,
+                      0b0110011, 0b1011011, 0b1011111, 0b1110000,
+                      0b1111111, 0b1111011};
+
+void showDigit(int d) {
+  for (int i = 0; i < 7; i++) {
+    digitalWrite(SEG[i], (DIGITS[d] >> (6 - i)) & 1);
+  }
+}
+
+void setup() {
+  for (int i = 0; i < 7; i++) pinMode(SEG[i], OUTPUT);
+  randomSeed(analogRead(A0));
+  Serial.begin(9600);
+  Serial.println("бросаем кубик");
+}
+
+void loop() {
+  int d = random(1, 7);
+  showDigit(d);
+  Serial.print("выпало ");
+  Serial.println(d);
+  delay(700);
+}
+`,
+  },
+
+  {
+    id: 'millis-blink',
+    name: 'millis() вместо delay: мигаем, не тормозя программу',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'r1', type: 'resistor', x: 40, y: -180, props: { value: 220 } },
+        { id: 'l1', type: 'led', x: 40, y: -70, props: { color: '#ff5544' } },
+      ],
+      wires: [wire('b1', 'D9', 'r1', '1'), wire('r1', '2', 'l1', 'A'), wire('l1', 'K', 'b1', 'GND2')],
+    },
+    code: `// delay() останавливает всю программу. millis() считает миллисекунды
+// с запуска и позволяет делать несколько дел «одновременно».
+
+const int LED = 9;
+unsigned long previous = 0;
+bool on = false;
+
+void setup() {
+  pinMode(LED, OUTPUT);
+  pinMode(2, INPUT_PULLUP);
+  Serial.begin(9600);
+  Serial.println("мигаем без delay");
+}
+
+void loop() {
+  unsigned long now = millis();
+  if (now - previous >= 500) {
+    previous = now;
+    on = !on;
+    digitalWrite(LED, on);
+    Serial.print("миг, светодиод ");
+    Serial.println(on ? "горит" : "погас");
+  }
+}
+`,
+  },
+
+  {
+    id: 'servo-pot',
+    name: 'Серво по потенциометру: руль на A0',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'rv1', type: 'pot', x: -200, y: -120, props: { value: 0.5 } },
+        { id: 'srv', type: 'servo', x: 120, y: -140, props: {} },
+      ],
+      wires: [
+        wire('b1', '5V2', 'rv1', 'A'), wire('b1', 'GND2', 'rv1', 'B'), wire('rv1', 'W', 'b1', 'A0'),
+        wire('b1', 'D9', 'srv', 'PWM'), wire('b1', '5V2', 'srv', 'VCC'), wire('b1', 'GND2', 'srv', 'GND'),
+      ],
+    },
+    code: `// Потенциометр задаёт угол: analogRead даёт 0…1023, а серво понимает 0…180°.
+// map() пересчитывает одно в другое.
+
+#include <Servo.h>
+
+Servo srv;
+
+void setup() {
+  srv.attach(9);
+  Serial.begin(9600);
+}
+
+void loop() {
+  int raw = analogRead(A0);
+  int angle = map(raw, 0, 1023, 0, 180);
+  srv.write(angle);
+  Serial.println(angle);
+  delay(120);
+}
+`,
+  },
+
 ];
 
 /** Стартовый скетч для платы, добавленной из палитры. */

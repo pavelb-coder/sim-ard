@@ -38,6 +38,13 @@ function extendString() {
     },
     configurable: true,
   });
+  // MicroPython: ' строка \n'.strip() / b'...'.decode() — в симуляторе строки уже str
+  Object.defineProperty(P, 'strip', { value() { return String(this).trim(); }, configurable: true });
+  Object.defineProperty(P, 'lstrip', { value() { return String(this).replace(/^\s+/, ''); }, configurable: true });
+  Object.defineProperty(P, 'rstrip', { value() { return String(this).replace(/\s+$/, ''); }, configurable: true });
+  Object.defineProperty(P, 'decode', { value() { return String(this); }, configurable: true });
+  Object.defineProperty(P, 'encode', { value() { return String(this); }, configurable: true });
+  Object.defineProperty(P, 'splitlines', { value() { return String(this).split(/\r?\n/); }, configurable: true });
   Object.defineProperty(P, 'remove', {
     value(idx) {
       const text = String(this);
@@ -63,6 +70,10 @@ export class ArduinoRuntime {
     this.readPin = opts.readPin || (() => 0);
     this.onTone = opts.onTone || (() => {});
     this.onPulseIn = opts.onPulseIn || (() => 0);
+    // то, что скетч отправляет «в USB» второй плате (Pi пишет в /dev/ttyACM0)
+    this.onUsbWrite = opts.onUsbWrite || (() => {});
+    // очередь принятых байт: USB-кабель, монитор порта, настоящая плата
+    this.serialRx = [];
 
     this.pins = new Map();
     const nums = this.spec.pins.filter((p) => typeof p.num === 'number').map((p) => p.num);
@@ -98,9 +109,71 @@ export class ArduinoRuntime {
       printf(fmt, ...args) { rt.onSerial(rt._format(fmt, args)); },
       write(v) { rt.onSerial(String.fromCharCode(v & 0xff)); },
       flush() {},
-      available() { return 0; },
-      read() { return -1; },
+      // Приём: байты приходят по USB с компьютера, от второй платы или из
+      // монитора порта (js/app.js → feedSerial). В железе Serial читается так же.
+      available() { return rt.serialRx.length; },
+      peek() { return rt.serialRx.length ? (rt.serialRx[0] & 0xff) : -1; },
+      read() { return rt.serialRx.length ? (rt.serialRx.shift() & 0xff) : -1; },
+      readString() { return rt.readSerialUntil('\n', true); },
+      readStringUntil(ch) {
+        // В скетче перевод строки — это число 10, но из JS сюда может прийти и строка.
+        const code = typeof ch === 'number' ? ch : (typeof ch === 'string' && ch ? ch.charCodeAt(0) : 10);
+        return rt.readSerialUntil(String.fromCharCode(code), false);   // терминатор в строку не входит
+      },
+      setTimeout() {},
       end() {},
+    };
+  }
+
+  /**
+   * Байты «с провода USB»: их присылает вторая плата, монитор порта или
+   * настоящая плата через Web Serial. Храним как числа 0…255, как в железе.
+   */
+  feedSerial(data) {
+    const text = typeof data === 'string' ? data : String.fromCharCode(...data);
+    // Храним коды символов как есть: в железе это байты, но нам важно не
+    // потерять русские буквы (UTF-16 → & 0xff их бы испортил).
+    for (const ch of text) this.serialRx.push(ch.codePointAt(0));
+    if (this.serialRx.length > 8192) this.serialRx.splice(0, this.serialRx.length - 8192);
+  }
+
+  /** Прочитать из очереди до разделителя (или всё, что есть). */
+  readSerialUntil(sep, keepTail = false) {
+    if (!this.serialRx.length) return '';
+    const idx = this.serialRx.indexOf(sep.charCodeAt(0));
+    // Разделитель забираем из очереди всегда, как это делает Arduino;
+    // в возвращаемую строку он попадает только при keepTail.
+    const take = idx < 0 ? this.serialRx.length : idx + 1;
+    const chars = this.serialRx.splice(0, take).map((c) => String.fromCharCode(c)).join('');
+    return keepTail ? chars : chars.replace(sep, '');
+  }
+
+  /**
+   * Порт /dev/ttyACM0 глазами Raspberry Pi: то же самое, что делает pyserial
+   * на настоящем компьютере. Скетч MicroPython пишет `serial.Serial('/dev/ttyACM0')`.
+   * Чтение неблокирующее: если данных нет — пустая строка, как при timeout=0.
+   */
+  usbSerial(port = '/dev/ttyACM0', baud = 9600) {
+    const rt = this;
+    return {
+      port,
+      baudrate: baud,
+      timeout: 0,
+      get in_waiting() { return rt.serialRx.length; },
+      get inWaiting() { return rt.serialRx.length; },
+      isOpen: true,
+      readline() { return rt.readSerialUntil('\n', true); },
+      read(n = 1) { return rt.serialRx.splice(0, Math.max(1, n | 0)).map((c) => String.fromCharCode(c)).join(''); },
+      read_all() { return rt.serialRx.splice(0).map((c) => String.fromCharCode(c)).join(''); },
+      write(data) {
+        const text = typeof data === 'string' ? data : String.fromCharCode(...(data || []));
+        rt.onUsbWrite(text);
+        return text.length;
+      },
+      flush() {},
+      close() {},
+      __enter__() { return this; },
+      __exit__() {},
     };
   }
 

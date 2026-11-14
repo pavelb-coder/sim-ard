@@ -568,6 +568,33 @@ for (const spec of Object.values(BOARDS)) {
   });
 }
 
+/**
+ * USB-разъём платы: точка, куда втыкается USB-кабель.
+ *
+ * Это не электрический вывод: у него нет номера (num), он не попадает ни в
+ * решатель цепи, ни в analogRead. Данные по нему ходят «по протоколу» —
+ * Serial одной платы появляется в /dev/ttyACM0 другой (см. js/app.js).
+ * Координаты — там, где на настоящей плате стоит разъём.
+ */
+const USB_PINS = {
+  uno:      { ymm: 11.8, dir: 'left' },   // USB-B на левом торце, рядом с гнездом питания
+  leonardo: { ymm: 11.8, dir: 'left' },
+  mega:     { ymm: 11.8, dir: 'left' },
+  nano:     { ymm: 8.9, dir: 'left' },    // mini-USB
+  esp32:    { ymm: 14.2, dir: 'left' },   // micro-USB
+  pico:     { ymm: 11.0, dir: 'left' },   // micro-USB
+  rpi5:     { xmm: 57, dir: 'down' },     // четыре USB-A на нижнем краю платы
+};
+
+for (const [id, cfg] of Object.entries(USB_PINS)) {
+  const spec = BOARDS[id];
+  if (!spec) continue;
+  const inset = spec.padInset ?? 2.54;
+  const x = cfg.dir === 'down' ? M(cfg.xmm - spec.wmm / 2) : M(-spec.wmm / 2 + inset);
+  const y = cfg.dir === 'down' ? M(spec.hmm / 2 - inset) : M(cfg.ymm - spec.hmm / 2);
+  spec.pins.push({ id: 'USB', label: 'USB', silk: 'USB', kind: 'usb', usb: true, dir: cfg.dir, x, y });
+}
+
 export const boardOf = (type) => BOARDS[type] || BOARDS.uno;
 
 /** Все числовые выводы платы (то, чем можно управлять из скетча). */

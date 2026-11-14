@@ -10,7 +10,9 @@
  * даже если после раскрытия блоков строк в JS стало больше.
  */
 
-const MODULES = new Set(['machine', 'time', 'utime', 'math', 'random', 'sys', 'gc']);
+// serial — pyserial на Raspberry Pi: Arduino, воткнутая в USB, читается как
+// serial.Serial('/dev/ttyACM0'). В симуляторе это виртуальный порт.
+const MODULES = new Set(['machine', 'time', 'utime', 'math', 'random', 'sys', 'gc', 'serial']);
 
 export function transpilePython(source) {
   const errors = [];

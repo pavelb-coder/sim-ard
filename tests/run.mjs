@@ -13,6 +13,7 @@ import { CheckContext, evaluate } from '../js/checker.js';
 import { lintCpp, lintPython } from '../js/hints.js';
 import { encodeProject, decodeProject, resultsCsv } from '../js/classroom.js';
 import { TASKS } from '../js/tasks.js';
+import { EXAMPLES } from '../js/examples.js';
 import { makeWorld, collides, raycast, castFan, roomAt, distToSegment } from '../js/ros/world.js';
 import { Robot } from '../js/ros/robot.js';
 import { OccupancyGrid } from '../js/ros/slam.js';
@@ -630,6 +631,8 @@ console.log('\nОтрисовка плат и подписи элементов'
     Object.values(BOARDS).every((spec) => spec.pins.every((p) => {
       const edgeY = spec.h / 2 - spec.padInset * 4;
       const edgeX = spec.w / 2 - spec.padInset * 4;
+      // разъём USB — не гребёнка: он стоит там, где на плате гнездо
+      if (p.kind === 'usb') return true;
       // боковые выводы (VCC разъёма ICSP) стоят на своём разъёме внутри платы
       if (p.dir === 'left' || p.dir === 'right') {
         return Math.abs(p.x) < spec.w / 2 - 8 && Math.abs(p.y) < spec.h / 2 - 8;
@@ -673,7 +676,7 @@ console.log('\nОтрисовка плат и подписи элементов'
     && near(Math.abs(+(byId(BOARDS.mega).D22.y - byId(BOARDS.mega).D24.y).toFixed(2)), PITCH));
 
   check('Raspberry Pi 5: гребёнка 1…40, 28 выводов GPIO, 8 земель и честная шина 5 В',
-    BOARDS.rpi5.pins.length === 40
+    BOARDS.rpi5.pins.filter((p) => p.kind !== 'usb').length === 40
     && BOARDS.rpi5.pins.filter((p) => typeof p.num === 'number').length === 28
     && BOARDS.rpi5.pins.filter((p) => p.kind === 'gnd').length === 8
     && BOARDS.rpi5.pins.some((p) => p.id === 'GPIO17' && p.num === 17)
@@ -1747,6 +1750,134 @@ console.log('\nВнешний вид: градиенты и палитра');
     pi.length > 500 && /rpi5:\s*paintRpi5/.test(boardSrc), `пикселей svg-кода: ${pi.length}`);
   check('на плате Pi 5 подписаны Wi-Fi, BCM2712 и Ethernet',
     /Wi-Fi/.test(pi) && /BCM2712/.test(pi) && /ETHERNET/i.test(pi));
+}
+
+console.log('\nЗадания «Эвольвектора»: эталоны проходят свои проверки');
+
+{
+  const examples = EXAMPLES;
+  const byId = Object.fromEntries(examples.map((e) => [e.id, e]));
+
+  check('в курсе 31 задание: 8 базовых и 23 из наборов «Эвольвектор»',
+    TASKS.length === 31 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 23,
+    `всего ${TASKS.length}`);
+  check('у заданий уникальные id и заполнены уровень, тема, минуты, цели и проверки',
+    new Set(TASKS.map((t) => t.id)).size === TASKS.length
+    && TASKS.every((t) => t.level >= 1 && t.level <= 3 && t.topic && t.minutes > 0
+      && Array.isArray(t.goals) && t.goals.length > 0 && Array.isArray(t.checks) && t.checks.length >= 3),
+    TASKS.filter((t) => !t.topic || !t.checks?.length).map((t) => t.id).join(', '));
+  check('у каждого задания есть эталон-пример, и он существует',
+    TASKS.every((t) => t.solutionExample && byId[t.solutionExample]),
+    TASKS.filter((t) => !byId[t.solutionExample]).map((t) => `${t.id}→${t.solutionExample}`).join(', '));
+  check('виды проверок — только schema, code и behavior',
+    TASKS.every((t) => t.checks.every((c) => ['schema', 'code', 'behavior'].includes(c.kind) && c.id && c.text && typeof c.test === 'function')));
+
+  // Эталон должен проходить все проверки, которые не требуют запуска скетча:
+  // схему и код движок проверяет без браузера.
+  const failures = [];
+  for (const task of TASKS) {
+    const ex = byId[task.solutionExample];
+    if (!ex) continue;
+    const cx = new CheckContext({
+      parts: ex.schematic.parts.map((p) => ({ ...p, __def: PARTS[p.type] })),
+      wires: ex.schematic.wires,
+      code: ex.code,
+      lang: ex.extraCode ? 'cpp' : 'cpp',
+      trace: {},
+    });
+    const res = evaluate(task, cx);
+    for (const item of res.items) {
+      if (item.kind === 'behavior' || task.checks.find((c) => c.id === item.id)?.needsLive) continue;
+      if (!item.ok) failures.push(`${task.id}: ${item.text} (${item.detail || ''})`);
+    }
+  }
+  check('эталоны проходят проверки схемы и кода', failures.length === 0, failures.slice(0, 4).join('; '));
+
+  check('все проверки «поведения» помечаются как ожидающие до запуска скетча',
+    (() => {
+      const task = TASKS.find((t) => t.id === 'ev-fade');
+      const cx = new CheckContext({ parts: [], wires: [], code: '', trace: {} });
+      const res = evaluate(task, cx);
+      return res.needRun && res.items.some((i) => i.kind === 'behavior' && i.skipped);
+    })());
+
+  // Провода в примерах ссылаются только на существующие выводы деталей.
+  const badWires = [];
+  for (const ex of examples) {
+    const types = Object.fromEntries(ex.schematic.parts.map((p) => [p.id, p.type]));
+    for (const w of ex.schematic.wires) {
+      for (const end of [w.a, w.b]) {
+        const def = PARTS[types[end.compId]];
+        if (!def) { badWires.push(`${ex.id}: нет детали ${end.compId}`); continue; }
+        const pins = def.pins({ id: end.compId, type: types[end.compId], props: {} }).map((p) => p.id);
+        if (!pins.includes(end.pin)) badWires.push(`${ex.id}: ${end.compId}.${end.pin}`);
+      }
+    }
+  }
+  check('во всех примерах провода идут к существующим выводам', badWires.length === 0, badWires.slice(0, 4).join('; '));
+}
+
+console.log('\nUSB: две платы кабелем, порт /dev/ttyACM0 и настоящая плата');
+
+{
+  // --- разъём на платах: есть там, где он есть в железе
+  check('у плат с USB-разъёмом есть вывод USB, у Pro Mini — нет',
+    ['uno', 'nano', 'leonardo', 'mega', 'esp32', 'pico', 'rpi5'].every((t) => BOARDS[t].pins.some((p) => p.id === 'USB'))
+    && !BOARDS.promini.pins.some((p) => p.id === 'USB'));
+  check('вывод USB не электрический: у него нет номера и он не попадает в analogRead/решатель',
+    Object.values(BOARDS).every((spec) => spec.pins.filter((p) => p.id === 'USB').every((p) => typeof p.num !== 'number' && p.kind === 'usb')));
+  check('USB-кабель — деталь с двумя концами и без номинала (он не горит)',
+    PARTS.usbcable && PARTS.usbcable.pins({}).map((p) => p.id).join('') === 'AB'
+    && !PARTS.usbcable.rating && PARTS.usbcable.category === 'Связь');
+
+  // --- приём в рантайме: то, что пришло по USB, видно скетчу
+  const rt = new ArduinoRuntime({ spec: BOARDS.uno });
+  rt.feedSerial('A0=511\nA0=512\n');
+  check('байты по USB складываются в очередь и считаются в available()', rt.Serial.available() === 14);
+  check('readStringUntil читает строку до перевода строки и терминатор не возвращает',
+    rt.Serial.readStringUntil(10) === 'A0=511' && rt.Serial.readStringUntil('\n') === 'A0=512');
+  rt.feedSerial('A');
+  check('read() отдаёт байт, как в железе, а на пустой очереди — −1',
+    rt.Serial.read() === 65 && rt.Serial.read() === -1);
+  rt.feedSerial('привет\n');
+  check('русские буквы не портятся при приёме', rt.Serial.readString() === 'привет\n');
+
+  // --- порт глазами Raspberry Pi
+  const pi = new ArduinoRuntime({ spec: BOARDS.rpi5 });
+  const written = [];
+  pi.onUsbWrite = (t) => written.push(t);
+  const port = pi.usbSerial('/dev/ttyACM0', 9600);
+  pi.feedSerial('от Arduino: 511\n');
+  check('pyserial-порт видит строку от Arduino', port.readline() === 'от Arduino: 511\n');
+  check('in_waiting считает принятые символы', port.in_waiting === 0);
+  port.write('on\n');
+  check('write() в порт уходит второй плате', written.join('') === 'on\n');
+
+  // --- MicroPython бережёт строки: strip(), decode(), splitlines()
+  check('strip/decode/splitlines работают как в MicroPython',
+    ' 42 \n'.strip() === '42' && 'x'.decode() === 'x' && 'a\nb'.splitlines().length === 2);
+
+  // --- 'r' в C++ — это число, поэтому switch (Serial.read()) работает
+  const t = transpile('void setup(){\n  Serial.begin(9600);\n}\nvoid loop(){\n  char c = Serial.read();\n  switch (c) {\n    case \'r\': Serial.println("red"); break;\n  }\n}\n');
+  check('символьный литерал \'r\' превращается в код символа 114', /case\s+114\s*:/.test(t.js), t.js.slice(0, 80));
+
+  // --- проверка задания «Arduino и Pi по USB» видит кабель между платами
+  const parts = [
+    { id: 'b1', type: 'uno', x: 0, y: 0, props: {}, __def: PARTS.uno },
+    { id: 'b2', type: 'rpi5', x: 0, y: 300, props: {}, __def: PARTS.rpi5 },
+    { id: 'x1', type: 'usbcable', x: 0, y: 150, props: {}, __def: PARTS.usbcable },
+  ];
+  const wires = [
+    { id: 'w1', a: { compId: 'b1', pin: 'USB' }, b: { compId: 'x1', pin: 'A' } },
+    { id: 'w2', a: { compId: 'x1', pin: 'B' }, b: { compId: 'b2', pin: 'USB' } },
+  ];
+  const task = TASKS.find((x) => x.id === 'usb-link');
+  const cx = new CheckContext({ parts, wires, code: 'void setup(){ Serial.begin(9600); Serial.println(1); }\nvoid loop(){}', trace: {} });
+  const cable = task.checks.find((c) => c.id === 'cable').test(cx);
+  const boards = task.checks.find((c) => c.id === 'boards').test(cx);
+  check('кабель, соединяющий разъёмы двух плат, засчитывается', cable.ok && boards.ok, JSON.stringify(cable));
+  const noCable = new CheckContext({ parts: parts.slice(0, 2), wires: [], code: '', trace: {} });
+  check('без кабеля задание не проходит', !task.checks.find((c) => c.id === 'cable').test(noCable).ok);
 }
 
 console.log(`\nИтого: ${passed} ок, ${failed} провалено\n`);

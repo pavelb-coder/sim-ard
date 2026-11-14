@@ -164,7 +164,17 @@ export function tokenize(src) {
         if (src[i] === '\n') break;
         s += src[i++];
       }
-      s += q; i++; push('str', s); continue;
+      s += q; i++;
+      // В C++ 'r' — это число (код символа 114), а не строка. Так же, как в
+      // железе, работает switch (c) { case 'r': … } после Serial.read().
+      const single = /^'(\\.|[^'\\])'$/.exec(s);
+      if (single) {
+        const code = { '\\n': 10, '\\t': 9, '\\r': 13, '\\0': 0, "\\'": 39, '\\\\': 92 }[single[1]]
+          ?? single[1].charCodeAt(0);
+        push('num', String(code));
+        continue;
+      }
+      push('str', s); continue;
     }
     if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src[i + 1] || ''))) {
       let s = '';

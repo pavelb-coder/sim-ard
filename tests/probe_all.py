@@ -14,7 +14,10 @@ OUT.mkdir(exist_ok=True)
 IDS = ["blink", "led", "button", "pot", "rc", "servo", "lcd", "oled",
        "dht", "sonar", "danger", "esp32", "pico", "pico-pwm", "two-boards",
        "rgb", "relay", "joystick", "seg7", "stepper", "power", "scope-pwm",
-       "multimeter", "probe", "shift595", "motor", "keypad", "overvolt", "short", "rpi5-led"]
+       "multimeter", "probe", "shift595", "motor", "keypad", "overvolt", "short", "rpi5-led",
+       "usb-uno-pi", "two-leds", "button-toggle", "fade", "ldr-nightlight", "buzzer-button",
+       "transistor-motor", "for-loop", "array-pattern", "functions", "switch-menu",
+       "serial-echo", "string-cmd", "random-dice", "millis-blink", "servo-pot"]
 
 
 async def main():
