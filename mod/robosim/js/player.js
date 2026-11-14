@@ -108,6 +108,32 @@
             checksEl.appendChild(list);
         }
 
+        /**
+         * Открывает в симуляторе то же задание, что настроено в элементе курса.
+         *
+         * Схема приходит в iframe ссылкой, а номер задания — атрибутом страницы.
+         * Без этого ученик видел общий список из 36 заданий и должен был сам
+         * догадаться, какое из них открыто, — а подсказки, цели и кнопка
+         * «Решение» относились к первому заданию списка.
+         */
+        var taskShown = false;
+
+        function showCourseTask() {
+            if (!task || taskShown) {
+                return;
+            }
+            var s = sim();
+            if (!s || !s.api || !s.api.tasksPanel || typeof s.api.tasksPanel.select !== 'function') {
+                return;
+            }
+            try {
+                s.api.tasksPanel.select(task);
+                taskShown = true;
+            } catch (e) {
+                // Симулятор ещё не готов — попробуем на следующем тике.
+            }
+        }
+
         /** Доступ к внутренностям симулятора (только для своей копии). */
         function sim() {
             try {
@@ -231,7 +257,19 @@
                 if (!external) {
                     setStatus(STR.ready, 'ok');
                 }
+                showCourseTask();
             });
+            // Симулятор поднимается асинхронно: несколько секунд ждём, пока
+            // в iframe появится панель заданий, и открываем задание курса.
+            if (task && !external) {
+                var taskTries = 0;
+                var taskTimer = setInterval(function() {
+                    showCourseTask();
+                    if (taskShown || ++taskTries > 40) {
+                        clearInterval(taskTimer);
+                    }
+                }, 250);
+            }
             if (!external) {
                 setStatus(STR.loading, 'busy');
             }

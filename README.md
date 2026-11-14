@@ -169,6 +169,7 @@ php admin\cli\purge_caches.php
 | 53 готовых примера и 36 заданий (у каждого — цели, критерии и пример-решение) | `examples.json`, `tasks.json` |
 | Семь датчиков с библиотеками: MPU-6050 (наклон и тряска), BMP280, DS18B20, BH1750, MQ-2, влажность почвы, микрофон — с честными делителями, подтяжками шины и порогами | `simulator/js/{parts,circuit,libraries}.js` |
 | Кнопка «Решение» в карточке задания: открывает готовый пример с автозапуском | `tasks.json` → `solutionExample`, `player.js` |
+| Элемент курса сразу открывает **своё** задание в симуляторе: карточка, цели и подсказки — про него, а не про первое из списка | `player.js` → `showCourseTask()`, `data-task` в шаблоне |
 | USB-кабель между двумя платами и порт `/dev/ttyACM0` для Raspberry Pi 5 | `simulator/js/runtime.js`, `simulator/js/parts.js` |
 | Настоящая плата по USB: Web Serial из браузера ученика (Chrome, Edge, Opera) | `simulator/js/webserial.js` |
 | Симулятор со схемой, решателем цепей и компиляторами C++/MicroPython | `simulator/` |
@@ -299,9 +300,11 @@ node tools/extract-examples.mjs ../sim         # примеры и задани�
 | Отчёт учителя | попытки, лучший результат, статус, кнопки Open / Download / Delete |
 | Ученик | своя страница, свои попытки, своя оценка |
 | Форма настроек элемента (1.0.4) | `course/modedit.php` → списки 53 примеров и 36 заданий, задания сгруппированы по уровню (`1 · Первый светодиод` …) |
-| Симулятор 1.0.4 внутри Moodle | 36 заданий и 53 примера в `iframe`, `__sim.checkTask('ev-relay')` отвечает, `allow="fullscreen; serial"` (Web Serial) |
+| Симулятор 1.0.4 внутри Moodle | 36 заданий и 53 примера в `iframe`, элемент курса сам открывает настроенное задание (`__sim.tasksPanel.currentId`), `__sim.checkTask('ev-relay')` отвечает, `allow="fullscreen; serial"` (Web Serial) |
 
 ![Страница элемента курса в Moodle](docs/moodle-activity.png)
+
+![Задание про газоанализатор MQ-2: симулятор открыл нужную карточку, проверка дала 100 %](docs/moodle-sensor-task.png)
 
 ![Отчёт по сданным работам](docs/moodle-report.png)
 
