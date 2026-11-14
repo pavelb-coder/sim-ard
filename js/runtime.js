@@ -534,6 +534,9 @@ export class ArduinoRuntime {
       floor: Math.floor, ceil: Math.ceil, round: Math.round, fabs: Math.abs,
       // препроцессор/predefined-константы Arduino
       HEX: 16, DEC: 10, OCT: 8, BIN: 2, LSBFIRST: 0, MSBFIRST: 1, ARDUINO: 10819,
+      // типы пикселей Adafruit_NeoPixel: порядок байт и частота шины
+      NEO_RGB: 0x06, NEO_RBG: 0x09, NEO_GRB: 0x52, NEO_GBR: 0xA0,
+      NEO_BRG: 0x58, NEO_BGR: 0xE0, NEO_KHZ800: 0x0000, NEO_KHZ400: 0x0100,
       CHANGE: 1, RISING: 2, FALLING: 3, LED_BUILTIN: this.spec.builtinLed,
       // строки, символы, биты и вывод битов — как в avr-libc / Arduino
       i32: this.i32.bind(this), b8: this.b8.bind(this), chr: this.chr.bind(this),

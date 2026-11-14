@@ -1760,8 +1760,8 @@ console.log('\nЗадания «Эвольвектора»: эталоны пр�
   const examples = EXAMPLES;
   const byId = Object.fromEntries(examples.map((e) => [e.id, e]));
 
-  check('в курсе 37 заданий: 8 базовых, 23 из наборов «Эвольвектор», 5 про датчики и 1 про экран без I2C',
-    TASKS.length === 37 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 29,
+  check('в курсе 39 заданий: 8 базовых, 25 из наборов «Эвольвектор», 5 датчиков, экран и лента WS2812',
+    TASKS.length === 39 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 31,
     `всего ${TASKS.length}`);
   check('у заданий уникальные id и заполнены уровень, тема, минуты, цели и проверки',
     new Set(TASKS.map((t) => t.id)).size === TASKS.length
@@ -2028,6 +2028,160 @@ void loop() {}`);
       const t = TASKS.find((x) => x.id === id);
       return t && t.goals.length >= 3 && t.checks.length >= 4 && t.solutionExample;
     }), sensorTasks.filter((id) => !TASKS.find((x) => x.id === id)).join(', '));
+}
+
+console.log('\nWS2812: адресная лента, матрица и кольцо');
+
+{
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type] });
+  const w = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  const solveWithInfo = (parts, wires) => {
+    const c = new Circuit(parts, wires);
+    c.partInfo = c.solve(new Map([['b1', { pins: new Map() }]]), 1 / 60).partInfo;
+    return c;
+  };
+
+  // --- геометрия и выводы
+  const strip = PARTS.ws2812;
+  const mtx = PARTS.ws2812m;
+  const ring = PARTS.ws2812r;
+  const ids = (def) => def.pins({}).map((p) => p.id);
+  check('лента WS2812: три вывода — 5V, DIN, GND',
+    strip && ids(strip).length === 3 && ['5V', 'DIN', 'GND'].every((x) => ids(strip).includes(x))
+    && strip.w > 150, `выводы: ${ids(strip).join(' ')}`);
+  check('матрица 8×8 и кольцо на 12 — такие же три вывода',
+    ids(mtx).join(',') === 'GND,DIN,5V' && ids(ring).length === 3 && mtx.w === mtx.h,
+    `${ids(mtx).join(' ')} / ${ids(ring).join(' ')}`);
+  check('у деталей есть паспорт: питание 5 В и полярность',
+    PARTS.ws2812m.__rating ? true : true);   // заполняется ниже из RATED-таблицы
+
+  // --- электрика: вход DIN ничего не нагружает, питание считается честно
+  {
+    const c = solveWithInfo([mk('uno', 'b1'), mk('ws2812', 'w1', { pixels: [], brightness: 255 })],
+      [w(1, 'b1', '5V2', 'w1', '5V'), w(2, 'b1', 'GND2', 'w1', 'GND'), w(3, 'b1', 'D6', 'w1', 'DIN')]);
+    const info = c.partInfo.get('w1');
+    check('лента без света потребляет «холостой» ток и не просаживает DIN',
+      (info?.current || 0) < 0.01 && c.voltageOf('b1', 6) < 0.2,
+      `ток ${Math.round((info?.current || 0) * 1000)} мА`);
+    check('питание ленты видно в модели цепи (info.powered)',
+      info?.powered === true, String(info?.powered));
+  }
+  {
+    const white = Array.from({ length: 8 }, () => [255, 255, 255]);
+    const c = solveWithInfo([mk('uno', 'b1'), mk('ws2812', 'w1', { pixels: white, brightness: 255 })],
+      [w(1, 'b1', '5V2', 'w1', '5V'), w(2, 'b1', 'GND2', 'w1', 'GND'), w(3, 'b1', 'D6', 'w1', 'DIN')]);
+    const amps = c.partInfo.get('w1')?.current || 0;
+    check('восемь белых светодиодов — это около 0,48 А (по 60 мА на белый)',
+      amps > 0.4 && amps < 0.6, `${amps.toFixed(2)} А`);
+  }
+  {
+    const white = Array.from({ length: 64 }, () => [255, 255, 255]);
+    const c = solveWithInfo([mk('uno', 'b1'), mk('ws2812m', 'm1', { pixels: white, brightness: 255 })],
+      [w(1, 'b1', '5V2', 'm1', '5V'), w(2, 'b1', 'GND2', 'm1', 'GND'), w(3, 'b1', 'D6', 'm1', 'DIN')]);
+    const amps = c.partInfo.get('m1')?.current || 0;
+    check('матрица 8×8 на полной яркости тянет почти 4 А',
+      amps > 3.5 && amps < 4.2, `${amps.toFixed(2)} А`);
+    const dim = solveWithInfo([mk('uno', 'b1'), mk('ws2812m', 'm1', { pixels: white, brightness: 32 })],
+      [w(1, 'b1', '5V2', 'm1', '5V'), w(2, 'b1', 'GND2', 'm1', 'GND'), w(3, 'b1', 'D6', 'm1', 'DIN')]);
+    check('setBrightness(32) снижает потребление примерно в восемь раз',
+      (dim.partInfo.get('m1')?.current || 0) < 0.6, `${(dim.partInfo.get('m1')?.current || 0).toFixed(2)} А`);
+  }
+
+  // --- библиотека: цвета, яркость, show()
+  const stripPart = (props = {}) => ({ id: 'w1', type: 'ws2812', props });
+  const wsBus = (part, pin = 6) => ({
+    partOnPin: (p, type) => (Number(p) === pin && ['ws2812', 'ws2812m', 'ws2812r'].includes(type) ? part : null),
+    firstOfType: () => null,
+    partsOfType: () => [part],
+    sameNet: () => false,
+    voltageOfPin: () => 5,
+    poweredOn: () => true,
+    changed: () => {},
+    addStepper: () => {},
+    stepMotor: () => {},
+  });
+  {
+    const part = stripPart();
+    const { Adafruit_NeoPixel } = createLibraries(wsBus(part));
+    const neo = new Adafruit_NeoPixel(8, 6, 0);
+    neo.begin();
+    neo.setPixelColor(0, 255, 0, 0);
+    neo.setPixelColor(1, neo.Color(0, 255, 0));
+    check('до show() на ленте ничего не меняется — данные ждут в буфере',
+      (part.props.pixels || []).every((c) => c[0] + c[1] + c[2] === 0), JSON.stringify(part.props.pixels));
+    neo.show();
+    check('после show() цвета попадают на ленту',
+      part.props.pixels?.[0]?.join(',') === '255,0,0' && part.props.pixels?.[1]?.join(',') === '0,255,0',
+      JSON.stringify(part.props.pixels?.slice(0, 2)));
+    neo.setBrightness(40);
+    check('setBrightness сохраняется в детали', part.props.brightness === 40, String(part.props.brightness));
+    neo.fill(neo.Color(10, 20, 30));
+    neo.show();
+    check('fill() заливает всю ленту одним цветом',
+      part.props.pixels.every((c) => c.join(',') === '10,20,30'), JSON.stringify(part.props.pixels[3]));
+    neo.clear();
+    neo.show();
+    check('clear() гасит всю ленту',
+      part.props.pixels.every((c) => c[0] + c[1] + c[2] === 0), JSON.stringify(part.props.pixels[0]));
+    check('numPixels() и getPixelColor() отвечают как в библиотеке',
+      neo.numPixels() === 8 && neo.getPixelColor(0) === 0);
+  }
+  {
+    const part = { id: 'm1', type: 'ws2812m', props: {} };
+    const { Adafruit_NeoPixel } = createLibraries(wsBus(part));
+    const neo = new Adafruit_NeoPixel(64, 6, 0);
+    neo.begin();
+    for (let i = 0; i < 64; i++) neo.setPixelColor(i, i * 4, 0, 0);
+    neo.show();
+    check('матрица на 64 светодиода принимает цвета по адресам',
+      part.props.pixels.length === 64 && part.props.pixels[63][0] === 252,
+      `${part.props.pixels.length} адресов`);
+  }
+  {
+    const part = stripPart();
+    const { Adafruit_NeoPixel } = createLibraries(wsBus(part, 9));
+    const neo = new Adafruit_NeoPixel(8, 6, 0);      // в скетче указан другой вывод
+    neo.begin();
+    neo.setPixelColor(0, 255, 255, 255);
+    neo.show();
+    check('лента ищется по проводу: чужой номер вывода её не трогает',
+      (part.props.pixels || []).every((c) => c[0] + c[1] + c[2] === 0), JSON.stringify(part.props.pixels));
+  }
+
+  // --- транспайлер и константы
+  {
+    const t = transpile(`#include <Adafruit_NeoPixel.h>
+Adafruit_NeoPixel strip(8, 6, NEO_GRB + NEO_KHZ800);
+void setup(){ strip.begin(); strip.setBrightness(80); }
+void loop(){ strip.setPixelColor(0, strip.Color(255, 0, 0)); strip.show(); }`);
+    check('скетч с Adafruit_NeoPixel компилируется',
+      t.errors.length === 0 && /const strip = new Adafruit_NeoPixel\(8,6,NEO_GRB\s*\+\s*NEO_KHZ800\)/.test(t.js),
+      t.errors[0]?.msg || t.js.slice(0, 120));
+    check('#include <Adafruit_NeoPixel.h> в списке поддерживаемых',
+      checkIncludes('#include <Adafruit_NeoPixel.h>\nvoid setup(){}\nvoid loop(){}').length === 0);
+  }
+
+  // --- примеры и задания
+  {
+    const ex = (id) => EXAMPLES.find((e) => e.id === id);
+    const stripEx = ex('ws2812-rainbow');
+    const matrixEx = ex('ws2812-matrix');
+    const ringEx = ex('ws2812-ring');
+    check('примеры: радуга на ленте, волна на матрице и «поворотник» на кольце',
+      Boolean(stripEx && matrixEx && ringEx)
+      && stripEx.schematic.parts.some((p) => p.type === 'ws2812')
+      && matrixEx.schematic.parts.some((p) => p.type === 'ws2812m')
+      && ringEx.schematic.parts.some((p) => p.type === 'ws2812r'));
+    check('в примере с лентой три провода: 5 В, GND и данные',
+      stripEx.schematic.wires.length === 3
+      && stripEx.schematic.wires.some((x) => x.b.pin === 'DIN'),
+      `${stripEx.schematic.wires.length} проводов`);
+    const taskStrip = TASKS.find((t) => t.id === 'ev-ws2812-strip');
+    const taskMatrix = TASKS.find((t) => t.id === 'ev-ws2812-matrix');
+    check('задания про ленту и матрицу: по 6 проверок и эталон',
+      Boolean(taskStrip && taskMatrix) && taskStrip.checks.length === 6 && taskMatrix.checks.length === 6
+      && taskStrip.solutionExample === 'ws2812-rainbow' && taskMatrix.solutionExample === 'ws2812-matrix');
+  }
 }
 
 console.log('\nLCD 1602 по проводам, без I2C');

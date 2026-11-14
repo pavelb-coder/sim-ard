@@ -364,6 +364,32 @@ export class Circuit {
           }
           break;
         }
+        // Адресная лента / матрица / кольцо WS2812: вход DIN — обычный КМОП-вход
+        // (на цепь не влияет), а питание лента потребляет честно: около 20 мА
+        // на канал каждого светодиода, то есть до 60 мА на белый.
+        case 'ws2812':
+        case 'ws2812m':
+        case 'ws2812r': {
+          const vcc = n('5V'), g = n('GND') || gnd, din = n('DIN');
+          if (din && g && din !== g) push({ type: 'R', n1: din, n2: g, value: 1e6 });
+          const px = Array.isArray(p.props?.pixels) ? p.props.pixels : [];
+          const bright = Math.max(0, Math.min(255, Number(p.props?.brightness ?? 255))) / 255;
+          let sum = 0;
+          for (const c of px) {
+            if (!c) continue;
+            sum += (Number(c[0] || 0) + Number(c[1] || 0) + Number(c[2] || 0)) / 765;
+          }
+          // 20 мА на канал: белый светодиод на полной яркости — 60 мА
+          const amps = 0.001 + sum * 0.06 * bright;                 // холостой ток + светодиоды
+          info.current = amps;
+          // На первом расчёте предыдущих напряжений ещё нет — считаем питание
+          // поданным, если провода есть, а дальше судим по настоящему напряжению.
+          info.powered = Boolean(vcc && g && vcc !== g && (!this._last || prevV(vcc) - prevV(g) > 3.0));
+          if (vcc && g && vcc !== g) {
+            push({ type: 'R', n1: vcc, n2: g, value: Math.max(0.6, 5 / Math.max(amps, 0.002)) });
+          }
+          break;
+        }
         case 'servo': {
           const a = n('VCC'), b = n('GND');
           const pwm = n('PWM');

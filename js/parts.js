@@ -31,6 +31,7 @@ export const SHORT_NAME = {
   ledBicolor: 'двухцветный светодиод', ledBar: 'линейка светодиодов', traffic: 'светофор',
   pnp: 'транзистор PNP', mosfet: 'MOSFET', tip120: 'Дарлингтон TIP120',
   l298n: 'драйвер L298N', dcmotor: 'мотор постоянного тока', keypad: 'клавиатура 4×4',
+  ws2812: 'лента WS2812', ws2812m: 'матрица WS2812', ws2812r: 'кольцо WS2812',
   sr595: 'сдвиговый регистр 74HC595', sr165: 'сдвиговый регистр 74HC165',
   seg7: 'индикатор', relay: 'реле', joystick: 'джойстик', stepper28byj: 'шаговый двигатель',
   uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico', rpi5: 'Raspberry Pi 5',
@@ -50,6 +51,7 @@ export const REF_PREFIX = {
   usbcable: 'X',
   mpu6050: 'MPU', bmp280: 'BMP', ds18b20: 'T', bh1750: 'LX', mq2: 'GAS', soil: 'SM', sound: 'MIC',
   l298n: 'DA', dcmotor: 'M', keypad: 'SB', sr595: 'DD', sr165: 'DD',
+  ws2812: 'D', ws2812m: 'D', ws2812r: 'D',
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
 
@@ -1751,7 +1753,160 @@ const EXTRA = {
   },
 };
 
-export const PARTS = { ...DISCRETE, ...MODULES, ...POWER, ...EXTRA };
+// ---------------------------------------------- адресные светодиоды WS2812 ----
+/*
+ * WS2812 / NeoPixel: внутри каждого светодиода стоит микросхема-драйвер, и все
+ * они соединены в цепочку «данные → данные». Поэтому с платы идёт всего один
+ * провод DIN, а цвет каждого светодиода задаётся по адресу.
+ *
+ * Деталь показывает то, что попало на ленту после show(): до этого горит
+ * прежняя картинка — как у настоящей адресной ленты.
+ */
+/** Цвет одного светодиода: и для первой отрисовки, и для обновления на ходу.
+ *  Глаз видит яркость нелинейно, поэтому к картинке применяем гамму — при
+ *  setBrightness(40) лента всё равно светится, как настоящая. */
+function wsShade(comp, i, power = 1) {
+  const bright = Math.max(0, Math.min(255, Number(comp?.props?.brightness ?? 255))) / 255;
+  const k = Math.pow(bright, 0.62) * power;
+  const px = Array.isArray(comp?.props?.pixels) ? comp.props.pixels : [];
+  const c = px[i] || [0, 0, 0];
+  const r0 = Number(c[0]) || 0, g0 = Number(c[1]) || 0, b0 = Number(c[2]) || 0;
+  const r = Math.round(r0 * k), gg = Math.round(g0 * k), b = Math.round(b0 * k);
+  const lum = (r0 + g0 + b0) / 765;
+  // горящий кристалл светится ярче корпуса: подмешиваем белый — так лента
+  // читается и на малой яркости, как настоящая под прозрачной заливкой
+  const m = Math.min(0.8, Math.pow(lum, 0.5) * k * 1.1 + 0.12);
+  const lit = r + gg + b > 8;
+  return {
+    lit,
+    fill: `rgb(${r},${gg},${b})`,
+    core: lit
+      ? `rgb(${Math.round(r + (255 - r) * m)},${Math.round(gg + (255 - gg) * m)},${Math.round(b + (255 - b) * m)})`
+      : '#0b1015',
+    glowOpacity: (lum * k * 0.6).toFixed(2),
+  };
+}
+
+/** Корпус одного светодиода ленты. sh — заранее посчитанный цвет (wsShade). */
+const WS_CELL = (x, y, size, i, sh = null) => `
+  <circle class="px-glow" data-i="${i}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(size * 0.85).toFixed(1)}"
+          fill="${sh ? sh.fill : '#000'}" opacity="${sh ? sh.glowOpacity : 0}"/>
+  <rect x="${(x - size / 2).toFixed(1)}" y="${(y - size / 2).toFixed(1)}" width="${size}" height="${size}"
+        rx="${(size * 0.2).toFixed(1)}" fill="#131a21" stroke="#232e39" stroke-width=".7"/>
+  <rect class="px" data-i="${i}" x="${(x - size * 0.33).toFixed(1)}" y="${(y - size * 0.33).toFixed(1)}"
+        width="${(size * 0.66).toFixed(1)}" height="${(size * 0.66).toFixed(1)}"
+        rx="${(size * 0.14).toFixed(1)}" fill="${sh ? sh.fill : '#1b232c'}"/>
+  <circle class="px-core" data-i="${i}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}"
+          r="${(size * 0.19).toFixed(1)}" fill="${sh ? sh.core : '#0b1015'}"/>
+  <rect x="${(x - size * 0.27).toFixed(1)}" y="${(y - size * 0.28).toFixed(1)}" width="${(size * 0.26).toFixed(1)}"
+        height="${(size * 0.14).toFixed(1)}" rx=".6" fill="rgba(255,255,255,.16)"/>`;
+
+/** Контактные площадки на конце ленты: золото и сверление, как на текстолите. */
+const WS_PADS = (pins) => pins.map((p) => `
+  <rect x="${(p.x - 4.8).toFixed(1)}" y="${(p.y - 4.8).toFixed(1)}" width="9.6" height="9.6" rx="1.2" fill="#0a0f14"/>
+  <rect x="${(p.x - 4).toFixed(1)}" y="${(p.y - 4).toFixed(1)}" width="8" height="8" rx="1" fill="url(#sim-gold)" opacity=".95"/>
+  <circle cx="${p.x}" cy="${p.y}" r="1.7" fill="url(#sim-drill)"/>`).join('');
+
+/** Сколько светодиодов у детали на схеме (физический размер, не адресов в скетче). */
+const WS_CAPACITY = { ws2812: 8, ws2812m: 64, ws2812r: 12 };
+
+/** Обновление картинки: цвет из props.pixels, яркость и наличие питания. */
+function wsUpdate(g, comp, env) {
+  const cap = WS_CAPACITY[comp.type] || 8;
+  const power = env?.info?.powered === false ? 0 : 1;
+  for (let i = 0; i < cap; i++) {
+    const sh = wsShade(comp, i, power);
+    const el = g.querySelector(`.px[data-i="${i}"]`);
+    if (el) {
+      el.setAttribute('fill', sh.fill);
+      el.setAttribute('opacity', sh.lit ? '1' : '.9');
+    }
+    const core = g.querySelector(`.px-core[data-i="${i}"]`);
+    if (core) core.setAttribute('fill', sh.core);
+    const glow = g.querySelector(`.px-glow[data-i="${i}"]`);
+    if (glow) {
+      glow.setAttribute('fill', sh.fill);
+      glow.setAttribute('opacity', sh.glowOpacity);
+    }
+  }
+}
+
+const WS2812 = {
+  ws2812: {
+    name: 'Лента WS2812 (8)', category: 'Компоненты', w: 216, h: 48,
+    pins: () => [
+      { id: '5V', label: '5V', x: -108, y: -12, dir: 'left' },
+      { id: 'DIN', label: 'DIN', x: -108, y: 0, dir: 'left' },
+      { id: 'GND', label: 'GND', x: -108, y: 12, dir: 'left' },
+    ],
+    render(comp) {
+      const pins = this.pins(comp);
+      const cells = Array.from({ length: 8 }, (_, i) => WS_CELL(-66 + i * 22, 0, 19, i, wsShade(comp, i))).join('');
+      return partTag(comp, 216, 48, `
+        <rect x="-109" y="-21" width="218" height="42" rx="6" fill="rgba(0,0,0,.45)"/>
+        <rect x="-108" y="-20" width="216" height="40" rx="6" fill="#12181e" stroke="#2b3540" stroke-width="1"/>
+        <rect x="-106" y="-18" width="212" height="6" rx="3" fill="rgba(255,255,255,.07)"/>
+        ${cells}
+        ${Array.from({ length: 7 }, (_, i) => `<path d="M ${-55 + i * 22} -15 l 5 3 l -5 3" fill="none" stroke="#3d4b57" stroke-width="1.2"/>`).join('')}
+        ${WS_PADS(pins)}
+        ${['5V', 'DIN', 'GND'].map((t, i) => `<text x="-97" y="${-8 + i * 12}" style="font:4.6px ui-monospace,monospace;fill:#8fa4b6">${t}</text>`).join('')}
+        <text x="56" y="17" style="font:4.6px ui-monospace,monospace;fill:#4d5c69">WS2812B · 5 В</text>`);
+    },
+    update: wsUpdate,
+  },
+
+  ws2812m: {
+    name: 'Матрица WS2812 8×8', category: 'Компоненты', w: 132, h: 132,
+    pins: () => [
+      { id: 'GND', label: 'GND', x: -26, y: 66, dir: 'down' },
+      { id: 'DIN', label: 'DIN', x: 0, y: 66, dir: 'down' },
+      { id: '5V', label: '5V', x: 26, y: 66, dir: 'down' },
+    ],
+    render(comp) {
+      const pins = this.pins(comp);
+      const cells = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          cells.push(WS_CELL(-49 + c * 14, -49 + r * 14, 13, r * 8 + c, wsShade(comp, r * 8 + c)));
+        }
+      }
+      return partTag(comp, 132, 132, `
+        <rect x="-65" y="-65" width="130" height="130" rx="5" fill="rgba(0,0,0,.45)"/>
+        <rect x="-64" y="-64" width="128" height="128" rx="5" fill="#12181e" stroke="#2b3540" stroke-width="1"/>
+        <rect x="-62" y="-62" width="124" height="6" rx="3" fill="rgba(255,255,255,.06)"/>
+        ${cells.join('')}
+        ${WS_PADS(pins)}
+        <text x="0" y="${-54}" style="font:5px ui-monospace,monospace;fill:#4d5c69;text-anchor:middle">8 × 8 · WS2812B</text>`);
+    },
+    update: wsUpdate,
+  },
+
+  ws2812r: {
+    name: 'Кольцо WS2812 (12)', category: 'Компоненты', w: 120, h: 120,
+    pins: () => [
+      { id: '5V', label: '5V', x: -22, y: 56, dir: 'down' },
+      { id: 'DIN', label: 'DIN', x: 0, y: 56, dir: 'down' },
+      { id: 'GND', label: 'GND', x: 22, y: 56, dir: 'down' },
+    ],
+    render(comp) {
+      const pins = this.pins(comp);
+      const cells = Array.from({ length: 12 }, (_, i) => {
+        const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
+        return WS_CELL(Math.cos(a) * 42, Math.sin(a) * 42 - 4, 16, i, wsShade(comp, i));
+      }).join('');
+      return partTag(comp, 120, 120, `
+        <circle cx="1" cy="1" r="58" fill="rgba(0,0,0,.45)"/>
+        <circle cx="0" cy="0" r="57" fill="#12181e" stroke="#2b3540" stroke-width="1"/>
+        <circle cx="0" cy="0" r="29" fill="#0b0f13" stroke="#232d38" stroke-width="1"/>
+        <circle cx="0" cy="0" r="45" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="14"/>
+        ${cells}
+        ${WS_PADS(pins)}`);
+    },
+    update: wsUpdate,
+  },
+};
+
+export const PARTS = { ...DISCRETE, ...MODULES, ...POWER, ...EXTRA, ...WS2812 };
 
 /**
  * Полярность у готовых модулей: плюс питания — на выводе VCC, минус — на GND.
@@ -1816,6 +1971,15 @@ export const RATINGS = {
   joystick:   { vMax: 5.5, hint: 'питание — до 5 В' },
   dcmotor:    { vMax: 6,   iMax: 0.6, hint: 'моторчик рассчитан на 3–6 В' },
   stepper28byj: { vMax: 6, hint: 'шаговый мотор рассчитан на 5 В', ...MODULE_POL },
+  ws2812:     { vMax: 5.5, vMin: -0.6, plus: '5V', minus: 'GND',
+                hint: 'адресная лента питается от 5 В, плюс — на «5V», минус — на «GND»',
+                revHint: 'плюс питания ленты — вывод «5V», минус — «GND»' },
+  ws2812m:    { vMax: 5.5, vMin: -0.6, plus: '5V', minus: 'GND',
+                hint: 'матрица 8×8 при полной яркости тянет 3,8 А — нужно внешнее питание',
+                revHint: 'плюс питания матрицы — вывод «5V», минус — «GND»' },
+  ws2812r:    { vMax: 5.5, vMin: -0.6, plus: '5V', minus: 'GND',
+                hint: 'кольцо питается от 5 В, на все 12 светодиодов нужен общий провод',
+                revHint: 'плюс питания кольца — вывод «5V», минус — «GND»' },
 };
 
 for (const [type, rate] of Object.entries(RATINGS)) {

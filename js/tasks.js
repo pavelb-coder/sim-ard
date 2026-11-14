@@ -1890,6 +1890,111 @@ export const TASKS = [
     solutionExample: 'lcd-parallel',
   },
 
+
+  {
+    id: 'ev-ws2812-strip',
+    title: 'Адресная лента WS2812',
+    level: 3,
+    topic: 'Адресные светодиоды',
+    minutes: 25,
+    brief: 'Подключите ленту WS2812B: питание 5 В, общий провод и ОДИН провод данных DIN на цифровой вывод. В скетче — Adafruit_NeoPixel: цвет задаётся по номеру светодиода, а на ленту попадает после show().',
+    goals: [
+      '«5V» ленты — на 5 В платы, «GND» — на землю, «DIN» — на цифровой вывод',
+      'Adafruit_NeoPixel strip(8, 6, NEO_GRB + NEO_KHZ800) и strip.begin()',
+      'setPixelColor() по номеру и show() после каждого кадра',
+    ],
+    start: { parts: [board()], wires: [], code: SKELETON_CPP },
+    checks: [
+      {
+        id: 'strip', kind: 'schema', text: 'На схеме есть адресная лента WS2812',
+        hint: 'В палитре это «Лента WS2812 (8)» — чёрная гибкая плата с восемью светодиодами.',
+        test: (cx) => ({ ok: cx.partsOf('ws2812').length > 0, detail: '' }),
+      },
+      {
+        id: 'power', kind: 'schema', text: 'Питание: «5V» ленты на 5 В платы, «GND» — на землю',
+        hint: 'Лента питается от 5 В: плюс — на вывод «5V», минус — на «GND».',
+        test: (cx) => ({ ok: cx.partsOf('ws2812').some((l) => cx.toVcc(l.id, '5V') && cx.toGround(l.id, 'GND')), detail: '' }),
+      },
+      {
+        id: 'data', kind: 'schema', text: 'Провод данных DIN идёт на цифровой вывод платы',
+        hint: 'Данные — один провод: например, DIN → D6. Питание у ленты отдельное.',
+        test: (cx) => ({ ok: cx.partsOf('ws2812').some((l) => Boolean(digitalPinOf(cx, l, 'DIN'))), detail: '' }),
+      },
+      {
+        id: 'library', kind: 'code', text: 'Подключена Adafruit_NeoPixel и создан объект ленты',
+        hint: '#include <Adafruit_NeoPixel.h>  и  Adafruit_NeoPixel strip(8, 6, NEO_GRB + NEO_KHZ800);',
+        test: (cx) => cx.codeHas(/#include\s*<Adafruit_NeoPixel\.h>/i)
+          && cx.codeHas(/Adafruit_NeoPixel\s+\w+\s*\(/),
+      },
+      {
+        id: 'show', kind: 'code', text: 'Лента инициализирована и обновляется: begin() и show()',
+        hint: 'Пока не вызвать show(), на ленте горит прежняя картинка — данные ждут в буфере.',
+        test: (cx) => cx.codeHas(/\.begin\s*\(/) && cx.codeHas(/\.show\s*\(/),
+      },
+      {
+        id: 'colors', kind: 'behavior', text: 'На ленте загорелись разные цвета (не меньше четырёх)',
+        hint: 'Запустите скетч: каждый светодиод может светить своим — это и есть «адресность».',
+        test: (cx) => {
+          const px = Object.values(cx.trace.pixels || {})[0] || [];
+          const colors = new Set(px.filter((c) => c[0] + c[1] + c[2] > 12).map((c) => c.join(',')));
+          return { ok: colors.size >= 4, detail: `${colors.size} разных цветов` };
+        },
+      },
+    ],
+    solutionExample: 'ws2812-rainbow',
+  },
+
+  {
+    id: 'ev-ws2812-matrix',
+    title: 'Матрица WS2812 8×8',
+    level: 3,
+    topic: 'Адресные светодиоды',
+    minutes: 30,
+    brief: 'Матрица 8×8 — это 64 адресных светодиода в одной цепочке. Подключите питание, землю и DIN, а в скетче превратите «плоский» номер светодиода в строку и столбец: номер = строка * 8 + столбец.',
+    goals: [
+      'Питание 5 В и земля, DIN — на цифровой вывод',
+      'Adafruit_NeoPixel matrix(64, 6, NEO_GRB + NEO_KHZ800)',
+      'Обход матрицы двумя циклами и заливка большей части светодиодов',
+    ],
+    start: { parts: [board()], wires: [], code: SKELETON_CPP },
+    checks: [
+      {
+        id: 'matrix', kind: 'schema', text: 'На схеме есть матрица WS2812 8×8',
+        hint: 'В палитре — «Матрица WS2812 8×8»: 64 светодиода на одной плате.',
+        test: (cx) => ({ ok: cx.partsOf('ws2812m').length > 0, detail: '' }),
+      },
+      {
+        id: 'power', kind: 'schema', text: 'Питание матрицы: «5V» на 5 В платы, «GND» — на землю',
+        hint: 'На полной яркости матрица тянет почти 4 А — в железе её питают отдельно, общий провод всё равно нужен.',
+        test: (cx) => ({ ok: cx.partsOf('ws2812m').some((m) => cx.toVcc(m.id, '5V') && cx.toGround(m.id, 'GND')), detail: '' }),
+      },
+      {
+        id: 'data', kind: 'schema', text: 'DIN матрицы подключён к цифровому выводу платы',
+        test: (cx) => ({ ok: cx.partsOf('ws2812m').some((m) => Boolean(digitalPinOf(cx, m, 'DIN'))), detail: '' }),
+      },
+      {
+        id: 'library', kind: 'code', text: 'Объект создан на 64 светодиода',
+        hint: 'Adafruit_NeoPixel matrix(64, 6, NEO_GRB + NEO_KHZ800);',
+        test: (cx) => cx.codeHas(/Adafruit_NeoPixel\s+\w+\s*\(\s*64\b/),
+      },
+      {
+        id: 'index', kind: 'code', text: 'Номер светодиода считается как строка * 8 + столбец',
+        hint: 'У матрицы нет отдельных проводов на строки: номер = row * 8 + col.',
+        test: (cx) => cx.codeHas(/\*\s*8\s*\+|\+\s*\w*\s*\*\s*8/),
+      },
+      {
+        id: 'lit', kind: 'behavior', text: 'Светится не меньше половины матрицы (32 из 64)',
+        hint: 'Заливайте всю матрицу в двойном цикле — иначе горят только отдельные светодиоды.',
+        test: (cx) => {
+          const px = Object.values(cx.trace.pixels || {})[0] || [];
+          const lit = px.filter((c) => c[0] + c[1] + c[2] > 12).length;
+          return { ok: lit >= 32, detail: `горит ${lit} из ${px.length}` };
+        },
+      },
+    ],
+    solutionExample: 'ws2812-matrix',
+  },
+
 ];
 
 /** Задание по id. */

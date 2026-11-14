@@ -174,6 +174,9 @@ function iconFor(type) {
     case 'keypad': return `<svg ${c} aria-hidden="true"><rect x="4" y="2" width="18" height="14" rx="2"/><path d="M8 6h2M12 6h2M16 6h2M8 10h2M12 10h2M16 10h2"/></svg>`;
     case 'sr595': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="1.5"/><path d="M10 4v-2M13 4v-2M16 4v-2M10 16v2M13 16v2M16 16v2" /><path d="M9 8h8M9 11h5" stroke="#3fd07a"/></svg>`;
     case 'sr165': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="1.5"/><path d="M10 4v-2M13 4v-2M16 4v-2"/><path d="M20 6h4M20 12h4"/><path d="M9 9h8"/></svg>`;
+    case 'ws2812': return `<svg ${c} aria-hidden="true"><rect x="1" y="7" width="24" height="5" rx="1.5" fill="#1b2530" stroke="#1b2530"/><rect x="3" y="8.5" width="3.4" height="2" fill="#ff8a3d"/><rect x="8" y="8.5" width="3.4" height="2" fill="#4ade80"/><rect x="13" y="8.5" width="3.4" height="2" fill="#37b6ff"/><rect x="18" y="8.5" width="3.4" height="2" fill="#ffd166"/></svg>`;
+    case 'ws2812m': return `<svg ${c} aria-hidden="true"><rect x="3" y="2" width="20" height="14" rx="1.5" fill="#1b2530" stroke="#1b2530"/><path d="M6 5h2M10 5h2M14 5h2M18 5h2M6 9h2M10 9h2M14 9h2M18 9h2M6 13h2M10 13h2M14 13h2M18 13h2" stroke="#ff8a3d"/></svg>`;
+    case 'ws2812r': return `<svg ${c} aria-hidden="true"><circle cx="13" cy="9" r="6.5" fill="none"/><circle cx="13" cy="2.5" r="1.5" fill="#ff8a3d" stroke="none"/><circle cx="19.5" cy="9" r="1.5" fill="#4ade80" stroke="none"/><circle cx="6.5" cy="9" r="1.5" fill="#37b6ff" stroke="none"/><circle cx="13" cy="15.5" r="1.5" fill="#ffd166" stroke="none"/></svg>`;
     case 'stepper28byj': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="10" height="9" rx="1"/><circle cx="18" cy="9" r="5"/><circle cx="18" cy="9" r="1.6"/><path d="M18 4v2"/></svg>`;
     case 'usbcable': return `<svg ${c} aria-hidden="true"><path d="M4 12c4-6 14 6 18 0"/><rect x="1" y="9" width="5" height="6" rx="1.2"/><rect x="20" y="9" width="5" height="6" rx="1.2"/></svg>`;
     default: return `<svg ${c} aria-hidden="true"><rect x="4" y="4" width="18" height="10" rx="2"/></svg>`;
@@ -1258,6 +1261,7 @@ const trace = {
   analog: {},          // 'b1:14' → { min, max }
   servos: {},          // 'srv' → { min, max }
   lcd: {},             // 'lcd' → строки на экране
+  pixels: {},          // 'ws1' → цвета адресной ленты/матрицы после show()
   sonarDistances: [],  // расстояния, которые прочитал скетч
   pressSeen: false,
   ledWhilePressed: 0,
@@ -1277,6 +1281,7 @@ function resetTrace() {
   trace.analog = {};
   trace.servos = {};
   trace.lcd = {};
+  trace.pixels = {};
   trace.sonarDistances = [];
   trace.pressSeen = false;
   trace.ledWhilePressed = 0;
@@ -1337,6 +1342,9 @@ function sampleTrace(res) {
     if (p.type === 'button' && p.props?.pressed) {
       trace.pressSeen = true;
       trace.ledWhilePressed = Math.max(trace.ledWhilePressed, maxLed);
+    } else if (p.type === 'ws2812' || p.type === 'ws2812m' || p.type === 'ws2812r') {
+      const px = Array.isArray(p.props?.pixels) ? p.props.pixels : [];
+      if (px.length) trace.pixels[p.id] = px.map((c) => [Number(c[0]) || 0, Number(c[1]) || 0, Number(c[2]) || 0]);
     } else if (p.type === 'servo') {
       const a = Number(p.props?.angle ?? 0);
       const s = trace.servos[p.id] || { min: a, max: a };
