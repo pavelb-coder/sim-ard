@@ -23,6 +23,7 @@ import { lint } from './hints.js';
 import { TasksPanel } from './ui-tasks.js';
 import { loadProgress, readHashProject, decodeProject } from './classroom.js';
 import { createRosMode } from './ros/app.js';
+import { webSerial, initWebSerial, connectWebSerial, disconnectWebSerial, webSerialSend } from './webserial.js';
 
 const $ = (id) => document.getElementById(id);
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -79,7 +80,7 @@ schematic.onHoverWire = (w) => {
 };
 
 // ------------------------------------------------------------------ палитра ----
-const CATS = ['Платы', 'Питание', 'Приборы', 'Компоненты', 'Датчики', 'Модули'];
+const CATS = ['Платы', 'Питание', 'Приборы', 'Компоненты', 'Датчики', 'Модули', 'Связь'];
 const SOURCE_TYPES = new Set(['battery9', 'batteryAA', 'psu']);
 const INSTRUMENTS = new Set(['scope', 'multimeter', 'logicprobe']);
 const palette = $('palette');
@@ -166,6 +167,7 @@ function iconFor(type) {
     case 'sr595': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="1.5"/><path d="M10 4v-2M13 4v-2M16 4v-2M10 16v2M13 16v2M16 16v2" /><path d="M9 8h8M9 11h5" stroke="#3fd07a"/></svg>`;
     case 'sr165': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="1.5"/><path d="M10 4v-2M13 4v-2M16 4v-2"/><path d="M20 6h4M20 12h4"/><path d="M9 9h8"/></svg>`;
     case 'stepper28byj': return `<svg ${c} aria-hidden="true"><rect x="2" y="5" width="10" height="9" rx="1"/><circle cx="18" cy="9" r="5"/><circle cx="18" cy="9" r="1.6"/><path d="M18 4v2"/></svg>`;
+    case 'usbcable': return `<svg ${c} aria-hidden="true"><path d="M4 12c4-6 14 6 18 0"/><rect x="1" y="9" width="5" height="6" rx="1.2"/><rect x="20" y="9" width="5" height="6" rx="1.2"/></svg>`;
     default: return `<svg ${c} aria-hidden="true"><rect x="4" y="4" width="18" height="10" rx="2"/></svg>`;
   }
 }
@@ -299,12 +301,23 @@ codeEl.addEventListener('keydown', (e) => {
 });
 
 // ----------------------------------------------------------------- консоль ----
+const lastOutEndedWithNewline = new Map();   // boardId → печатал ли он перевод строки
+
 function appendSerial(text, kind = 'out', boardPart = null) {
   const many = boards().length > 1 && boardPart;
-  const prefix = many ? `[${BOARDS[boardPart.type].short}] ` : '';
+  // Serial.print() печатает без перевода строки — подпись платы ставим только
+  // в начале строки, иначе «[Uno] A0=[Uno] 511» вместо «[Uno] A0=511».
+  const atLineStart = boardPart ? (lastOutEndedWithNewline.get(boardPart.id) ?? true) : true;
+  const prefix = many && (kind !== 'usb' && kind !== 'in') && atLineStart ? `[${BOARDS[boardPart.type].short}] ` : '';
+  if (boardPart) lastOutEndedWithNewline.set(boardPart.id, String(text).endsWith('\n'));
   const span = document.createElement('span');
   if (kind === 'sys') span.className = 'sys';
   if (kind === 'err') span.className = 'err';
+  if (kind === 'usb') span.className = 'usb';
+  // Serial Arduino — это и есть USB: всё, что скетч печатает, уходит в кабель,
+  // к второй плате или на настоящий компьютер (Web Serial).
+  if (kind === 'out' && boardPart && boardPart.props?.lang !== 'mpy') usbSend(boardPart.id, text);
+  if (kind === 'out') webSerialSend(text);
   span.textContent = prefix + text;
   // наблюдения для автопроверки заданий
   for (const line of String(text).split('\n')) {
@@ -367,6 +380,34 @@ const updateWarnings = (warnings) => {
   warnEl.textContent = '';
 };
 
+// --------------------------------------------------- настоящая плата по USB ----
+/**
+ * Web Serial: настоящая Arduino, воткнутая в USB компьютера, работает вместе
+ * с симулятором. Что пришло с платы — уходит в скетч (Serial.read) и в монитор;
+ * что скетч напечатал — уходит на плату. Без поддержки в браузере кнопка
+ * просто честно об этом говорит.
+ */
+initWebSerial({
+  onData: (text) => {
+    for (const rt of runtimes.values()) rt.feedSerial(text);
+    appendSerial(text, 'usb');
+  },
+  onChange: (st) => {
+    const btn = $('realUsbBtn');
+    const label = $('realUsbState');
+    if (!btn || !label) return;
+    btn.textContent = st.connected ? 'Отключить плату' : 'Реальная плата';
+    btn.disabled = st.busy;
+    label.textContent = st.message || (st.supported ? '' : 'Web Serial: нужен Chrome, Edge или Opera');
+    label.classList.toggle('ok', st.connected);
+  },
+});
+
+$('realUsbBtn').addEventListener('click', async () => {
+  if (webSerial.connected) await disconnectWebSerial();
+  else await connectWebSerial();
+});
+
 // ------------------------------------------------------------- библиотеки ----
 const steppers = [];          // экземпляры библиотеки Stepper — их крутит драйвер кадров
 let stepperOwner = null;      // плата, к которой относится текущий скетч
@@ -410,9 +451,60 @@ function mpyGlobals(rt) {
     machine: { Pin, PWM, ADC },
     time: { sleep: (s) => rt.sleepSeconds(s), sleep_ms: (ms) => rt.sleepMs(ms), ticks_ms: () => rt.millis() },
     utime: { sleep: (s) => rt.sleepSeconds(s), sleep_ms: (ms) => rt.sleepMs(ms) },
+    // pyserial: порт Arduino, воткнутой в USB. Строки — как в железе (bytes → str).
+    serial: {
+      Serial: (port = '/dev/ttyACM0', baud = 9600) => rt.usbSerial(port, baud),
+      serial_for_url: (url = '/dev/ttyACM0', baud = 9600) => rt.usbSerial(url, baud),
+    },
     str: String, int: (x) => Math.trunc(Number(x)), float: Number, len: (x) => (x?.length ?? String(x).length),
     range: (a, b, s = 1) => { const out = []; if (b === undefined) { b = a; a = 0; } for (let i = a; i < b; i += s) out.push(i); return out; },
   };
+}
+
+// ------------------------------------------------------------------- USB ----
+/**
+ * USB-связь двух плат: Serial одной появляется в /dev/ttyACM0 другой.
+ *
+ * Соединение — не провод: у платы есть разъём «USB», у детали «USB-кабель» —
+ * два конца A и B. Если конец кабеля и разъём платы попали на один узел схемы,
+ * платы связаны. Электрически это ничего не закорачивает: вывод USB не имеет
+ * номера и в решатель цепи не попадает.
+ */
+const usbLinks = new Map();       // boardId → { peer, cable }
+let usbSig = '';
+
+function usbBoardsOn(net) {
+  if (!net) return null;
+  return schematic.parts.find((p) => BOARDS[p.type] && circuit.netOf(p.id, 'USB') === net) || null;
+}
+
+function updateUsbLinks() {
+  const cables = schematic.parts.filter((p) => p.type === 'usbcable');
+  const sig = `${cables.length}:${schematic.wires.length}:${schematic.parts.length}`;
+  if (sig === usbSig) return usbLinks;
+  usbSig = sig;
+  usbLinks.clear();
+  for (const cable of cables) {
+    const a = usbBoardsOn(circuit.netOf(cable.id, 'A'));
+    const b = usbBoardsOn(circuit.netOf(cable.id, 'B'));
+    if (!a || !b || a.id === b.id) continue;
+    usbLinks.set(a.id, { peer: b.id, cable: cable.id });
+    usbLinks.set(b.id, { peer: a.id, cable: cable.id });
+  }
+  return usbLinks;
+}
+
+/** Данные от платы `fromId` уходят второй плате и в настоящий компьютер. */
+function usbSend(fromId, text) {
+  updateUsbLinks();
+  const link = usbLinks.get(fromId);
+  if (!link) return false;
+  const peer = runtimes.get(link.peer);
+  const cable = schematic.parts.find((p) => p.id === link.cable);
+  if (cable) { cable.props = cable.props || {}; cable.props.usbAt = performance.now(); schematic.refreshPart(cable.id); }
+  if (!peer) return false;
+  peer.feedSerial(text);
+  return true;
 }
 
 // --------------------------------------------------------------- запуск ----
@@ -471,6 +563,8 @@ function prepareBoard(part) {
       return v;
     },
     onTone: (boardId, pin, freq, dur, on) => handleTone(part, pin, freq, on),
+    // Pi пишет в /dev/ttyACM0 — данные уходят Arduino и в монитор порта
+    onUsbWrite: (text) => { appendSerial(text, 'usb', part); usbSend(part.id, text); },
     onPulseIn: (boardId, pin) => handlePulseIn(part, pin),
   });
 
@@ -557,6 +651,8 @@ async function run() {
 
   runtimes = new Map(prepared.map((p) => [p.part.id, p.rt]));
   circuit.setSchematic(schematic.parts, schematic.wires);
+  usbSig = '';
+  updateUsbLinks();
   resetTrace();
   trace.hasRun = true;
   running = true;
@@ -933,10 +1029,21 @@ $('tabSerial').addEventListener('click', showSerialTab);
 $('tabProblems').addEventListener('click', showProblemsTab);
 $('tabHints').addEventListener('click', () => switchTab('hints'));
 $('clearConsoleBtn').addEventListener('click', () => { serialEl.innerHTML = ''; });
-$('sendBtn').addEventListener('click', () => { $('serialInput').value = ''; });
+$('sendBtn').addEventListener('click', () => sendFromMonitor());
 $('serialInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); appendSerial(`> ${e.target.value}\n`); e.target.value = ''; }
+  if (e.key === 'Enter') { e.preventDefault(); sendFromMonitor(); }
 });
+
+/** Строка из монитора порта — в скетч (Serial.read) и на настоящую плату. */
+function sendFromMonitor() {
+  const el = $('serialInput');
+  const text = el.value;
+  el.value = '';
+  if (!text) return;
+  appendSerial(`> ${text}\n`);
+  for (const rt of runtimes.values()) rt.feedSerial(`${text}\n`);
+  webSerialSend(`${text}\n`);
+}
 $('labelsBtn').addEventListener('click', () => {
   const on = schematic.toggleLabels();
   $('labelsBtn').classList.toggle('active', on);
@@ -1296,12 +1403,10 @@ function openTask(task) {
 }
 
 function openSolution(solution) {
-  applyBundle({
-    schematic: solution.schematic,
-    code: solution.code,
-    extraCode: solution.extraCode,
-  }, { primaryId: solution.boardId || null });
-  setStatus('Загружен эталон задания — сравните со своей схемой');
+  // Решение — это обычный пример, поэтому грузим его как пример:
+  // так же открываются вкладки плат, каналы осциллографа и автозапуск.
+  loadExample(solution);
+  setStatus('Загружено решение задания — сравните со своей схемой');
 }
 
 // -------------------------------------------------------------- задания ----

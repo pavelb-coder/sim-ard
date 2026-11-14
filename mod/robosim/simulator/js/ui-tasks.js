@@ -87,15 +87,24 @@ export class TasksPanel {
   renderList() {
     this.listEl.innerHTML = '';
     let lastLevel = null;
-    for (const task of TASKS) {
+    // задания идут по возрастанию уровня, внутри уровня — в порядке программы курса
+    const ordered = TASKS.slice().sort((a, b) => a.level - b.level);
+    for (const task of ordered) {
       if (task.level !== lastLevel) {
         lastLevel = task.level;
-        this.listEl.appendChild(el('div', 'task-group', `${task.level} · ${LEVELS[task.level] || ''}`));
+        // в заголовке группы — сколько заданий этого уровня и сколько уже решено
+        const group = TASKS.filter((t) => t.level === lastLevel);
+        const done = group.filter((t) => this.progress[t.id]?.solved).length;
+        this.listEl.appendChild(el('div', 'task-group',
+          `${task.level} · ${LEVELS[task.level] || ''} · ${done}/${group.length}`));
       }
       const solved = Boolean(this.progress[task.id]?.solved);
       const b = el('button', `task-item${task.id === this.currentId ? ' active' : ''}${solved ? ' solved' : ''}`);
       b.innerHTML = `<span class="task-tick">${solved ? '✓' : task.level}</span>
-        <span class="task-name">${esc(task.title)}</span>
+        <span class="task-main">
+          <span class="task-name">${esc(task.title)}</span>
+          <span class="task-topic">${esc(task.topic || '')}</span>
+        </span>
         <span class="task-min">${task.minutes}′</span>`;
       b.addEventListener('click', () => this.select(task.id));
       this.listEl.appendChild(b);
@@ -182,7 +191,7 @@ export class TasksPanel {
         <button class="btn" id="taskRun">Старт</button>
         <button class="btn" id="taskStart">С нуля</button>
         <button class="btn" id="taskHint">Подсказка</button>
-        <button class="btn" id="taskSolution" title="Загрузить готовое решение">Эталон</button>
+        <button class="btn" id="taskSolution" title="Загрузить готовое решение этого задания">Решение</button>
       </footer>`;
 
     this.cardEl.querySelector('#taskCheck').addEventListener('click', () => this.check());

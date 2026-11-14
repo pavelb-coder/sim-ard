@@ -35,6 +35,7 @@ export const SHORT_NAME = {
   seg7: 'индикатор', relay: 'реле', joystick: 'джойстик', stepper28byj: 'шаговый двигатель',
   uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico', rpi5: 'Raspberry Pi 5',
   nano: 'Arduino Nano', promini: 'Arduino Pro Mini', leonardo: 'Arduino Leonardo', mega: 'Arduino Mega 2560',
+  usbcable: 'USB-кабель',
 };
 
 export const REF_PREFIX = {
@@ -44,6 +45,7 @@ export const REF_PREFIX = {
   diode: 'VD', npn: 'VT', rgbled: 'D', toggle: 'S', seg7: 'HG', relay: 'K', joystick: 'RV', stepper28byj: 'M',
   battery9: 'GB', batteryAA: 'GB', psu: 'G', scope: 'OS', multimeter: 'PA', logicprobe: 'PL',
   ledBicolor: 'D', ledBar: 'HL', traffic: 'HL', pnp: 'VT', mosfet: 'VT', tip120: 'VT',
+  usbcable: 'X',
   l298n: 'DA', dcmotor: 'M', keypad: 'SB', sr595: 'DD', sr165: 'DD',
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
@@ -1020,6 +1022,44 @@ function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<'
 // ---------------------------------------------------------------- ещё детали ----
 // Светодиоды разных видов, транзисторы, модули Arduino и сдвиговые регистры.
 const EXTRA = {
+  /**
+   * USB-кабель: соединяет USB-разъёмы двух плат. Электрически это не провод —
+   * данные идут «по протоколу»: Serial одной платы появляется в /dev/ttyACM0
+   * другой (см. js/app.js → updateUsbLinks). Поэтому у выводов нет номиналов
+   * и они ничего не закорачивают.
+   */
+  usbcable: {
+    name: 'USB-кабель', category: 'Связь', w: 104, h: 54,
+    pins: () => [
+      { id: 'A', label: 'A', x: -52, y: 0, dir: 'left' },
+      { id: 'B', label: 'B', x: 52, y: 0, dir: 'right' },
+    ],
+    render(comp) {
+      return partTag(comp, 104, 54, `
+        <path d="M -42 0 C -16 -20 16 20 42 0" stroke="#39434e" stroke-width="7" fill="none" stroke-linecap="round"/>
+        <path d="M -42 0 C -16 -20 16 20 42 0" stroke="#8b9aa8" stroke-width="4.6" fill="none" stroke-linecap="round" opacity=".55"/>
+        <path d="M -42 0 C -16 -20 16 20 42 0" stroke="#20272f" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <g class="plug-a">
+          <rect x="-52" y="-9" width="18" height="18" rx="3" fill="url(#sim-metal)" stroke="#7f8b96" stroke-width=".9"/>
+          <rect x="-49" y="-5" width="11" height="10" rx="1.6" fill="#1b2127"/>
+        </g>
+        <g class="plug-b">
+          <rect x="34" y="-9" width="18" height="18" rx="3" fill="url(#sim-metal)" stroke="#7f8b96" stroke-width=".9"/>
+          <rect x="38" y="-5" width="11" height="10" rx="1.6" fill="#1b2127"/>
+        </g>
+        <circle class="usb-led" cx="0" cy="-6" r="3.4" fill="#3fd07a" opacity=".16"/>
+        <text x="0" y="-14" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">USB</text>`);
+    },
+    update(g, comp) {
+      // зелёная точка горит, пока по кабелю идут данные
+      const led = g.querySelector('.usb-led');
+      const a = g.querySelector('.plug-a rect');
+      const active = Date.now() - (Number(comp.props?.usbAt) || 0) < 300;
+      if (led) led.setAttribute('opacity', active ? '.95' : '.16');
+      if (a) a.setAttribute('stroke', active ? '#3fd07a' : '#7f8b96');
+    },
+  },
+
   ledBicolor: {
     name: 'Двухцветный светодиод', category: 'Компоненты', w: 70, h: 56,
     pins: () => [
