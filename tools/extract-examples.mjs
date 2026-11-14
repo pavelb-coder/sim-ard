@@ -1,7 +1,7 @@
 /**
  * Собирает данные симулятора для плагина Moodle:
  *   mod/robosim/examples.json — встроенные примеры (схема + скетч),
- *   mod/robosim/tasks.json    — учебные задания (id и название).
+ *   mod/robosim/tasks.json    — учебные задания: цели, критерии, пример-решение.
  *
  * Запуск:  node tools/extract-examples.mjs [путь-к-репозиторию-сайта]
  * По умолчанию берётся $ROBOSIM_SRC или ../sim рядом с этой веткой.
@@ -37,6 +37,11 @@ const tasks = TASKS.map((t) => ({
   topic: t.topic || '',
   minutes: t.minutes || 0,
   brief: t.brief || '',
+  // цели задания и критерии — по ним учитель видит, что именно проверяется
+  goals: (t.goals || []).map((g) => (typeof g === 'string' ? g : g.text || String(g))),
+  checks: (t.checks || []).map((c) => ({ id: c.id, kind: c.kind, text: c.text })),
+  // готовое решение: id примера, который открывается кнопкой «Решение»
+  solutionExample: t.solutionExample || '',
   // с чего начинать: схема-заготовка и скетч (task.start = схема + .code)
   start: {
     schematic: { parts: t.start?.parts || [], wires: t.start?.wires || [] },

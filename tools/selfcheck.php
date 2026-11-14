@@ -320,6 +320,55 @@ foreach (['examples.json', 'tasks.json'] as $jsonfile) {
     }
 }
 
+// данные для учителя: примеры и задания должны быть согласованы между собой
+$examples = json_decode(file_get_contents("$root/examples.json"), true)['examples'] ?? [];
+$tasks = json_decode(file_get_contents("$root/tasks.json"), true)['tasks'] ?? [];
+$ids = [];
+foreach ($examples as $ex) {
+    $ids[$ex['id'] ?? '?'] = true;
+}
+$dupTasks = [];
+$seen = [];
+$missing = [];
+$noChecks = [];
+foreach ($tasks as $t) {
+    $id = $t['id'] ?? '?';
+    if (isset($seen[$id])) {
+        $dupTasks[] = $id;
+    }
+    $seen[$id] = true;
+    if (!empty($t['solutionExample']) && !isset($ids[$t['solutionExample']])) {
+        $missing[] = "$id → {$t['solutionExample']}";
+    }
+    if (empty($t['checks'])) {
+        $noChecks[] = $id;
+    }
+}
+
+if (count($tasks) >= 20 && count($examples) >= 30) {
+    ok();
+} else {
+    fail('мало данных: ' . count($examples) . ' примеров и ' . count($tasks) . ' заданий');
+}
+
+if (!$dupTasks) {
+    ok();
+} else {
+    fail('повторяются id заданий: ' . implode(', ', $dupTasks));
+}
+
+if (!$missing) {
+    ok();
+} else {
+    fail('у задания нет примера-решения в examples.json: ' . implode(', ', $missing));
+}
+
+if (!$noChecks) {
+    ok();
+} else {
+    fail('у задания нет ни одной проверки: ' . implode(', ', $noChecks));
+}
+
 // ------------------------------------------------------------- итог -----------
 echo "\nПроверок пройдено: $checks\n";
 if ($warnings) {

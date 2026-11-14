@@ -105,8 +105,13 @@ class project {
      */
     public static function task_menu(): array {
         $menu = [];
-        foreach (self::tasks() as $id => $task) {
-            $menu[$id] = $task['title'] ?? $id;
+        // задания курса идут по возрастанию уровня: в списке из 31 пункта так проще искать
+        $ordered = array_values(self::tasks());
+        usort($ordered, fn($a, $b) => ((int) ($a['level'] ?? 0)) <=> ((int) ($b['level'] ?? 0)));
+        foreach ($ordered as $task) {
+            $level = (int) ($task['level'] ?? 0);
+            $title = $task['title'] ?? $task['id'];
+            $menu[$task['id']] = $level > 0 ? "{$level} · {$title}" : $title;
         }
         return $menu;
     }

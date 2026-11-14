@@ -20,3 +20,15 @@ if ! git diff --cached --quiet; then
 fi
 git push -q origin HEAD:moodle
 echo "✓ ветка moodle: $(git rev-parse --short HEAD) → $(git remote get-url origin)"
+
+# ---------------------------------------------------------------- архив ------
+# mod_robosim-<версия>.zip — готовый к установке плагин: распаковать в mod/ Moodle.
+ver=$(sed -n "s/.*release *= *'\([0-9][0-9.]*\).*/\1/p" mod/robosim/version.php | head -1)
+[ -n "$ver" ] || ver=dev
+out="../mod_robosim-$ver.zip"
+tmp=$(mktemp -d)
+cp -a mod/robosim "$tmp/robosim"
+rm -rf "$tmp/robosim/.git"
+(cd "$tmp" && zip -qr "$(cd "$OLDPWD" && pwd)/$out" robosim)
+rm -rf "$tmp"
+echo "✓ архив: $(cd .. && pwd)/mod_robosim-$ver.zip"
