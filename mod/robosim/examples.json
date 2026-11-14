@@ -5702,6 +5702,585 @@
      }
     ]
    }
+  },
+  {
+   "id": "linecar-line",
+   "name": "Робот-тележка «Эвольвектор»: езда по линии",
+   "board": "uno",
+   "code": "// Робот-тележка «Эвольвектор»: езда по линии.\n// Поле с чёрной линией нарисовано вместе с тележкой; датчики линии — это два\n// TCRT5000 спереди: над белым полем выход HIGH, над чёрной полосой — LOW.\n// Моторы подключены через драйвер L298N (два канала: A — левое колесо, B — правое).\n\nconst int SL = 2;           // датчик линии слева\nconst int SR = 3;           // датчик линии справа\nconst int ENA = 5, IN1 = 6, IN2 = 7;   // канал A — левое колесо\nconst int IN3 = 8, IN4 = 9, ENB = 10;  // канал B — правое колесо\nconst int SPEED = 200;      // 0…255 — насколько быстро едем\n\nvoid setup() {\n  pinMode(SL, INPUT);\n  pinMode(SR, INPUT);\n  pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);\n  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);\n  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Тележка на старте: ищу линию\");\n}\n\n// left и right — от −255 до 255: знак задаёт направление, число — скорость\nvoid motors(int left, int right) {\n  digitalWrite(IN1, left > 0 ? HIGH : LOW);\n  digitalWrite(IN2, left > 0 ? LOW : HIGH);\n  analogWrite(ENA, abs(left));\n  digitalWrite(IN3, right > 0 ? HIGH : LOW);\n  digitalWrite(IN4, right > 0 ? LOW : HIGH);\n  analogWrite(ENB, abs(right));\n}\n\nvoid loop() {\n  bool l = digitalRead(SL) == LOW;    // под левым датчиком чёрная полоса\n  bool r = digitalRead(SR) == LOW;\n\n  if (l && r) {\n    motors(SPEED, SPEED);             // линия под обоими — едем прямо\n  } else if (l) {\n    motors(0, SPEED);                 // полоса ушла влево — подтормаживаем левое колесо\n  } else if (r) {\n    motors(SPEED, 0);                 // полоса справа — подтормаживаем правое\n  } else {\n    motors(SPEED, 0);                 // оба на белом — доворачиваем и ищем линию\n  }\n  delay(5);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "da1",
+      "type": "l298n",
+      "x": 90,
+      "y": 235,
+      "props": {}
+     },
+     {
+      "id": "rb1",
+      "type": "linecar",
+      "x": -40,
+      "y": 600,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D5"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "ENA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D10"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "ENB"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D6"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN1"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D7"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN3"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN4"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "SL"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D3"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "SR"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT1"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M1+"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M1-"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT3"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M2+"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT4"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M2-"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "linecar-pwm",
+   "name": "Робот-тележка «Эвольвектор»: плавная езда на ШИМ",
+   "board": "uno",
+   "code": "// Робот-тележка «Эвольвектор»: плавная езда на ШИМ.\n// Драйвер L298N умеет не только «полный ход / стоп»: выводы ENA и ENB включают\n// ШИМ, и скважность задаёт мощность на моторе. Скорость становится управляемой,\n// а подруливание — мягким: тележка не дёргается на каждом повороте.\n\nconst int SL = 2, SR = 3;                 // датчики линии\nconst int ENA = 5, IN1 = 6, IN2 = 7;      // канал A — левое колесо\nconst int IN3 = 8, IN4 = 9, ENB = 10;     // канал B — правое колесо\nconst int SPEED = 130;                     // 0…255: примерно половина мощности\nconst int SLOW = 60;                       // «подтормаживание» внутреннего колеса\n\nvoid setup() {\n  pinMode(SL, INPUT);\n  pinMode(SR, INPUT);\n  pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);\n  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);\n  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Плавный ход: ШИМ 130 из 255\");\n}\n\nvoid motors(int left, int right) {\n  digitalWrite(IN1, left > 0 ? HIGH : LOW);\n  digitalWrite(IN2, left > 0 ? LOW : HIGH);\n  analogWrite(ENA, abs(left));\n  digitalWrite(IN3, right > 0 ? HIGH : LOW);\n  digitalWrite(IN4, right > 0 ? LOW : HIGH);\n  analogWrite(ENB, abs(right));\n}\n\nvoid loop() {\n  bool l = digitalRead(SL) == LOW;\n  bool r = digitalRead(SR) == LOW;\n\n  if (l && r) {\n    motors(SPEED, SPEED);        // полоса под обоими датчиками\n  } else if (l) {\n    motors(SLOW, SPEED);         // полоса слева: внутреннее колесо медленнее\n  } else if (r) {\n    motors(SPEED, SLOW);         // полоса справа\n  } else {\n    motors(SPEED, 0);            // потеряли линию — доворачиваем на месте\n  }\n  delay(5);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "da1",
+      "type": "l298n",
+      "x": 90,
+      "y": 235,
+      "props": {}
+     },
+     {
+      "id": "rb1",
+      "type": "linecar",
+      "x": -40,
+      "y": 600,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D5"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "ENA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D10"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "ENB"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D6"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN1"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D7"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN3"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN4"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "SL"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D3"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "SR"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT1"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M1+"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M1-"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT3"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M2+"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT4"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M2-"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "linecar-laps",
+   "name": "Робот-тележка «Эвольвектор»: круг и остановка на старте",
+   "board": "uno",
+   "code": "// Робот-тележка «Эвольвектор»: круг и остановка на старте.\n// Одометра у тележки нет, поэтому круг отмеряем по времени: секундомером\n// измеряем, сколько идёт один круг (у нас ~16 с при полной мощности),\n// и останавливаем моторы, когда время вышло.\n// Попробуйте измерить своё время круга и подставить его в LAP_MS.\n\nconst int SL = 2, SR = 3;\nconst int ENA = 5, IN1 = 6, IN2 = 7;\nconst int IN3 = 8, IN4 = 9, ENB = 10;\nconst int SPEED = 255;\nconst unsigned long LAP_MS = 15800;   // время одного круга, мс\nconst int LAPS = 1;                   // сколько кругов проехать\n\nunsigned long t0 = 0;\n\nvoid setup() {\n  pinMode(SL, INPUT);\n  pinMode(SR, INPUT);\n  pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);\n  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);\n  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);\n  Serial.begin(9600);\n  Serial.print(\"Едем \");\n  Serial.print(LAPS);\n  Serial.println(\" круга\");\n}\n\nvoid motors(int left, int right) {\n  digitalWrite(IN1, left > 0 ? HIGH : LOW);\n  digitalWrite(IN2, left > 0 ? LOW : HIGH);\n  analogWrite(ENA, abs(left));\n  digitalWrite(IN3, right > 0 ? HIGH : LOW);\n  digitalWrite(IN4, right > 0 ? LOW : HIGH);\n  analogWrite(ENB, abs(right));\n}\n\nvoid loop() {\n  if (t0 == 0) t0 = millis();\n\n  // круги кончились — стоп и ждём (моторы обесточены)\n  if (millis() - t0 > LAP_MS * LAPS) {\n    motors(0, 0);\n    return;\n  }\n\n  bool l = digitalRead(SL) == LOW;\n  bool r = digitalRead(SR) == LOW;\n\n  if (l && r) {\n    motors(SPEED, SPEED);\n  } else if (l) {\n    motors(0, SPEED);\n  } else if (r) {\n    motors(SPEED, 0);\n  } else {\n    motors(SPEED, 0);\n  }\n  delay(5);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "da1",
+      "type": "l298n",
+      "x": 90,
+      "y": 235,
+      "props": {}
+     },
+     {
+      "id": "rb1",
+      "type": "linecar",
+      "x": -40,
+      "y": 600,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D5"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "ENA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D10"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "ENB"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D6"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN1"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D7"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN3"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "da1",
+       "pin": "IN4"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "SL"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D3"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "SR"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT1"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M1+"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT2"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M1-"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT3"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M2+"
+      }
+     },
+     {
+      "a": {
+       "compId": "da1",
+       "pin": "OUT4"
+      },
+      "b": {
+       "compId": "rb1",
+       "pin": "M2-"
+      }
+     }
+    ]
+   }
   }
  ]
 }

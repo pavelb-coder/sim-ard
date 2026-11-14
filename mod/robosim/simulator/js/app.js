@@ -19,6 +19,7 @@ import { Scope, TIME_DIVS, VOLT_DIVS } from './scope.js';
 import { EXAMPLES, defaultCodeFor } from './examples.js';
 import { TASKS, taskById, solutionOf } from './tasks.js';
 import { CheckContext } from './checker.js';
+import { newPose, trackLength } from './linecar.js';
 import { lint } from './hints.js';
 import { TasksPanel } from './ui-tasks.js';
 import { loadProgress, readHashProject, decodeProject } from './classroom.js';
@@ -146,6 +147,7 @@ function iconFor(type) {
     case 'soil': return `<svg ${c} aria-hidden="true"><rect x="7" y="2" width="12" height="7" rx="1.5"/><path d="M10 9v7M16 9v7"/><path d="M4 16h18" stroke="#8ce8a4"/></svg>`;
     case 'sound': return `<svg ${c} aria-hidden="true"><circle cx="9" cy="9" r="4"/><path d="M15 5a6 6 0 0 1 0 8M18 3a9 9 0 0 1 0 12"/></svg>`;
     case 'servo': return `<svg ${c} aria-hidden="true"><rect x="5" y="6" width="16" height="8" rx="2"/><circle cx="13" cy="6" r="3"/><path d="M13 3v-3"/></svg>`;
+    case 'linecar': return `<svg ${c} aria-hidden="true"><ellipse cx="13" cy="9" rx="10" ry="6" stroke="#4b5a68"/><rect x="8" y="6" width="9" height="6" rx="1.5" fill="#d9b52a" stroke="#d9b52a"/><circle cx="8" cy="5" r="1.6" fill="#2b3138"/><circle cx="8" cy="13" r="1.6" fill="#2b3138"/><path d="M17 7v4" stroke="#5ee0a0"/></svg>`;
     case 'lcd1602': return `<svg ${c} aria-hidden="true"><rect x="2" y="4" width="22" height="11" rx="1" fill="#0d3a1f" stroke="#1d6b38"/><path d="M5 8h16M5 11h10" stroke="#7ef29d"/></svg>`;
     case 'lcd1602p': return `<svg ${c} aria-hidden="true"><rect x="1" y="5" width="24" height="11" rx="1" fill="#0d3a1f" stroke="#1d6b38"/><path d="M4 9h18M4 12h11" stroke="#7ef29d"/><path d="M3 19v3M6 19v3M9 19v3M12 19v3M15 19v3M18 19v3M21 19v3" stroke="#8fa3b5"/></svg>`;
     case 'oled': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="2" fill="#04121f" stroke="#24405c"/><path d="M8 7h10M8 10h6" stroke="#9ad7ff"/></svg>`;
@@ -1262,6 +1264,7 @@ const trace = {
   servos: {},          // 'srv' → { min, max }
   lcd: {},             // 'lcd' → строки на экране
   pixels: {},          // 'ws1' → цвета адресной ленты/матрицы после show()
+  linecar: {},          // 'rb1' → сколько проехала, сколько времени видела линию
   sonarDistances: [],  // расстояния, которые прочитал скетч
   pressSeen: false,
   ledWhilePressed: 0,
@@ -1282,12 +1285,23 @@ function resetTrace() {
   trace.servos = {};
   trace.lcd = {};
   trace.pixels = {};
+  trace.linecar = {};
   trace.sonarDistances = [];
   trace.pressSeen = false;
   trace.ledWhilePressed = 0;
   trace.serial = [];
   trace._ledMin = Infinity;
   trace._ledMax = 0;
+  // тележка «ставится на старт»: положение, обороты колёс и одометр — с нуля
+  for (const p of schematic.parts) {
+    if (p.type !== 'linecar') continue;
+    p.__car = { wL: 0, wR: 0, done: false };
+    p.props.pose = newPose();
+    p.props.sensors = [true, true];
+    p.props.angleL = 0;
+    p.props.angleR = 0;
+    p.props.speed = 0;
+  }
 }
 
 function recordFlip(boardId, num) {
@@ -1345,6 +1359,20 @@ function sampleTrace(res) {
     } else if (p.type === 'ws2812' || p.type === 'ws2812m' || p.type === 'ws2812r') {
       const px = Array.isArray(p.props?.pixels) ? p.props.pixels : [];
       if (px.length) trace.pixels[p.id] = px.map((c) => [Number(c[0]) || 0, Number(c[1]) || 0, Number(c[2]) || 0]);
+    } else if (p.type === 'linecar') {
+      const st = p.__car || {};
+      const car = trace.linecar[p.id] || { distance: 0, onLine: 0, offLine: 0, changes: 0, sensors: [false, false] };
+      car.distance = Math.max(car.distance, st.odo || 0);
+      car.onLine = Math.max(car.onLine, st.tOn || 0);
+      car.offLine = Math.max(car.offLine, st.tOff || 0);
+      car.changes = Math.max(car.changes, st.changes || 0);
+      car.sensors = [...(p.props?.sensors || [false, false])];
+      car.laps = car.distance / trackLength();
+      car.seconds = (st.tOn || 0) + (st.tOff || 0);
+      car.avgSpeed = car.seconds > 0.2 ? car.distance / car.seconds : 0;
+      car.speed = Math.abs(Number(p.props?.speed) || 0);
+      car.pose = { x: p.props?.pose?.x || 0, y: p.props?.pose?.y || 0, th: p.props?.pose?.th || 0 };
+      trace.linecar[p.id] = car;
     } else if (p.type === 'servo') {
       const a = Number(p.props?.angle ?? 0);
       const s = trace.servos[p.id] || { min: a, max: a };

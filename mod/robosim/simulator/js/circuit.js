@@ -14,6 +14,7 @@
 
 import { solveCircuit } from './solver.js';
 import { BOARDS } from './boards.js';
+import { CAR, newPose, sensorsOnLine, stepPose } from './linecar.js';
 
 const boardSpecOf = (type) => BOARDS[type] || BOARDS.uno;
 
@@ -29,6 +30,8 @@ const BOARD_FUSE = 1.5;    // А — больше плата не отдаёт �
 const FUSE_TIME = 0.15;    // с — столько держится КЗ, пока сгорит предохранитель
 const VIN_MIN = -0.7;      // В — на входе питания отрицательное напряжение
 const KE = 0.02;           // В·с/рад у мотора: 5 В без нагрузки ≈ 2400 об/мин
+// Моторы тележки — TT с редуктором 1:48: обмотка 6 Ом, около 1250 об/мин на валу
+const CAR_KE = 0.006, CAR_R = 6, CAR_J = 8e-6, CAR_FRIC = 1.23e-5;
 const HFE = 100;                 // усиление BC547 — для модели ключа
 // последовательность фаз 28BYJ-48 (IN1…IN4): полушаги по кругу
 /** Числа для сообщений: 0,25 Вт, 32 мА, 5,2 В. */
@@ -533,31 +536,75 @@ export class Circuit {
           break;
         }
         case 'l298n': {
-          // H-мост: входы задают полярность, ENA — разрешение.
-          // Выход не идеальный: на плечах моста падает около 1,8 В.
-          const en = prevV(n('ENA')) > 2.0;
-          const in1 = prevV(n('IN1')) > 2.0;
-          const in2 = prevV(n('IN2')) > 2.0;
-          info.enabled = en;
-          info.dir = en && in1 !== in2 ? (in1 ? 1 : -1) : 0;
-          const drive = (id, volts) => {
-            const net = n(id);
-            if (!net) return;
-            const inner = `l298_${p.id}_${id}`;
-            push({ type: 'R', n1: net, n2: inner, value: 1.2 });
-            push({ type: 'V', n1: inner, n2: gnd, value: volts });
+          // Два H-моста в одном модуле: канал A (ENA, IN1, IN2 → OUT1, OUT2)
+          // и канал B (ENB, IN3, IN4 → OUT3, OUT4). Выход не идеальный: на
+          // плечах моста падает около 1,8 В.
+          const chan = (enId, inA, inB, outA, outB) => {
+            // ENA/ENB — не только «включено/выключено»: ШИМ на этом выводе
+            // задаёт скважность, а значит и среднее напряжение на моторе.
+            const enNet = n(enId);
+            // dutyOf хранит пару {duty, vcc}: без ШИМ остаётся «включено на полную»
+            const dutyRec = enNet ? dutyOf.get(enNet) : null;
+            const duty = enNet
+              ? (dutyRec ? Math.min(1, Math.max(0, dutyRec.duty)) : (prevV(enNet) > 2.0 ? 1 : 0))
+              : 0;
+            const en = duty > 0.02;
+            const a = prevV(n(inA)) > 2.0, b = prevV(n(inB)) > 2.0;
+            const dir = en && a !== b ? (a ? 1 : -1) : 0;
+            const drive = (id, volts) => {
+              const net = n(id);
+              if (!net) return;
+              const inner = `l298_${p.id}_${id}`;
+              push({ type: 'R', n1: net, n2: inner, value: 1.2 });
+              push({ type: 'V', n1: inner, n2: gnd, value: volts });
+            };
+            // выходы «висят» и при выключенном мосте: слабая утечка на землю,
+            // иначе цепь «мотор + два провода» остаётся без точки отсчёта
+            for (const id of [outA, outB]) {
+              const net = n(id);
+              if (net && net !== gnd) push({ type: 'R', n1: net, n2: gnd, value: 1e6 });
+            }
+            if (dir) {
+              const vccV = this.vccNet() ? (prevV(this.vccNet()) || 5) : 5;
+              const hi = Math.max(0, (vccV - 1.8) * Math.min(1, duty));
+              drive(dir > 0 ? outA : outB, hi);
+              drive(dir > 0 ? outB : outA, 0);
+            }
+            return { en, dir, duty: dir ? duty : 0 };
           };
-          // выходы «висят» и при выключенном мосте: слабая утечка на землю,
-          // иначе цепь «мотор + два провода» остаётся без точки отсчёта
-          for (const id of ['OUT1', 'OUT2']) {
-            const net = n(id);
-            if (net && net !== gnd) push({ type: 'R', n1: net, n2: gnd, value: 1e6 });
-          }
-          if (en && in1 !== in2) {
-            const hi = this.vccNet() ? Math.max(0, (prevV(this.vccNet()) || 5) - 1.8) : 3.2;
-            drive('OUT1', in1 ? hi : 0);
-            drive('OUT2', in2 ? hi : 0);
-          }
+          const A = chan('ENA', 'IN1', 'IN2', 'OUT1', 'OUT2');
+          const B = chan('ENB', 'IN3', 'IN4', 'OUT3', 'OUT4');
+          info.enabled = A.en || B.en;
+          info.dir = A.dir;
+          info.dirB = B.dir;
+          info.dutyA = A.duty;
+          info.dutyB = B.duty;
+          break;
+        }
+        case 'linecar': {
+          // Робот-тележка: две обмотки моторов (как у отдельного мотора) и два
+          // датчика линии. Датчик — компаратор модуля TCRT5000: над белым полем
+          // выход притянут к 5 В, над чёрной линией — к земле.
+          const st = p.__car || (p.__car = { wL: 0, wR: 0 });
+          const vcc = n('5V') || this.vccNet(), g = n('GND') || gnd;
+          const winding = (aId, bId, w) => {
+            const a = n(aId), b = n(bId);
+            if (!a || !b || a === b) return null;
+            const inner = `car_${p.id}_${aId.replace(/[^A-Za-z0-9]/g, '')}`;
+            push({ type: 'R', n1: a, n2: inner, value: CAR_R });
+            return push({ type: 'V', n1: inner, n2: b, value: CAR_KE * w });
+          };
+          info.motorIdxL = winding('M1+', 'M1-', st.wL);
+          info.motorIdxR = winding('M2+', 'M2-', st.wR);
+          const on = Array.isArray(p.props?.sensors) ? p.props.sensors : [false, false];
+          ['SL', 'SR'].forEach((id, i) => {
+            const pin = n(id);
+            if (!pin) return;
+            const target = on[i] ? gnd : vcc;
+            if (target && pin !== target) push({ type: 'R', n1: pin, n2: target, value: 1000 });
+          });
+          if (vcc && g && vcc !== g) push({ type: 'R', n1: vcc, n2: g, value: 1000 });   // электроника тележки
+          info.sensors = [!!on[0], !!on[1]];
           break;
         }
         case 'dcmotor': {
@@ -988,6 +1035,49 @@ export class Circuit {
       const angle = ((Number(p.props.angle) || 0) + st.w * dt * 57.2958) % 360;
       p.props.angle = angle;
       info.angle = angle;
+    }
+
+    // Робот-тележка: те же уравнения, что у мотора, но на два колеса.
+    // Момент каждого мотора тянет своё колесо через редуктор 1:48, разность
+    // скоростей колёс поворачивает тележку — как у настоящей дифференциальной
+    // пары. Датчики при этом смотрят на реальную геометрию поля.
+    for (const p of this.parts) {
+      if (p.type !== 'linecar') continue;
+      const st = p.__car;
+      const info = partInfo.get(p.id);
+      if (!st || !info) continue;
+      const IL = info.motorIdxL != null ? (res.currents[info.motorIdxL] || 0) : 0;
+      const IR = info.motorIdxR != null ? (res.currents[info.motorIdxR] || 0) : 0;
+      st.wL = Math.max(-600, Math.min(600, st.wL + ((CAR_KE * IL - CAR_FRIC * st.wL) / CAR_J) * dt));
+      st.wR = Math.max(-600, Math.min(600, st.wR + ((CAR_KE * IR - CAR_FRIC * st.wR) / CAR_J) * dt));
+      if (Math.abs(st.wL) < 0.05 && Math.abs(IL) < 0.001) st.wL = 0;
+      if (Math.abs(st.wR) < 0.05 && Math.abs(IR) < 0.001) st.wR = 0;
+      const pose = p.props.pose || (p.props.pose = newPose());
+      const move = stepPose(pose, st.wL, st.wR, dt);
+      p.props.sensors = sensorsOnLine(pose);
+      p.props.speed = move.v;
+      const degL = (st.wL / CAR.gear) * dt * 57.2958;
+      const degR = (st.wR / CAR.gear) * dt * 57.2958;
+      p.props.angleL = ((Number(p.props.angleL) || 0) + degL) % 360;
+      p.props.angleR = ((Number(p.props.angleR) || 0) + degR) % 360;
+      info.angleL = p.props.angleL;
+      info.angleR = p.props.angleR;
+      info.speed = move.v;
+      info.current = Math.abs(IL) + Math.abs(IR);
+      info.rpmL = st.wL * 60 / (2 * Math.PI);
+      info.rpmR = st.wR * 60 / (2 * Math.PI);
+      st.odo = (st.odo || 0) + Math.abs(move.v) * dt;
+      const anyOn = p.props.sensors.some(Boolean);
+      st.tOn = (st.tOn || 0) + (anyOn ? dt : 0);
+      st.tOff = (st.tOff || 0) + (anyOn ? 0 : dt);
+      const prevOn = st.prevOn || [false, false];
+      if (prevOn[0] !== p.props.sensors[0] || prevOn[1] !== p.props.sensors[1]) st.changes = (st.changes || 0) + 1;
+      st.prevOn = p.props.sensors.slice();
+      info.sensors = p.props.sensors;
+      info.onLine = p.props.sensors.filter(Boolean).length;
+      info.distance = st.odo;
+      info.offLine = st.tOff;
+      info.pose = { x: pose.x, y: pose.y, th: pose.th };
     }
 
     // зуммер звучит, если на нём есть напряжение

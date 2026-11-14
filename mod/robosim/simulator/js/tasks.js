@@ -13,6 +13,7 @@
 
 import { EXAMPLES } from './examples.js';
 import { PARTS } from './parts.js';
+import { START } from './linecar.js';
 
 const board = (type = 'uno', x = 0, y = 0, id = 'b1') => ({ id, type, x, y, props: {} });
 const wire = (ac, ap, bc, bp) => ({ a: { compId: ac, pin: ap }, b: { compId: bc, pin: bp } });
@@ -28,6 +29,22 @@ const digitalPinOf = (cx, part, pinId) => {
   }
   return null;
 };
+
+/** Обмотки всех моторов тележки сидят на выходах какого-нибудь L298N. */
+const carMotorsWired = (cx) => cx.partsOf('linecar').length > 0 && cx.partsOf('l298n').length > 0
+  && cx.partsOf('linecar').every((car) => ['M1+', 'M1-', 'M2+', 'M2-'].every((pin) => {
+    const net = cx.netOf(car.id, pin);
+    if (!net) return false;
+    return cx.partsOf('l298n').some((drv) => ['OUT1', 'OUT2', 'OUT3', 'OUT4']
+      .some((out) => cx.netOf(drv.id, out) === net));
+  }));
+
+/** Датчики линии тележки висят на двух разных цифровых выводах платы. */
+const carSensorsOnPins = (cx) => cx.partsOf('linecar').some((car) => {
+  const l = digitalPinOf(cx, car, 'SL');
+  const r = digitalPinOf(cx, car, 'SR');
+  return Boolean(l && r && l !== r);
+});
 
 const SKELETON_CPP = `// Задание: соберите схему и допишите скетч.
 // Подсказка появится в панели «Проблемы», если что-то забыли.
@@ -1993,6 +2010,226 @@ export const TASKS = [
       },
     ],
     solutionExample: 'ws2812-matrix',
+  },
+
+  // ------------------------------------------------------------- тележка ----
+
+  {
+    id: 'ev-linecar-line',
+    title: 'Робот-тележка: первый круг по линии',
+    level: 2,
+    topic: 'Моторы и движение',
+    minutes: 25,
+    brief: 'Соберите робота-тележку «Эвольвектор»: два колеса с TT-моторами через драйвер L298N, два датчика линии спереди. Скетч должен читать датчики и подруливать так, чтобы тележка объехала замкнутую трассу и не сошла с чёрной полосы.',
+    goals: [
+      'Тележка и драйвер L298N на схеме, питание тележки подано',
+      'Датчики линии SL и SR — на двух цифровых выводах платы',
+      'Обмотки моторов M1±/M2± подключены к выходам OUT1…OUT4',
+      'Скетч читает оба датчика и задаёт скорость каждого колеса',
+      'Тележка проезжает круг, почти не теряя линию',
+    ],
+    start: {
+      parts: [
+        board(),
+        { id: 'da1', type: 'l298n', x: 90, y: 235, props: {} },
+        { id: 'rb1', type: 'linecar', x: -40, y: 600, props: {} },
+      ],
+      wires: [],
+      code: SKELETON_CPP,
+    },
+    checks: [
+      {
+        id: 'has-car', kind: 'schema', text: 'На схеме есть робот-тележка «Эвольвектор»',
+        hint: 'В палитре, раздел «Модули»: «Робот-тележка (по линии)». На её поле нарисована трасса — это и есть полигон.',
+        test: (cx) => ({ ok: cx.partsOf('linecar').length > 0, detail: '' }),
+      },
+      {
+        id: 'power', kind: 'schema', text: 'Питание тележки: «5V» на 5 В платы, «GND» — на землю',
+        hint: 'В наборе тележку питают от отсека 4×AA; в симуляторе обмотки моторов запитывает L298N, а логика тележки берёт 5 В с платы.',
+        test: (cx) => ({
+          ok: cx.partsOf('linecar').some((m) => cx.toVcc(m.id, '5V') && cx.toGround(m.id, 'GND')),
+          detail: '',
+        }),
+      },
+      {
+        id: 'motors', kind: 'schema', text: 'Моторы подключены к L298N: OUT1…OUT4 → M1±/M2±',
+        hint: 'Канал A (ENA, IN1, IN2, OUT1, OUT2) — левое колесо, канал B (ENB, IN3, IN4, OUT3, OUT4) — правое. Если поменять местами провода одной обмотки, колесо поедет назад.',
+        test: (cx) => ({ ok: carMotorsWired(cx), detail: '' }),
+      },
+      {
+        id: 'sensors', kind: 'schema', text: 'Датчики линии SL и SR — на разных цифровых выводах',
+        hint: 'SL и SR — выходы TCRT5000: над белым полем HIGH, над чёрной полосой LOW. Их заводят на любые цифровые выводы, например D2 и D3.',
+        test: (cx) => ({ ok: carSensorsOnPins(cx), detail: '' }),
+      },
+      {
+        id: 'reads', kind: 'code', text: 'Скетч читает датчики через digitalRead()',
+        hint: 'bool l = digitalRead(SL) == LOW; — «под датчиком чёрная полоса».',
+        test: (cx) => cx.codeHas(/digitalRead\s*\(/),
+      },
+      {
+        id: 'drives', kind: 'code', text: 'Скорость колёс задаётся через analogWrite()',
+        hint: 'analogWrite(ENA, speed) — ШИМ на разрешающем выводе драйвера; направление задают IN1…IN4.',
+        test: (cx) => cx.codeHas(/analogWrite\s*\(/),
+      },
+      {
+        id: 'lap', kind: 'behavior', text: 'Тележка проехала почти целый круг (не меньше 0,9)',
+        hint: 'Запустите скетч и дайте тележке проехать трассу. Если она встала на повороте — проверьте, что при потере линии одно колесо продолжает крутиться.',
+        test: (cx) => {
+          const car = cx.car();
+          return { ok: car.laps >= 0.9, detail: `проехала ${car.laps.toFixed(2)} круга` };
+        },
+      },
+      {
+        id: 'on-line', kind: 'behavior', text: 'Не меньше 90 % времени тележка видела линию',
+        hint: 'Если тележка «пилит» из стороны в сторону и теряет полосу — уменьшите скорость (SPEED) или добавьте доворот, когда оба датчика на белом.',
+        test: (cx) => {
+          const share = cx.carLineShare();
+          return { ok: share >= 0.9, detail: `на линии ${(share * 100).toFixed(0)} % времени` };
+        },
+      },
+    ],
+    solutionExample: 'linecar-line',
+  },
+
+  {
+    id: 'ev-linecar-pwm',
+    title: 'Робот-тележка: плавный ход на ШИМ',
+    level: 3,
+    topic: 'Моторы и движение',
+    minutes: 30,
+    brief: 'Драйвер L298N умеет не только «полный ход / стоп»: выводы ENA и ENB включают ШИМ, и скважность задаёт мощность мотора. Переведите тележку на умеренную скорость и сделайте подруливание мягким: внутреннее колесо должно замедляться, а не останавливаться.',
+    goals: [
+      'ENA и ENB подключены к выводам ШИМ платы, а не к 5 В',
+      'В скетче analogWrite() для обоих каналов драйвера',
+      'Тележка едет медленнее полного хода и всё равно держит линию',
+    ],
+    start: {
+      parts: [
+        board(),
+        { id: 'da1', type: 'l298n', x: 90, y: 235, props: {} },
+        { id: 'rb1', type: 'linecar', x: -40, y: 600, props: {} },
+      ],
+      wires: [],
+      code: SKELETON_CPP,
+    },
+    checks: [
+      {
+        id: 'has-car', kind: 'schema', text: 'На схеме есть тележка и драйвер L298N',
+        test: (cx) => ({ ok: cx.partsOf('linecar').length > 0 && cx.partsOf('l298n').length > 0, detail: '' }),
+      },
+      {
+        id: 'en-pins', kind: 'schema', text: 'ENA и ENB сидят на цифровых выводах платы (можно менять скважность)',
+        hint: 'Если ENA/ENB прикручены к 5 В, мотор всегда работает на полную и analogWrite() ни на что не влияет.',
+        test: (cx) => {
+          const ok = cx.partsOf('l298n').some((drv) => digitalPinOf(cx, drv, 'ENA') && digitalPinOf(cx, drv, 'ENB'));
+          return { ok, detail: '' };
+        },
+      },
+      {
+        id: 'analog', kind: 'code', text: 'В скетче analogWrite() для обоих каналов',
+        hint: 'analogWrite(ENA, …) и analogWrite(ENB, …) — по одному на каждое колесо.',
+        test: (cx) => ({
+          ok: (cx.code.match(/analogWrite\s*\(/g) || []).length >= 2,
+          detail: `analogWrite() — ${(cx.code.match(/analogWrite\s*\(/g) || []).length} раз`,
+        }),
+      },
+      {
+        id: 'soft-turn', kind: 'code', text: 'Скорости колёс считаются по-разному (есть «медленнее», а не только 0)',
+        hint: 'Вместо motors(0, SPEED) попробуйте motors(SPEED / 3, SPEED): внутреннее колесо подтормаживает, тележка едет плавнее.',
+        test: (cx) => cx.codeHas(/SPEED\s*\/\s*[2-9]|SLOW|SPEED\s*\*\s*0?\.\d|analogWrite\s*\(\s*\w+\s*,\s*\d+\s*\)/),
+      },
+      {
+        id: 'rides', kind: 'behavior', text: 'Тележка проехала хотя бы полкруга',
+        hint: 'Запустите скетч: если тележка не двигается, проверьте ENA/ENB и направления IN1…IN4.',
+        test: (cx) => {
+          const car = cx.car();
+          return { ok: car.distance >= 400, detail: `проехала ${Math.round(car.distance)} мм` };
+        },
+      },
+      {
+        id: 'moderate', kind: 'behavior', text: 'Средняя скорость не больше 32 мм/с — тележка действительно «притормозила»',
+        hint: 'Скважность 255 — полный ход, около 40 мм/с. Уменьшайте SPEED, пока средняя скорость не станет ниже 32 мм/с.',
+        test: (cx) => {
+          const car = cx.car();
+          return { ok: car.avgSpeed > 0 && car.avgSpeed <= 32, detail: `средняя ${car.avgSpeed.toFixed(0)} мм/с` };
+        },
+      },
+      {
+        id: 'on-line', kind: 'behavior', text: 'На линии не меньше 90 % времени',
+        test: (cx) => {
+          const share = cx.carLineShare();
+          return { ok: share >= 0.9, detail: `на линии ${(share * 100).toFixed(0)} % времени` };
+        },
+      },
+    ],
+    solutionExample: 'linecar-pwm',
+  },
+
+  {
+    id: 'ev-linecar-stop',
+    title: 'Робот-тележка: круг и остановка на старте',
+    level: 3,
+    topic: 'Моторы и движение',
+    minutes: 30,
+    brief: 'Тележка должна проехать ровно один круг и встать там, где стояла. Одометра у неё нет, поэтому круг отмеряют по времени: секундомером узнают, сколько идёт один круг, и останавливают моторы, когда время вышло.',
+    goals: [
+      'Схема собрана и тележка едет по линии',
+      'В скетче есть отсчёт времени через millis()',
+      'После круга моторы обесточены: motors(0, 0)',
+      'Тележка встаёт там же, где стартовала',
+    ],
+    start: {
+      parts: [
+        board(),
+        { id: 'da1', type: 'l298n', x: 90, y: 235, props: {} },
+        { id: 'rb1', type: 'linecar', x: -40, y: 600, props: {} },
+      ],
+      wires: [],
+      code: SKELETON_CPP,
+    },
+    checks: [
+      {
+        id: 'has-car', kind: 'schema', text: 'Схема собрана: тележка, драйвер, датчики на цифровых выводах',
+        test: (cx) => ({ ok: carMotorsWired(cx) && carSensorsOnPins(cx), detail: '' }),
+      },
+      {
+        id: 'millis', kind: 'code', text: 'Время считается через millis()',
+        hint: 'unsigned long t0 = millis(); … if (millis() - t0 > LAP_MS) { остановка }',
+        test: (cx) => cx.codeHas(/millis\s*\(/),
+      },
+      {
+        id: 'stop-code', kind: 'code', text: 'В скетче есть остановка моторов',
+        hint: 'motors(0, 0) выставляет нулевую скважность на ENA и ENB — моторы обесточиваются и тележка встаёт.',
+        test: (cx) => cx.codeHas(/motors\s*\(\s*0\s*,\s*0\s*\)|analogWrite\s*\(\s*\w+\s*,\s*0\s*\)/),
+      },
+      {
+        id: 'lap', kind: 'behavior', text: 'Тележка проехала круг (0,9…1,2)',
+        hint: 'Если круг не доехала — увеличьте LAP_MS; если переехала — уменьшите.',
+        test: (cx) => {
+          const car = cx.car();
+          return { ok: car.laps >= 0.9 && car.laps <= 1.2, detail: `кругов ${car.laps.toFixed(2)}` };
+        },
+      },
+      {
+        id: 'stopped', kind: 'behavior', text: 'В конце тележка стоит (скорость меньше 6 мм/с)',
+        hint: 'Скетч должен не просто перестать читать датчики, а именно обесточить моторы.',
+        test: (cx) => {
+          const car = cx.car();
+          return { ok: car.speed < 6, detail: `скорость ${car.speed.toFixed(0)} мм/с` };
+        },
+      },
+      {
+        id: 'at-start', kind: 'behavior', text: 'Тележка встала рядом со стартом (не дальше 130 мм)',
+        hint: 'Подберите LAP_MS по секундомеру: время одного круга у всех разное, потому что зависит от заряда батареек и настройки скорости.',
+        test: (cx) => {
+          const car = cx.car();
+          if (!car.pose) return { ok: false, detail: 'тележка ещё не двигалась' };
+          const d = Math.hypot(car.pose.x - START.x, car.pose.y - START.y);
+          return { ok: d < 130, detail: `до старта ${Math.round(d)} мм` };
+        },
+      },
+    ],
+    solutionExample: 'linecar-laps',
   },
 
 ];
