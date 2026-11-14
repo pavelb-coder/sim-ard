@@ -36,6 +36,8 @@ export const SHORT_NAME = {
   uno: 'Arduino Uno', esp32: 'ESP32 DevKit V1', pico: 'Raspberry Pi Pico', rpi5: 'Raspberry Pi 5',
   nano: 'Arduino Nano', promini: 'Arduino Pro Mini', leonardo: 'Arduino Leonardo', mega: 'Arduino Mega 2560',
   usbcable: 'USB-кабель',
+  mpu6050: 'MPU-6050', bmp280: 'BMP280', ds18b20: 'DS18B20', bh1750: 'BH1750',
+  mq2: 'датчик газа', soil: 'влажность почвы', sound: 'датчик звука',
 };
 
 export const REF_PREFIX = {
@@ -46,6 +48,7 @@ export const REF_PREFIX = {
   battery9: 'GB', batteryAA: 'GB', psu: 'G', scope: 'OS', multimeter: 'PA', logicprobe: 'PL',
   ledBicolor: 'D', ledBar: 'HL', traffic: 'HL', pnp: 'VT', mosfet: 'VT', tip120: 'VT',
   usbcable: 'X',
+  mpu6050: 'MPU', bmp280: 'BMP', ds18b20: 'T', bh1750: 'LX', mq2: 'GAS', soil: 'SM', sound: 'MIC',
   l298n: 'DA', dcmotor: 'M', keypad: 'SB', sr595: 'DD', sr165: 'DD',
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
@@ -75,6 +78,22 @@ function partLabel(comp, type) {
   const name = SHORT_NAME[type] || comp.__def?.name || type;
   return comp.ref ? `${comp.ref} · ${name}` : name;
 }
+
+/** Дорожка ползунка у датчика: тянется мышью влево-вправо, значение — в props. */
+const sensorKnob = (cx, cy, alpha, w = 42, key = '') => `
+  <rect x="${cx - w / 2}" y="${cy}" width="${w}" height="4" rx="2" fill="#0b161d" stroke="#2a3d4a" stroke-width=".6"/>
+  <rect x="${cx - w / 2}" y="${cy}" width="${Math.max(2, w * alpha)}" height="4" rx="2" fill="#37b6ff" opacity=".8"/>
+  <circle cx="${cx - w / 2 + w * alpha}" cy="${cy + 2}" r="3.2" fill="#d6e6f5" stroke="#0b1218" stroke-width=".7"/>
+  <rect data-role="knob"${key ? ` data-knob="${key}"` : ''} x="${cx - w / 2 - 3}" y="${cy - 5}" width="${w + 6}" height="14"
+        fill="transparent" style="cursor:ew-resize"/>`;
+
+/** Плата датчика-модуля: зелёный текстолит и два крепёжных отверстия. */
+const sensorBoard = (comp, w, h, body) => partTag(comp, w, h, `
+  <rect x="${-w / 2 + 4}" y="${-h / 2 + 4}" width="${w - 8}" height="${h - 8}" rx="3"
+        fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.1"/>
+  <circle cx="${-w / 2 + 11}" cy="${-h / 2 + 11}" r="2.2" fill="#0d2a1d" stroke="#2c5c46" stroke-width=".6"/>
+  <circle cx="${w / 2 - 11}" cy="${-h / 2 + 11}" r="2.2" fill="#0d2a1d" stroke="#2c5c46" stroke-width=".6"/>
+  ${body}`);
 
 const partTag = (comp, w, h, body, extra = '') => {
   const label = partLabel(comp, comp.type);
@@ -339,6 +358,219 @@ const DISCRETE = {
     update(g, comp) {
       const t = g.querySelector('.body text');
       if (t) t.textContent = `${Math.round(comp.props?.distance ?? 50)} см`;
+    },
+  },
+
+  // ------------------------------------------- датчики для метеостанции ----
+  /* У всех новых датчиков есть «ползунок» под корпусом: потяните его мышью —
+   * изменится измеряемая величина, и скетч сразу увидит новое значение. */
+
+  mpu6050: {
+    name: 'Гироскоп и акселерометр MPU-6050', category: 'Датчики', w: 100, h: 84,
+    pins: () => [
+      { id: 'VCC', label: '+', x: -33, y: 34, dir: 'down' },
+      { id: 'GND', label: '−', x: -11, y: 34, dir: 'down' },
+      { id: 'SDA', label: 'SDA', x: 11, y: 34, dir: 'down' },
+      { id: 'SCL', label: 'SCL', x: 33, y: 34, dir: 'down' },
+    ],
+    knob: {
+      set(part, a, key) {
+        if (key === 'shake') part.props.shake = Math.round(a * 100) / 100;
+        else part.props.tilt = Math.round(-60 + 120 * a);
+      },
+    },
+    render(comp) {
+      const tilt = Number(comp.props?.tilt ?? 0);
+      const a = (tilt + 60) / 120;
+      const shake = Math.min(1, Math.max(0, Number(comp.props?.shake ?? 0)));
+      return sensorBoard(comp, 100, 84, `
+        <rect x="-22" y="-30" width="44" height="30" rx="2" fill="#151c23" stroke="#2b3945"/>
+        <text x="0" y="-16" style="font:6px ui-monospace;fill:#8fbde3;text-anchor:middle">MPU</text>
+        <text x="0" y="-8" style="font:5.4px ui-monospace;fill:#6f93b0;text-anchor:middle">6050</text>
+        <g transform="rotate(${tilt} 0 8)">
+          <line x1="-24" y1="8" x2="24" y2="8" stroke="#7ef29d" stroke-width="1.2"/>
+          <line x1="-4" y1="8" x2="-4" y2="-2" stroke="#ffd166" stroke-width="1.2"/>
+          <circle cx="-4" cy="8" r="2.4" fill="#7ef29d"/>
+        </g>
+        <text class="val" x="0" y="24" style="font:6.4px ui-monospace;fill:#8ce8a4;text-anchor:middle">${tilt > 0 ? '+' : ''}${tilt}°</text>
+        ${sensorKnob(-2, 12, a, 34, 'tilt')}
+        ${sensorKnob(20, 12, shake, 34, 'shake')}
+        <text x="-2" y="4" style="font:4.6px ui-monospace;fill:#6f93b0;text-anchor:middle">наклон</text>
+        <text x="20" y="4" style="font:4.6px ui-monospace;fill:#6f93b0;text-anchor:middle">тряска</text>`);
+    },
+    update(g, comp) {
+      const tilt = Number(comp.props?.tilt ?? 0);
+      const t = g.querySelector('.val');
+      if (t) t.textContent = `${tilt > 0 ? '+' : ''}${tilt}°`;
+      const axis = g.querySelector('.body g[transform]');
+      if (axis) axis.setAttribute('transform', `rotate(${tilt} 0 8)`);
+    },
+  },
+
+  bmp280: {
+    name: 'Барометр BMP280', category: 'Датчики', w: 92, h: 78,
+    pins: () => [
+      { id: 'VCC', label: '+', x: -30, y: 31, dir: 'down' },
+      { id: 'GND', label: '−', x: -10, y: 31, dir: 'down' },
+      { id: 'SDA', label: 'SDA', x: 10, y: 31, dir: 'down' },
+      { id: 'SCL', label: 'SCL', x: 30, y: 31, dir: 'down' },
+    ],
+    knob: { set(part, a) { part.props.pressure = Math.round(950 + 100 * a); } },
+    render(comp) {
+      const hPa = Math.round(comp.props?.pressure ?? 1013);
+      const a = Math.min(1, Math.max(0, (hPa - 950) / 100));
+      return sensorBoard(comp, 92, 78, `
+        <rect x="-20" y="-28" width="40" height="26" rx="2" fill="url(#sim-metal)" stroke="#7d8b96"/>
+        <rect x="-13" y="-22" width="26" height="3" rx="1.5" fill="#0d1a22" opacity=".5"/>
+        <text x="0" y="-10" style="font:5px ui-monospace;fill:#25313b;text-anchor:middle">BMP280</text>
+        <text class="val" x="0" y="10" style="font:6.6px ui-monospace;fill:#8ce8a4;text-anchor:middle">${hPa} гПа</text>
+        ${sensorKnob(0, 14, a)}`);
+    },
+    update(g, comp) {
+      const hPa = Math.round(comp.props?.pressure ?? 1013);
+      const t = g.querySelector('.val');
+      if (t) t.textContent = `${hPa} гПа`;
+    },
+  },
+
+  ds18b20: {
+    name: 'Термометр DS18B20', category: 'Датчики', w: 72, h: 86,
+    pins: () => [
+      { id: 'GND', label: '−', x: -18, y: 34, dir: 'down' },
+      { id: 'DATA', label: 'D', x: 0, y: 34, dir: 'down' },
+      { id: 'VCC', label: '+', x: 18, y: 34, dir: 'down' },
+    ],
+    knob: { set(part, a) { part.props.temp = Math.round(-10 + 60 * a); } },
+    render(comp) {
+      const t0 = Number(comp.props?.temp ?? 24);
+      const a = Math.min(1, Math.max(0, (t0 + 10) / 60));
+      return sensorBoard(comp, 72, 86, `
+        <path d="M -16 -32 h 32 v 30 a 6 6 0 0 1 -6 6 h -20 a 6 6 0 0 1 -6 -6 z" fill="url(#sim-plastic)" stroke="#1b232b"/>
+        <rect x="-16" y="-32" width="32" height="10" fill="#2b3945" opacity=".55"/>
+        <text x="0" y="-18" style="font:5px ui-monospace;fill:#cfe9dc;text-anchor:middle">DS18B20</text>
+        <text class="val" x="0" y="4" style="font:6.6px ui-monospace;fill:#8ce8a4;text-anchor:middle">${t0.toFixed(1)}°C</text>
+        ${sensorKnob(0, 14, a)}`);
+    },
+    update(g, comp) {
+      const t = g.querySelector('.val');
+      if (t) t.textContent = `${Number(comp.props?.temp ?? 24).toFixed(1)}°C`;
+    },
+  },
+
+  bh1750: {
+    name: 'Люксметр BH1750', category: 'Датчики', w: 88, h: 70,
+    pins: () => [
+      { id: 'VCC', label: '+', x: -28, y: 27, dir: 'down' },
+      { id: 'GND', label: '−', x: -9, y: 27, dir: 'down' },
+      { id: 'SDA', label: 'SDA', x: 10, y: 27, dir: 'down' },
+      { id: 'SCL', label: 'SCL', x: 29, y: 27, dir: 'down' },
+    ],
+    knob: { set(part, a) { part.props.lux = Math.round(2000 * a); } },
+    render(comp) {
+      const lux = Math.round(comp.props?.lux ?? 300);
+      const a = Math.min(1, Math.max(0, lux / 2000));
+      return sensorBoard(comp, 88, 70, `
+        <rect x="-16" y="-26" width="32" height="20" rx="2" fill="#0d1a22" stroke="#2b3945"/>
+        <rect x="-12" y="-22" width="24" height="12" rx="1" fill="#8fd3ff" opacity=".75"/>
+        <text x="0" y="-11" style="font:4.6px ui-monospace;fill:#08202c;text-anchor:middle">BH1750</text>
+        <text class="val" x="0" y="6" style="font:6.4px ui-monospace;fill:#8ce8a4;text-anchor:middle">${lux} лк</text>
+        ${sensorKnob(0, 10, a)}`);
+    },
+    update(g, comp) {
+      const t = g.querySelector('.val');
+      if (t) t.textContent = `${Math.round(comp.props?.lux ?? 300)} лк`;
+    },
+  },
+
+  mq2: {
+    name: 'Датчик газа и дыма MQ-2', category: 'Датчики', w: 88, h: 80,
+    pins: () => [
+      { id: 'VCC', label: '+', x: -30, y: 32, dir: 'down' },
+      { id: 'GND', label: '−', x: -10, y: 32, dir: 'down' },
+      { id: 'AO', label: 'AO', x: 10, y: 32, dir: 'down' },
+      { id: 'DO', label: 'DO', x: 30, y: 32, dir: 'down' },
+    ],
+    knob: { set(part, a) { part.props.value = Math.round(a * 100) / 100; } },
+    render(comp) {
+      const v = Math.min(1, Math.max(0, Number(comp.props?.value ?? 0)));
+      const ppm = Math.round(v * 1000);
+      const alarm = v > 0.5;
+      return sensorBoard(comp, 88, 80, `
+        <circle cx="0" cy="-12" r="18" fill="url(#sim-metal-h)" stroke="#6a7680"/>
+        <circle cx="0" cy="-12" r="13" fill="none" stroke="#59646e" stroke-width=".8"/>
+        <g stroke="#3c464f" stroke-width=".7">
+          <line x1="-11" y1="-12" x2="11" y2="-12"/><line x1="-11" y1="-17" x2="11" y2="-17"/>
+          <line x1="-11" y1="-7" x2="11" y2="-7"/><line x1="-6" y1="-25" x2="-6" y2="1"/>
+          <line x1="0" y1="-25" x2="0" y2="1"/><line x1="6" y1="-25" x2="6" y2="1"/>
+        </g>
+        <text class="val" x="0" y="12" style="font:6.4px ui-monospace;fill:${alarm ? '#ff8a7a' : '#8ce8a4'};text-anchor:middle">${ppm} ppm</text>
+        <text class="st" x="0" y="22" style="font:5.2px ui-monospace;fill:${alarm ? '#ff5544' : '#6f8a9b'};text-anchor:middle">${alarm ? 'газ!' : 'чисто'}</text>
+        ${sensorKnob(0, 5, v)}`);
+    },
+    update(g, comp) {
+      const v = Math.min(1, Math.max(0, Number(comp.props?.value ?? 0)));
+      const t = g.querySelector('.val');
+      if (t) t.textContent = `${Math.round(v * 1000)} ppm`;
+      const st = g.querySelector('.st');
+      if (st) st.textContent = v > 0.5 ? 'газ!' : 'чисто';
+    },
+  },
+
+  soil: {
+    name: 'Датчик влажности почвы', category: 'Датчики', w: 76, h: 92,
+    pins: () => [
+      { id: 'VCC', label: '+', x: -18, y: 40, dir: 'down' },
+      { id: 'GND', label: '−', x: 0, y: 40, dir: 'down' },
+      { id: 'AO', label: 'AO', x: 18, y: 40, dir: 'down' },
+    ],
+    knob: { set(part, a) { part.props.value = Math.round(a * 100) / 100; } },
+    render(comp) {
+      const v = Math.min(1, Math.max(0, Number(comp.props?.value ?? 0.4)));
+      const dry = v < 0.35;
+      return sensorBoard(comp, 76, 92, `
+        <rect x="-18" y="-34" width="36" height="26" rx="2" fill="#1b4f8a" stroke="#2f74b8"/>
+        <text x="0" y="-18" style="font:5px ui-monospace;fill:#a9d4f5;text-anchor:middle">YL-69</text>
+        <line x1="-8" y1="-8" x2="-8" y2="18" stroke="#c9d6df" stroke-width="2.4"/>
+        <line x1="8" y1="-8" x2="8" y2="18" stroke="#c9d6df" stroke-width="2.4"/>
+        <text class="val" x="0" y="16" style="font:6.4px ui-monospace;fill:${dry ? '#ffd166' : '#8ce8a4'};text-anchor:middle">${Math.round(v * 100)}%</text>
+        <text class="st" x="0" y="26" style="font:5.2px ui-monospace;fill:${dry ? '#ffd166' : '#6f8a9b'};text-anchor:middle">${dry ? 'сухо' : 'влажно'}</text>
+        ${sensorKnob(0, 0, v)}`);
+    },
+    update(g, comp) {
+      const v = Math.min(1, Math.max(0, Number(comp.props?.value ?? 0.4)));
+      const t = g.querySelector('.val');
+      if (t) t.textContent = `${Math.round(v * 100)}%`;
+      const st = g.querySelector('.st');
+      if (st) st.textContent = v < 0.35 ? 'сухо' : 'влажно';
+    },
+  },
+
+  sound: {
+    name: 'Датчик звука (микрофон)', category: 'Датчики', w: 84, h: 72,
+    pins: () => [
+      { id: 'VCC', label: '+', x: -28, y: 28, dir: 'down' },
+      { id: 'GND', label: '−', x: -9, y: 28, dir: 'down' },
+      { id: 'AO', label: 'AO', x: 10, y: 28, dir: 'down' },
+      { id: 'DO', label: 'DO', x: 29, y: 28, dir: 'down' },
+    ],
+    knob: { set(part, a) { part.props.value = Math.round(a * 100) / 100; } },
+    render(comp) {
+      const v = Math.min(1, Math.max(0, Number(comp.props?.value ?? 0)));
+      const loud = v > 0.5;
+      return sensorBoard(comp, 84, 72, `
+        <circle cx="-8" cy="-14" r="11" fill="#151c23" stroke="#3b4a58"/>
+        <circle cx="-8" cy="-14" r="6" fill="#0a0f14"/>
+        <circle cx="-8" cy="-14" r="6" fill="none" stroke="#2b3945" stroke-width=".6"/>
+        <g stroke="${loud ? '#ffd166' : '#4a5b6b'}" stroke-width="1" fill="none">
+          <path d="M 8 -20 a 8 8 0 0 1 0 12"/><path d="M 14 -24 a 14 14 0 0 1 0 20"/>
+        </g>
+        <text class="val" x="0" y="8" style="font:6.4px ui-monospace;fill:${loud ? '#ffd166' : '#8ce8a4'};text-anchor:middle">${Math.round(40 + 50 * v)} дБ</text>
+        ${sensorKnob(0, 12, v)}`);
+    },
+    update(g, comp) {
+      const v = Math.min(1, Math.max(0, Number(comp.props?.value ?? 0)));
+      const t = g.querySelector('.val');
+      if (t) t.textContent = `${Math.round(40 + 50 * v)} дБ`;
     },
   },
 

@@ -37,6 +37,8 @@ const UNSUPPORTED = {
 /** Классы из libraries.js: их можно объявлять как в скетче — Servo myservo; */
 const LIB_CLASSES = new Set([
   'Servo', 'DHT', 'DHT11', 'Stepper', 'LiquidCrystal_I2C', 'Adafruit_SSD1306', 'Wire', 'TwoWire',
+  // датчики-модули: у каждого своя библиотека
+  'MPU6050', 'Adafruit_MPU6050', 'Adafruit_BMP280', 'OneWire', 'DallasTemperature', 'BH1750',
 ]);
 
 /** new Array(m).fill(0) для последней размерности. */
@@ -212,6 +214,24 @@ export function transpile(source) {
   const errors = [];
   const warnings = [];
   const toks = tokenize(source);
+  // Указателей нет, но `&объект` в вызовах библиотек встречается сплошь
+  // (DallasTemperature sensors(&wire)). Унарный «&» просто выбрасываем:
+  // библиотека получит сам объект. Бинарный «и» (x & mask) не трогаем.
+  for (let k = 0; k < toks.length; k++) {
+    const t = toks[k];
+    if (!(t.t === 'op' && t.v === '&')) continue;
+    let j = k - 1;
+    while (j >= 0 && toks[j].t === 'nl') j--;
+    const prev = toks[j];
+    const unary = !prev || (prev.t === 'op' && ['(', ',', '=', '==', '&&', '||', '+', '-', '*', '/', '%', '<', '>', '<=', '>=',
+      '+=', '-=', '*=', '/='].includes(prev.v));
+    if (!unary) continue;
+    let m = k + 1;
+    while (m < toks.length && toks[m].t === 'nl') m++;
+    if (!toks[m] || !(toks[m].t === 'id' || (toks[m].t === 'op' && toks[m].v === '('))) continue;
+    toks.splice(k, 1);
+    k--;
+  }
   const out = [];
   let i = 0;
   let pendingType = false;   // ждём имя переменной после типа

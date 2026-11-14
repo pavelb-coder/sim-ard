@@ -311,6 +311,44 @@ export class Circuit {
           if (data && vcc && data !== vcc) push({ type: 'R', n1: data, n2: vcc, value: 10000 });
           break;
         }
+        // Аналоговый датчик: внутри модуля делитель, поэтому на выводе AO —
+        // честное напряжение. 0 — земля, 1 — питание, analogRead читает это
+        // как 0…1023, и скетч работает с реальными числами, а не с «магией».
+        case 'mq2':
+        case 'soil':
+        case 'sound': {
+          const out = n('AO'), vcc = n('VCC') || this.vccNet();
+          const raw = Math.min(1, Math.max(0, Number(p.props?.value ?? 0)));
+          // у датчика влажности почвы сухая земля даёт БОЛЬШЕ напряжения
+          const v = p.type === 'soil' ? 1 - raw : raw;
+          if (out && vcc && out !== vcc) push({ type: 'R', n1: out, n2: vcc, value: 1000 * (1 - v) + 1 });
+          if (out && out !== gnd) push({ type: 'R', n1: out, n2: gnd, value: 1000 * v + 1 });
+          const dout = n('DO');
+          if (dout) {
+            const target = raw > 0.5 ? (vcc || gnd) : gnd;      // порог компаратора модуля
+            if (dout !== target) push({ type: 'R', n1: dout, n2: target, value: 1000 });
+          }
+          break;
+        }
+        // Шины I2C и 1-Wire: подтяжки к питанию. Плата видит на SDA/SCL
+        // высокий уровень, как и на настоящей шине в покое.
+        case 'mpu6050':
+        case 'bmp280':
+        case 'bh1750': {
+          const vcc = n('VCC') || this.vccNet(), g = n('GND') || gnd;
+          if (vcc && g && vcc !== g) push({ type: 'R', n1: vcc, n2: g, value: 4700 });
+          for (const id of ['SDA', 'SCL']) {
+            const pin = n(id);
+            if (pin && vcc && pin !== vcc) push({ type: 'R', n1: pin, n2: vcc, value: 10000 });
+          }
+          break;
+        }
+        case 'ds18b20': {
+          const vcc = n('VCC') || this.vccNet(), g = n('GND') || gnd, data = n('DATA');
+          if (vcc && g && vcc !== g) push({ type: 'R', n1: vcc, n2: g, value: 22000 });
+          if (data && vcc && data !== vcc) push({ type: 'R', n1: data, n2: vcc, value: 4700 });
+          break;
+        }
         case 'servo': {
           const a = n('VCC'), b = n('GND');
           const pwm = n('PWM');

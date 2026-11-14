@@ -1758,8 +1758,8 @@ console.log('\nЗадания «Эвольвектора»: эталоны пр�
   const examples = EXAMPLES;
   const byId = Object.fromEntries(examples.map((e) => [e.id, e]));
 
-  check('в курсе 31 задание: 8 базовых и 23 из наборов «Эвольвектор»',
-    TASKS.length === 31 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 23,
+  check('в курсе 36 заданий: 8 базовых, 23 из наборов «Эвольвектор» и 5 про датчики',
+    TASKS.length === 36 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 28,
     `всего ${TASKS.length}`);
   check('у заданий уникальные id и заполнены уровень, тема, минуты, цели и проверки',
     new Set(TASKS.map((t) => t.id)).size === TASKS.length
@@ -1878,6 +1878,154 @@ console.log('\nUSB: две платы кабелем, порт /dev/ttyACM0 и �
   check('кабель, соединяющий разъёмы двух плат, засчитывается', cable.ok && boards.ok, JSON.stringify(cable));
   const noCable = new CheckContext({ parts: parts.slice(0, 2), wires: [], code: '', trace: {} });
   check('без кабеля задание не проходит', !task.checks.find((c) => c.id === 'cable').test(noCable).ok);
+}
+
+console.log('\nДатчики: наклон, погода, газ и влажность');
+
+{
+  // --- детали на месте и ползунки не выходят за пределы
+  const sensors = ['mpu6050', 'bmp280', 'ds18b20', 'bh1750', 'mq2', 'soil', 'sound'];
+  check('семь новых датчиков — в категории «Датчики» и с выводами',
+    sensors.every((type) => PARTS[type] && PARTS[type].category === 'Датчики' && PARTS[type].pins({}).length >= 3),
+    sensors.filter((t) => !PARTS[t]).join(', '));
+
+  const knobOf = (type, key = '') => {
+    const part = { id: 'x1', type, props: { ...PARTS[type].knob && {} } };
+    return { part, set: (a) => PARTS[type].knob.set(part, a, key) };
+  };
+  {
+    const { part, set } = knobOf('mpu6050');
+    set(0); const lo = part.props.tilt;
+    set(1); const hi = part.props.tilt;
+    const { part: p2, set: set2 } = knobOf('mpu6050', 'shake');
+    set2(0.5);
+    check('ползунок MPU-6050: наклон −60…60 и отдельная тряска',
+      lo === -60 && hi === 60 && Math.abs(p2.props.shake - 0.5) < 1e-9, `${lo}…${hi}, тряска ${p2.props.shake}`);
+  }
+  {
+    const { part, set } = knobOf('bmp280');
+    set(0); const lo = part.props.pressure; set(1); const hi = part.props.pressure;
+    const t = knobOf('ds18b20'); t.set(1);
+    check('ползунок барометра 950…1050 гПа, термометра — до +50 °C',
+      lo === 950 && hi === 1050 && t.part.props.temp === 50, `${lo}…${hi}, ${t.part.props.temp} °C`);
+  }
+
+  // --- аналоговые датчики: честное напряжение на выводе
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type] });
+  const w = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  const solve = (parts, wires) => {
+    const c = new Circuit(parts, wires);
+    c.solve(new Map([['b1', { pins: new Map() }]]), 1 / 60);
+    return c;
+  };
+  const A0 = 14;      // номер вывода A0 у Uno
+  {
+    const v = (value) => solve([mk('uno', 'b1'), mk('mq2', 'g1', { value })],
+      [w(1, 'b1', '5V', 'g1', 'VCC'), w(2, 'b1', 'GND', 'g1', 'GND'), w(3, 'g1', 'AO', 'b1', 'A0')]).voltageOf('b1', A0);
+    check('MQ-2 отдаёт на A0 напряжение пропорционально газу (0 → 0 В, 0,6 → 3 В, 1 → 5 В)',
+      Math.abs(v(0)) < 0.05 && Math.abs(v(0.6) - 3) < 0.1 && Math.abs(v(1) - 5) < 0.1,
+      `${v(0).toFixed(2)} / ${v(0.6).toFixed(2)} / ${v(1).toFixed(2)} В`);
+  }
+  {
+    const v = (value) => solve([mk('uno', 'b1'), mk('soil', 's1', { value })],
+      [w(1, 'b1', '5V', 's1', 'VCC'), w(2, 'b1', 'GND', 's1', 'GND'), w(3, 's1', 'AO', 'b1', 'A0')]).voltageOf('b1', A0);
+    check('у датчика влажности сухая земля даёт больше напряжения, чем мокрая',
+      v(0.1) > v(0.5) && v(0.5) > v(0.9) && Math.abs(v(0.1) - 4.5) < 0.2,
+      `${v(0.1).toFixed(2)} / ${v(0.5).toFixed(2)} / ${v(0.9).toFixed(2)} В`);
+  }
+  {
+    const c = solve([mk('uno', 'b1'), mk('mq2', 'g1', { value: 0.9 })],
+      [w(1, 'b1', '5V', 'g1', 'VCC'), w(2, 'b1', 'GND', 'g1', 'GND'), w(3, 'g1', 'DO', 'b1', 'D3')]);
+    const hi = c.voltageOf('b1', 3);
+    const c2 = solve([mk('uno', 'b1'), mk('mq2', 'g1', { value: 0.1 })],
+      [w(1, 'b1', '5V', 'g1', 'VCC'), w(2, 'b1', 'GND', 'g1', 'GND'), w(3, 'g1', 'DO', 'b1', 'D3')]);
+    const lo = c2.voltageOf('b1', 3);
+    check('цифровой выход DO модуля переключается по порогу', hi > 4 && lo < 1, `${hi.toFixed(2)} / ${lo.toFixed(2)} В`);
+  }
+  {
+    // I2C: в покое обе линии шины подтянуты к питанию
+    const c = solve([mk('uno', 'b1'), mk('mpu6050', 'm1', { tilt: 0 })],
+      [w(1, 'b1', '5V', 'm1', 'VCC'), w(2, 'b1', 'GND', 'm1', 'GND'),
+        w(3, 'b1', 'A4', 'm1', 'SDA'), w(4, 'b1', 'A5', 'm1', 'SCL')]);
+    const sda = c.voltageOf('b1', 18), scl = c.voltageOf('b1', 19);
+    check('шина I2C в покое подтянута к 5 В (SDA — A4, SCL — A5)', sda > 4 && scl > 4, `${sda.toFixed(1)} / ${scl.toFixed(1)} В`);
+  }
+
+  // --- библиотеки-двойники читают «железо» детали
+  const bus = (parts) => ({
+    firstOfType: (type) => parts.find((p) => p.type === type) || null,
+    partOnPin: () => null,
+    changed: () => {},
+    addStepper: () => {},
+    stepMotor: () => {},
+  });
+  {
+    const libs = createLibraries(bus([{ id: 'm1', type: 'mpu6050', props: { tilt: 45, shake: 0.5, temp: 29 } }]));
+    const mpu = new libs.Adafruit_MPU6050();
+    const ok = mpu.begin();
+    mpu.readSensor();
+    check('MPU-6050: begin(), угол наклона 45°, Z-ускорение cos(45°) = 0,71 g',
+      ok && Math.abs(mpu.pitch() - 45) < 1 && Math.abs(mpu.accelZ() - Math.SQRT1_2) < 0.02
+      && mpu.accelX() > 0.6 && mpu.temperature() === 29,
+      `pitch ${mpu.pitch().toFixed(1)}, aZ ${mpu.accelZ().toFixed(2)}`);
+    check('MPU-6050: при тряске гироскоп показывает сотни градусов в секунду', mpu.gyroZ() > 100, `${mpu.gyroZ().toFixed(0)} °/с`);
+  }
+  {
+    const libs = createLibraries(bus([{ id: 'p1', type: 'bmp280', props: { pressure: 980, temp: 19 } }]));
+    const bmp = new libs.Adafruit_BMP280();
+    const ok = bmp.begin();
+    const alt = bmp.readAltitude(1013);
+    check('BMP280: давление в паскалях и высота из давления (980 гПа ≈ 280 м)',
+      ok && bmp.readPressure() === 98000 && bmp.readTemperature() === 19 && alt > 260 && alt < 300,
+      `${Math.round(alt)} м`);
+  }
+  {
+    const libs = createLibraries(bus([{ id: 't1', type: 'ds18b20', props: { temp: 30.5 } }]));
+    const wire = new libs.OneWire(2);
+    const sensors = new libs.DallasTemperature(wire);
+    const ok = sensors.begin();
+    sensors.requestTemperatures();
+    check('DS18B20: библиотека DallasTemperature отдаёт температуру с датчика',
+      ok && sensors.getDeviceCount() === 1 && sensors.getTempCByIndex(0) === 30.5, `${sensors.getTempCByIndex(0)} °C`);
+  }
+  {
+    const libs = createLibraries(bus([{ id: 'l1', type: 'bh1750', props: { lux: 1500 } }]));
+    const meter = new libs.BH1750();
+    check('BH1750: readLightLevel() возвращает люксы', meter.begin() && meter.readLightLevel() === 1500);
+  }
+  {
+    const libs = createLibraries(bus([]));
+    const mpu = new libs.MPU6050();
+    const sensors = new libs.DallasTemperature(new libs.OneWire(2));
+    check('без датчика на схеме библиотеки честно сообщают «нет устройства»',
+      mpu.begin() === false && sensors.getDeviceCount() === 0 && sensors.getTempCByIndex(0) === -127);
+  }
+
+  // --- транспайлер: объекты библиотек и ссылка &объект
+  {
+    const t = transpile(`void setup() {
+  Adafruit_MPU6050 mpu;
+  Adafruit_BMP280 bmp;
+  OneWire wire(2);
+  DallasTemperature sensors(&wire);
+  mpu.begin();
+}
+void loop() {}`);
+    check('объекты датчиков объявляются как new, &объект передаётся без «&»',
+      t.errors.length === 0 && /new Adafruit_MPU6050\(\)/.test(t.js) && /new Adafruit_BMP280\(\)/.test(t.js)
+      && /new DallasTemperature\(\s*wire\s*\)/.test(t.js),
+      t.errors.map((e) => e.msg).join('; '));
+    const bits = transpile('void setup() {\n  int x = 6 & 3;\n}\nvoid loop() {}');
+    check('бинарное «и» (x & mask) не ломается', /6\s*&\s*3/.test(bits.js), bits.js.split('\n')[1]);
+  }
+
+  // --- задания про датчики
+  const sensorTasks = ['ev-mpu-tilt', 'ev-bmp-barometer', 'ev-ds18b20', 'ev-mq2-gas', 'ev-soil-watering'];
+  check('пять заданий про датчики на месте, с целями, проверками и решениями',
+    sensorTasks.every((id) => {
+      const t = TASKS.find((x) => x.id === id);
+      return t && t.goals.length >= 3 && t.checks.length >= 4 && t.solutionExample;
+    }), sensorTasks.filter((id) => !TASKS.find((x) => x.id === id)).join(', '));
 }
 
 console.log(`\nИтого: ${passed} ок, ${failed} провалено\n`);

@@ -1506,6 +1506,307 @@ export const TASKS = [
     solutionExample: 'usb-uno-pi',
   },
 
+  // ==========================================================================
+  //  Датчики: погода, наклон и безопасность
+  // ==========================================================================
+
+  {
+    id: 'ev-mpu-tilt',
+    title: 'Наклон: гироскоп и акселерометр MPU-6050',
+    level: 2,
+    topic: 'Эвольвектор · Датчики: MPU-6050',
+    minutes: 18,
+    brief: 'MPU-6050 — целая метеостанция в одном корпусе: акселерометр меряет, куда смотрит гравитация, гироскоп — как быстро датчик поворачивается. Он подключается по шине I2C двумя проводами данных.',
+    goals: [
+      'MPU-6050 подключён к питанию 5 В и земле',
+      'SDA — на A4, SCL — на A5 (это шина I2C платы Uno)',
+      'Скетч запускает датчик и печатает угол наклона',
+    ],
+    start: { parts: [board()], wires: [], code: SKELETON_CPP },
+    checks: [
+      {
+        id: 'sensor', kind: 'schema', text: 'На схеме есть MPU-6050',
+        hint: 'Раздел «Датчики» → «Гироскоп и акселерометр MPU-6050».',
+        test: (cx) => ({ ok: cx.count('mpu6050') >= 1, detail: `${cx.count('mpu6050')} шт.` }),
+      },
+      powered('mpu6050'),
+      {
+        id: 'i2c', kind: 'schema', text: 'SDA подключён к A4, SCL — к A5',
+        hint: 'На Uno шина I2C выведена на A4 (SDA) и A5 (SCL). Питание — 5V и GND.',
+        test: (cx) => {
+          const m = cx.partsOf('mpu6050')[0];
+          if (!m) return { ok: false, detail: 'датчика нет' };
+          const sda = cx.attached('A4', m.id, 'SDA') || cx.attached('A4', m.id, 'SCL');
+          const scl = cx.attached('A5', m.id, 'SCL') || cx.attached('A5', m.id, 'SDA');
+          return { ok: sda && scl, detail: `${sda ? 'SDA' : '—'} / ${scl ? 'SCL' : '—'}` };
+        },
+      },
+      {
+        id: 'begin', kind: 'code', text: 'Скетч запускает датчик через begin()',
+        hint: '#include <Wire.h>, mpu.begin(), и можно проверить результат: if (!mpu.begin()) …',
+        test: (cx) => ({
+          ok: cx.codeHas(/MPU6050/) && cx.codeHas(/\.begin\s*\(/) && cx.codeHas(/Wire\.begin/),
+          detail: cx.codeHas(/Wire\.begin/) ? '' : 'нет Wire.begin()',
+        }),
+      },
+      {
+        id: 'angle', kind: 'code', text: 'Скетч вычисляет угол наклона',
+        hint: 'mpu.readSensor() обновляет показания, mpu.pitch() даёт угол в градусах.',
+        test: (cx) => ({
+          ok: cx.codeHas(/pitch\s*\(/) || cx.codeHas(/accelZ\s*\(/) || cx.codeHas(/accelX\s*\(/),
+          detail: 'нужен pitch() или accelX()/accelZ()',
+        }),
+      },
+      {
+        id: 'prints', kind: 'behavior', text: 'Плата печатает угол наклона',
+        hint: 'Serial.print("наклон "); Serial.println(mpu.pitch());',
+        test: (cx) => {
+          const text = cx.serialText();
+          return { ok: /наклон/i.test(text) && /\d/.test(text), detail: text.slice(-60) };
+        },
+      },
+    ],
+    solutionExample: 'mpu-tilt',
+  },
+
+  {
+    id: 'ev-bmp-barometer',
+    title: 'Барометр BMP280: давление и высота',
+    level: 3,
+    topic: 'Эвольвектор · Датчики: BMP280',
+    minutes: 20,
+    brief: 'BMP280 меряет атмосферное давление с точностью до паскаля. По давлению можно посчитать высоту над уровнем моря — так работают альтиметры в телефонах и дронах.',
+    goals: [
+      'BMP280 подключён по I2C: SDA → A4, SCL → A5, питание 5 В и земля',
+      'Давление выведено на LCD 1602 (или в монитор порта)',
+      'Высота считается через readAltitude()',
+    ],
+    start: { parts: [board()], wires: [], code: SKELETON_CPP },
+    checks: [
+      {
+        id: 'sensor', kind: 'schema', text: 'На схеме есть BMP280',
+        test: (cx) => ({ ok: cx.count('bmp280') >= 1, detail: `${cx.count('bmp280')} шт.` }),
+      },
+      powered('bmp280'),
+      {
+        id: 'i2c', kind: 'schema', text: 'SDA и SCL барометра подключены к A4 и A5',
+        test: (cx) => {
+          const m = cx.partsOf('bmp280')[0];
+          if (!m) return { ok: false, detail: 'датчика нет' };
+          const sda = cx.attached('A4', m.id, 'SDA');
+          const scl = cx.attached('A5', m.id, 'SCL');
+          return { ok: sda && scl, detail: `${sda ? 'SDA' : '—'} / ${scl ? 'SCL' : '—'}` };
+        },
+      },
+      {
+        id: 'lcd', kind: 'schema', text: 'Давление видно на экране LCD',
+        hint: 'LCD 1602 по I2C: VCC и GND на питание, SDA на A4, SCL на A5 — она висит на той же шине, что и барометр.',
+        test: (cx) => {
+          const lcd = cx.partsOf('lcd1602')[0];
+          const ok = Boolean(lcd) && cx.attached('A4', lcd.id, 'SDA') && cx.attached('A5', lcd.id, 'SCL')
+            && cx.toVcc(lcd.id, 'VCC') && cx.toGround(lcd.id, 'GND');
+          return { ok, detail: lcd ? '' : 'LCD нет' };
+        },
+      },
+      {
+        id: 'pressure', kind: 'code', text: 'Скетч читает давление',
+        test: (cx) => ({
+          ok: cx.codeHas(/BMP280/) && cx.codeHas(/readPressure\s*\(/),
+          detail: cx.calls('readPressure').length ? '' : 'нет readPressure()',
+        }),
+      },
+      {
+        id: 'altitude', kind: 'code', text: 'Скетч считает высоту через readAltitude()',
+        hint: 'bmp.readAltitude(1013) — высота относительно давления 1013 гПа на уровне моря.',
+        test: (cx) => ({ ok: cx.codeHas(/readAltitude\s*\(/), detail: '' }),
+      },
+      {
+        id: 'lcdText', kind: 'behavior', text: 'На LCD появились давление и температура',
+        test: (cx) => {
+          const lines = Object.values(cx.trace.lcd || {}).flat().join(' ');
+          return { ok: /\d/.test(lines), detail: lines.slice(0, 40) || 'экран пуст' };
+        },
+      },
+    ],
+    solutionExample: 'bmp-altimeter',
+  },
+
+  {
+    id: 'ev-ds18b20',
+    title: 'Термометр DS18B20 и сигнал «жарко»',
+    level: 2,
+    topic: 'Эвольвектор · Датчики: DS18B20',
+    minutes: 16,
+    brief: 'DS18B20 передаёт температуру цифрой по одному проводу — шина 1-Wire. Сделайте простой термометр: температура идёт в монитор порта, а выше 25 °C загорается светодиод.',
+    goals: [
+      'DS18B20 подключён: DATA — на D2, питание и земля — к плате',
+      'Светодиод на D9 через резистор 220 Ом',
+      'Скетч читает температуру и сравнивает её с порогом',
+    ],
+    start: { parts: [board()], wires: [], code: SKELETON_CPP },
+    checks: [
+      {
+        id: 'sensor', kind: 'schema', text: 'На схеме есть DS18B20',
+        test: (cx) => ({ ok: cx.count('ds18b20') >= 1, detail: `${cx.count('ds18b20')} шт.` }),
+      },
+      powered('ds18b20'),
+      {
+        id: 'data', kind: 'schema', text: 'DATA датчика подключён к цифровому выводу D2',
+        hint: 'Шина 1-Wire занимает один цифровой вывод: DATA → D2.',
+        test: (cx) => {
+          const m = cx.partsOf('ds18b20')[0];
+          if (!m) return { ok: false, detail: 'датчика нет' };
+          const ok = ['D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].some((p) => cx.attached(p, m.id, 'DATA'));
+          return { ok, detail: ok ? '' : 'DATA не на цифровом выводе' };
+        },
+      },
+      ledOn('D9'),
+      {
+        id: 'lib', kind: 'code', text: 'Скетч спрашивает температуру у датчика',
+        hint: '#include <OneWire.h>, #include <DallasTemperature.h>, sensors.requestTemperatures(); float t = sensors.getTempCByIndex(0);',
+        test: (cx) => ({
+          ok: cx.codeHas(/requestTemperatures/) && cx.codeHas(/getTempCByIndex|getTempC/),
+          detail: '',
+        }),
+      },
+      {
+        id: 'compare', kind: 'code', text: 'Скетч сравнивает температуру с порогом',
+        hint: 'if (t > 25) digitalWrite(LED, HIGH); else digitalWrite(LED, LOW);',
+        test: (cx) => ({ ok: cx.codeHas(/>\s*2[0-9]|>=\s*2[0-9]/) && cx.calls('digitalWrite').length > 0, detail: '' }),
+      },
+      {
+        id: 'reads', kind: 'behavior', text: 'Плата печатает температуру',
+        test: (cx) => {
+          const text = cx.serialText();
+          return { ok: /\d/.test(text) && /(T\s*=|температура|C\b)/i.test(text), detail: text.slice(-50) };
+        },
+      },
+    ],
+    solutionExample: 'ds18b20-thermo',
+  },
+
+  {
+    id: 'ev-mq2-gas',
+    title: 'Газоанализатор MQ-2 с сиреной',
+    level: 3,
+    topic: 'Эвольвектор · Датчики: MQ-2',
+    minutes: 20,
+    brief: 'MQ-2 замечает дым, метан и пропан: внутри нагреватель и плёнка, сопротивление которой падает от газа. Модуль отдаёт аналоговый уровень (AO) и готовый сигнал «газ есть» (DO).',
+    goals: [
+      'MQ-2 подключён к 5 В, земле, AO — на A0, DO — на D3',
+      'Зуммер на D8, светодиод на D9 через резистор',
+      'При газе — сирена tone() и красный светодиод',
+    ],
+    start: { parts: [board()], wires: [], code: SKELETON_CPP },
+    checks: [
+      {
+        id: 'sensor', kind: 'schema', text: 'На схеме есть MQ-2',
+        test: (cx) => ({ ok: cx.count('mq2') >= 1, detail: `${cx.count('mq2')} шт.` }),
+      },
+      powered('mq2'),
+      {
+        id: 'analog', kind: 'schema', text: 'Аналоговый выход AO подключён к A0',
+        hint: 'AO — на A0: получим число 0…1023. DO — на цифровой вывод, если хотите готовый порог.',
+        test: (cx) => {
+          const m = cx.partsOf('mq2')[0];
+          return { ok: Boolean(m) && cx.attached('A0', m.id, 'AO'), detail: '' };
+        },
+      },
+      ledOn('D9'),
+      {
+        id: 'buzzer', kind: 'schema', text: 'Зуммер подключён к D8 и к земле',
+        test: (cx) => {
+          const bz = cx.partsOf('buzzer')[0];
+          const ok = Boolean(bz) && (cx.attached('D8', bz.id, '1') || cx.attached('D8', bz.id, '2'))
+            && (cx.toGround(bz.id, '1') || cx.toGround(bz.id, '2'));
+          return { ok, detail: bz ? '' : 'зуммера нет' };
+        },
+      },
+      {
+        id: 'reads', kind: 'code', text: 'Скетч читает уровень газа через analogRead(A0)',
+        hint: 'int raw = analogRead(A0); — или через константу: const int GAS = A0; analogRead(GAS);',
+        test: (cx) => {
+          const a0 = cx.boardPin('A0')?.pin?.num;
+          const args = cx.calls('analogRead');
+          const ok = args.some((arg) => cx.pinArgValue(arg) === a0);
+          return { ok, detail: args.length ? `analogRead(${args.join('), (')})` : 'analogRead не вызывается' };
+        },
+      },
+      {
+        id: 'alarm', kind: 'code', text: 'Есть тревога: tone() и включение светодиода',
+        test: (cx) => ({
+          ok: cx.calls('tone').length > 0 && cx.calls('digitalWrite').length > 0,
+          detail: cx.calls('tone').length ? '' : 'tone() не вызывается',
+        }),
+      },
+      {
+        id: 'prints', kind: 'behavior', text: 'Плата печатает уровень газа',
+        test: (cx) => {
+          const text = cx.serialText();
+          return { ok: /(газ|дым|уровень)/i.test(text) && /\d/.test(text), detail: text.slice(-50) };
+        },
+      },
+    ],
+    solutionExample: 'mq2-gas',
+  },
+
+  {
+    id: 'ev-soil-watering',
+    title: 'Влажность почвы: пора поливать',
+    level: 2,
+    topic: 'Эвольвектор · Датчики: влажность почвы',
+    minutes: 16,
+    brief: 'Датчик влажности — два щупа, между которыми меряется сопротивление земли. Сухая земля даёт большое напряжение на AO, мокрая — маленькое. Научите плату говорить «пора поливать».',
+    goals: [
+      'Датчик влажности подключён: AO — на A0, питание и земля — к плате',
+      'Светодиод-индикатор на D9 через резистор',
+      'Скетч переводит analogRead в проценты и сравнивает с порогом',
+    ],
+    start: { parts: [board()], wires: [], code: SKELETON_CPP },
+    checks: [
+      {
+        id: 'sensor', kind: 'schema', text: 'На схеме есть датчик влажности почвы',
+        test: (cx) => ({ ok: cx.count('soil') >= 1, detail: `${cx.count('soil')} шт.` }),
+      },
+      powered('soil'),
+      {
+        id: 'analog', kind: 'schema', text: 'Выход AO подключён к A0',
+        test: (cx) => {
+          const m = cx.partsOf('soil')[0];
+          return { ok: Boolean(m) && cx.attached('A0', m.id, 'AO'), detail: '' };
+        },
+      },
+      ledOn('D9'),
+      {
+        id: 'reads', kind: 'code', text: 'Скетч читает analogRead(A0)',
+        hint: 'int raw = analogRead(A0); — или через константу: const int SOIL = A0;',
+        test: (cx) => {
+          const a0 = cx.boardPin('A0')?.pin?.num;
+          const args = cx.calls('analogRead');
+          return { ok: args.some((arg) => cx.pinArgValue(arg) === a0), detail: args.length ? `analogRead(${args.join('), (')})` : 'analogRead не вызывается' };
+        },
+      },
+      {
+        id: 'percent', kind: 'code', text: 'Скетч переводит показания в проценты через map()',
+        hint: 'int percent = map(raw, 1023, 300, 0, 100); percent = constrain(percent, 0, 100);',
+        test: (cx) => ({ ok: cx.calls('map').length > 0 || cx.codeHas(/\/\s*10\.23|100\s*\*/), detail: '' }),
+      },
+      {
+        id: 'decision', kind: 'code', text: 'Есть решение «поливать или нет»',
+        hint: 'if (raw > 700) digitalWrite(LED, HIGH); else digitalWrite(LED, LOW);',
+        test: (cx) => ({ ok: cx.codeHas(/if\s*\(/) && cx.calls('digitalWrite').length > 0, detail: '' }),
+      },
+      {
+        id: 'prints', kind: 'behavior', text: 'Плата печатает влажность',
+        test: (cx) => {
+          const text = cx.serialText();
+          return { ok: /(влаж|почв|%|сухо)/i.test(text), detail: text.slice(-50) };
+        },
+      },
+    ],
+    solutionExample: 'soil-watering',
+  },
+
 ];
 
 /** Задание по id. */

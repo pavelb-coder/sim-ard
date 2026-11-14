@@ -54,10 +54,13 @@ function collectConsts(code, lang) {
     for (const m of src.matchAll(/^\s*(\w+)\s*=\s*Pin\s*\(\s*(\d+)/gm)) out[m[1]] = Number(m[2]);
     return out;
   }
-  for (const m of src.matchAll(/(?:const\s+)?(?:unsigned\s+)?(?:int|long|short|byte|uint8_t|int8_t|int16_t)\s+([A-Za-z_]\w*)\s*=\s*(\d+)\s*;/g)) {
-    out[m[1]] = Number(m[2]);
+  // const int LED = 9; и const int GAS = A0; — во втором случае храним имя вывода
+  for (const m of src.matchAll(/(?:const\s+)?(?:unsigned\s+)?(?:int|long|short|byte|uint8_t|int8_t|int16_t)\s+([A-Za-z_]\w*)\s*=\s*(\d+|[A-Z]\d+|LED_BUILTIN)\s*;/g)) {
+    out[m[1]] = /^\d+$/.test(m[2]) ? Number(m[2]) : m[2];
   }
-  for (const m of src.matchAll(/#define\s+([A-Za-z_]\w*)\s+(\d+)/g)) out[m[1]] = Number(m[2]);
+  for (const m of src.matchAll(/#define\s+([A-Za-z_]\w*)\s+(\d+|[A-Z]\d+|LED_BUILTIN)\b/g)) {
+    out[m[1]] = /^\d+$/.test(m[2]) ? Number(m[2]) : m[2];
+  }
   return out;
 }
 
@@ -241,7 +244,11 @@ export class CheckContext {
     const spec = b ? (PARTS[b.type].spec || PARTS[b.type]) : null;
     const a = String(arg || '').trim();
     if (a === 'LED_BUILTIN') return spec?.builtinLed ?? null;
-    if (this.consts[a] !== undefined) return this.consts[a];
+    // константа может быть объявлена через другую константу: const int G = A0;
+    if (this.consts[a] !== undefined) {
+      const next = String(this.consts[a]).trim();
+      return next === a ? null : this.pinArgValue(next, board);
+    }
     const m = /^A(\d+)$/i.exec(a);
     if (m && spec) return spec.pins.filter((p) => p.kind === 'analog')[Number(m[1])]?.num ?? Number(m[1]);
     const n = Number(a);

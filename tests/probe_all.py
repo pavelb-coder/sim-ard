@@ -17,7 +17,9 @@ IDS = ["blink", "led", "button", "pot", "rc", "servo", "lcd", "oled",
        "multimeter", "probe", "shift595", "motor", "keypad", "overvolt", "short", "rpi5-led",
        "usb-uno-pi", "two-leds", "button-toggle", "fade", "ldr-nightlight", "buzzer-button",
        "transistor-motor", "for-loop", "array-pattern", "functions", "switch-menu",
-       "serial-echo", "string-cmd", "random-dice", "millis-blink", "servo-pot"]
+       "serial-echo", "string-cmd", "random-dice", "millis-blink", "servo-pot",
+       "mpu-tilt", "bmp-altimeter", "ds18b20-thermo", "bh1750-lux", "mq2-gas",
+       "soil-watering", "sound-clap"]
 
 
 async def main():
