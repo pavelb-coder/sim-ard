@@ -48,19 +48,35 @@ export function resistorBody({ value = 220, x1 = -18, x2 = 18 } = {}) {
     ${band(0.13, b1)}${band(0.32, b2)}${band(0.52, b3)}${band(0.78, b4)}`;
 }
 
-/** Светодиод: колба-«капля» с блеском, юбка и два вывода. */
+/**
+ * Светодиод 5 мм: прозрачный купол с плоской стороной катода, фланец-юбка,
+ * внутри видны кристалл и перемычка. Свечение включается через lit (0…1).
+ */
 export function ledLens({ color = '#ff5544', r = 12, label = 'A→K', lit = 0 } = {}) {
-  const dark = shade(color, -0.55);
+  const R = r + 1.9;
+  const fx = R * 0.68;                       // хорда — плоский край катода
+  const fy = Math.sqrt(R * R - fx * fx);
+  const rim = shade(color, -0.55);
+  const glow = Math.max(0, Math.min(1, lit));
+  const f = (v) => v.toFixed(1);
   return `
-    <circle class="glow" cx="0" cy="0" r="${r * 2}" fill="${color}" opacity="${Math.min(0.45, lit * 0.4)}"/>
-    <circle class="glow-core" cx="0" cy="0" r="${r * 1.15}" fill="${color}" opacity="${Math.min(0.7, lit * 0.6)}"/>
-    <circle cx="0" cy="2" r="${r}" fill="${dark}" opacity=".55"/>
-    <circle cx="0" cy="0" r="${r}" fill="url(#sim-lens)" stroke="${shade(color, -0.35)}" stroke-width="1"/>
-    <circle cx="0" cy="0" r="${r - 1.6}" fill="${color}" opacity="${0.22 + Math.min(0.6, lit * 0.65)}"/>
-    <ellipse cx="${-r * 0.34}" cy="${-r * 0.38}" rx="${r * 0.32}" ry="${r * 0.22}" fill="rgba(255,255,255,.85)" transform="rotate(-28 ${-r * 0.34} ${-r * 0.38})"/>
-    <path d="M ${-r} 6 A ${r} ${r} 0 0 0 ${r} 6 L ${r * 0.82} ${r * 0.7} L ${-r * 0.82} ${r * 0.7} Z"
-          fill="${shade(color, -0.25)}" opacity=".9"/>
-    ${label ? `<text x="0" y="${r + 13}" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">${label}</text>` : ''}`;
+    <circle class="glow" cx="0" cy="0" r="${f(r * 2)}" fill="${color}" opacity="${(glow * 0.35).toFixed(2)}"/>
+    <circle class="glow-core" cx="0" cy="0" r="${f(r * 1.25)}" fill="${color}" opacity="${(glow * 0.45).toFixed(2)}"/>
+    <path d="M ${f(fx + 1.1)} ${f(-fy - 1.1)} A ${f(R + 1.1)} ${f(R + 1.1)} 0 1 0 ${f(fx + 1.1)} ${f(fy + 1.1)} Z"
+          fill="rgba(208,222,234,.45)" stroke="rgba(150,166,180,.55)" stroke-width=".6"/>
+    <path d="M ${f(fx)} ${f(-fy)} A ${f(R)} ${f(R)} 0 1 0 ${f(fx)} ${f(fy)} Z"
+          fill="${shade(color, -0.2)}" opacity=".9"/>
+    <circle class="lens-fill" cx="0" cy="0" r="${f(r)}" fill="${color}" opacity="${(0.34 + glow * 0.5).toFixed(2)}"/>
+    <circle cx="0" cy="0" r="${f(r)}" fill="url(#sim-lens)" opacity=".55"/>
+    <circle cx="0" cy="0" r="${f(r)}" fill="none" stroke="${rim}" stroke-width="1"/>
+    <circle cx="0" cy="${f(r * 0.1)}" r="${f(r * 0.56)}" fill="${shade(color, glow > 0.02 ? 0.3 : -0.12)}" opacity=".38"/>
+    <path d="M ${f(-r * 0.8)} ${f(r * 0.46)} A ${f(r)} ${f(r)} 0 0 0 ${f(r * 0.5)} ${f(r * 0.88)}"
+          fill="none" stroke="rgba(0,0,0,.22)" stroke-width="1.6"/>
+    <ellipse cx="${f(-r * 0.32)}" cy="${f(-r * 0.46)}" rx="${f(r * 0.34)}" ry="${f(r * 0.2)}"
+             fill="rgba(255,255,255,.75)" transform="rotate(-32 ${f(-r * 0.32)} ${f(-r * 0.46)})"/>
+    <path d="M ${f(-r * 0.8)} ${f(-r * 0.1)} A ${f(r * 0.82)} ${f(r * 0.82)} 0 0 1 ${f(r * 0.42)} ${f(-r * 0.7)}"
+          fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.2"/>
+    ${label ? `<text x="0" y="${f(r + 13)}" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">${label}</text>` : ''}`;
 }
 
 /** Электролитический конденсатор: алюминиевый стакан, насечка, полоса «−». */
