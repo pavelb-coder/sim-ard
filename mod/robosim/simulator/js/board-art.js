@@ -29,6 +29,63 @@ function silk(str, x, y, o = {}) {
 }
 
 /**
+ * «Рассыпь» мелочи по текстолиту: SMD-конденсаторы, резисторы и переходные
+ * отверстия. Позиции детерминированные (линейный конгруэнтный генератор от
+ * размеров платы), поэтому плата выглядит одинаково при каждой перерисовке.
+ *
+ * Слой рисуется до крупных деталей: те, что окажутся сверху, просто закроют
+ * мелочь — как на настоящей плате.
+ */
+function smdField(w, h, seed = 1) {
+  let st = (seed * 2654435761) >>> 0 || 12345;
+  const rnd = () => {
+    st = (Math.imul(st, 1664525) + 1013904223) >>> 0;
+    return st / 4294967296;
+  };
+  const out = [];
+  const n = Math.min(220, Math.round((w * h) / 1150));
+  // по краям платы идут гребёнки и их подписи — там место оставляем свободным
+  const mx = 20, my = 38;
+  for (let i = 0; i < n; i++) {
+    const x = -w / 2 + mx + rnd() * (w - mx * 2);
+    const y = -h / 2 + my + rnd() * (h - my * 2);
+    const t = rnd();
+    const vert = rnd() < 0.45;
+    const rot = vert ? ` transform="rotate(90 ${x.toFixed(1)} ${y.toFixed(1)})"` : '';
+    if (t < 0.34) {
+      // керамический конденсатор 0603: светлый корпус и металлические торцы
+      out.push(`<g${rot}>
+        <rect x="${x - 3.4}" y="${y - 1.8}" width="6.8" height="3.6" rx=".7" fill="#b8a179" stroke="#8a7754" stroke-width=".35"/>
+        <rect x="${x - 3.4}" y="${y - 1.8}" width="1.7" height="3.6" fill="#c9d1d8"/>
+        <rect x="${x + 1.7}" y="${y - 1.8}" width="1.7" height="3.6" fill="#aab4bd"/>
+        <rect x="${x - 1.1}" y="${y - 1.4}" width="2.2" height="1" rx=".5" fill="rgba(255,255,255,.35)"/>
+      </g>`);
+    } else if (t < 0.66) {
+      // резистор 0603: чёрный корпус с маркировкой
+      out.push(`<g${rot}>
+        <rect x="${x - 3.4}" y="${y - 1.7}" width="6.8" height="3.4" rx=".6" fill="#171b20" stroke="#0b0e12" stroke-width=".3"/>
+        <rect x="${x - 3.4}" y="${y - 1.7}" width="1.5" height="3.4" fill="#b9c2ca"/>
+        <rect x="${x + 1.9}" y="${y - 1.7}" width="1.5" height="3.4" fill="#9ea8b2"/>
+        <rect x="${x - 1.2}" y="${y - .9}" width="2.4" height="1.8" rx=".4" fill="#2c333a"/>
+      </g>`);
+    } else if (t < 0.86) {
+      // переходное отверстие с золотым ободком
+      out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.9" fill="url(#sim-gold)" opacity=".9"/>
+        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r=".95" fill="#080c10"/>`);
+    } else {
+      // транзистор SOT-23: тёмный корпус с тремя ножками
+      out.push(`<g${rot}>
+        <rect x="${x - 2.6}" y="${y - 2}" width="5.2" height="4" rx=".5" fill="#1b2027" stroke="#0c1014" stroke-width=".3"/>
+        <rect x="${x - 2.2}" y="${y + 2}" width="1.2" height="1.4" fill="#c2cbd3"/>
+        <rect x="${x + .5}" y="${y + 2}" width="1.2" height="1.4" fill="#c2cbd3"/>
+        <rect x="${x - 2.2}" y="${y - 3.4}" width="1.2" height="1.4" fill="#c2cbd3"/>
+      </g>`);
+    }
+  }
+  return out.join('');
+}
+
+/**
  * Текстолит: тело платы, фаска, стеклотекстолит, дорожки под маской
  * и крепёжные отверстия.
  *
@@ -36,7 +93,7 @@ function silk(str, x, y, o = {}) {
  * ткань стеклотекстолита (две диагональные сетки), дорожки под зелёной
  * маской, свет сверху-слева и затемнение к нижнему краю, фаска и отверстия.
  */
-function pcbBody(w, h, base, edge, { radius = 9, holes = [] } = {}) {
+function pcbBody(w, h, base, edge, { radius = 9, holes = [], seed = 0 } = {}) {
   const x = -w / 2, y = -h / 2;
   return `
     <rect x="${x - 1.1}" y="${y - 1.1}" width="${w + 2.2}" height="${h + 2.2}" rx="${radius + 1}"
@@ -45,7 +102,9 @@ function pcbBody(w, h, base, edge, { radius = 9, holes = [] } = {}) {
     <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-traces)"/>
     <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-traces2)"/>
     <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-fiber)"/>
+    ${smdField(w, h, seed || Math.round(w * 7 + h * 13))}
     <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-face-light)"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-gloss)"/>
     <rect x="${x + 2.5}" y="${y + 2.5}" width="${w - 5}" height="${h - 5}" rx="${radius - 2}"
           fill="none" stroke="rgba(255,255,255,.10)" stroke-width="1"/>
     ${holes.map(([hx, hy, r = 4.6]) => `
@@ -112,8 +171,10 @@ function chip(x, y, w, h, label, sub = '', { legs = 14, silkSize = 5 } = {}) {
   const pins = [];
   for (let i = 0; i < legs / 2; i++) {
     const lx = x + legStep * (i + 0.5);
-    pins.push(`<rect x="${lx - 1.2}" y="${y - 2.6}" width="2.4" height="3.2" fill="#b9c3cb"/>`);
-    pins.push(`<rect x="${lx - 1.2}" y="${y + h - 0.6}" width="2.4" height="3.2" fill="#b9c3cb"/>`);
+    pins.push(`<rect x="${lx - 1.2}" y="${y - 2.8}" width="2.4" height="3.4" rx=".4" fill="url(#sim-metal-h)"/>
+      <rect x="${lx - 1.2}" y="${y - 2.8}" width="1" height="3.4" fill="rgba(255,255,255,.45)"/>`);
+    pins.push(`<rect x="${lx - 1.2}" y="${y + h - 0.6}" width="2.4" height="3.4" rx=".4" fill="url(#sim-metal-h)"/>
+      <rect x="${lx - 1.2}" y="${y + h - 0.6}" width="1" height="3.4" fill="rgba(255,255,255,.4)"/>`);
   }
   return `
     ${pins.join('')}
@@ -128,11 +189,18 @@ function chip(x, y, w, h, label, sub = '', { legs = 14, silkSize = 5 } = {}) {
 
 /** Электролитический конденсатор. */
 function capElectro(x, y, r = 7, label = '') {
+  // SMD-электролит: чёрная база-бочонок, серебристый торец, полоса полярности
+  const ir = r - 1.6;
   return `
-    <circle cx="${x}" cy="${y}" r="${r}" fill="#1d2730" stroke="#3a4a58" stroke-width="1"/>
-    <path d="M ${x - r + 1.5} ${y} a ${r - 1.5} ${r - 1.5} 0 0 1 ${2 * r - 3} 0" fill="#2c3a46"/>
-    <circle cx="${x}" cy="${y}" r="${r - 3.4}" fill="none" stroke="rgba(255,255,255,.14)"/>
-    ${label ? silk(label, x, y + 2, { size: 3.8, fill: '#93a4b2' }) : ''}`;
+    <circle cx="${x + .7}" cy="${y + 1.2}" r="${r}" fill="#04070a" opacity=".5"/>
+    <circle cx="${x}" cy="${y}" r="${r}" fill="#1a2027" stroke="#2b333b" stroke-width=".7"/>
+    <circle cx="${x}" cy="${y - .3}" r="${ir}" fill="url(#sim-can)" stroke="#8d99a3" stroke-width=".5"/>
+    <circle cx="${x}" cy="${y - .3}" r="${(ir * 0.62).toFixed(1)}" fill="none" stroke="rgba(70,84,96,.45)" stroke-width=".9"/>
+    <path d="M ${x - ir} ${y + ir * 0.28} a ${ir} ${ir} 0 0 0 ${ir * 2} 0 z" fill="#0f151b" opacity=".85"/>
+    <path d="M ${x - ir * 0.72} ${y - ir * 0.72} a ${ir} ${ir} 0 0 1 ${ir * 1.05} ${-ir * 0.42}"
+          fill="none" stroke="rgba(255,255,255,.6)" stroke-width="1.1"/>
+    <circle cx="${x + ir * 0.55}" cy="${y + ir * 0.1}" r="${(ir * 0.17).toFixed(1)}" fill="#c9d3db" opacity=".9"/>
+    ${label ? silk(label, x, y + r + 5.2, { size: 3.8, fill: '#8d9aa6' }) : ''}`;
 }
 
 /** Тактовая кнопка: металлический корпус и «пятак» сверху. */

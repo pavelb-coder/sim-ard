@@ -133,17 +133,16 @@ const DISCRETE = {
         ${lead(-26, -12)}
         ${lead(12, 26)}
         ${ledLens({ color: c, r: 12, label: '' })}
-        <path class="sym" d="M -4.5 -5.5 L 4.5 0 L -4.5 5.5 Z" fill="#ffffff" opacity=".5"/>
-        <line x1="4.5" y1="-5.5" x2="4.5" y2="5.5" stroke="#ffffff" stroke-width="1.3" opacity=".5"/>
-        <text x="-19" y="-9" style="font:6px ui-monospace,monospace;fill:#7d93a6">A</text>
-        <text x="16" y="-9" style="font:6px ui-monospace,monospace;fill:#7d93a6">K</text>`);
+        <text x="-22" y="-12" style="font:6px ui-monospace,monospace;fill:#7d93a6">A</text>
+        <text x="17" y="-12" style="font:6px ui-monospace,monospace;fill:#7d93a6">K</text>`);
     },
     update(g, comp, env) {
       const b = Math.min(1, env.brightness || 0);
-      const halo = g.querySelector('.glow'), core = g.querySelector('.glow-core'), sym = g.querySelector('.sym');
-      if (halo) halo.setAttribute('opacity', String(b * 0.4));
-      if (core) core.setAttribute('opacity', String(b * 0.6));
-      if (sym) sym.setAttribute('opacity', b > 0.02 ? '0.9' : '0.5');
+      const halo = g.querySelector('.glow'), core = g.querySelector('.glow-core');
+      const lens = g.querySelector('.lens-fill');
+      if (halo) halo.setAttribute('opacity', String(b * 0.35));
+      if (core) core.setAttribute('opacity', String(b * 0.45));
+      if (lens) lens.setAttribute('opacity', String(0.34 + b * 0.5));
     },
   },
 
@@ -611,11 +610,11 @@ const DISCRETE = {
     ],
     render(comp) {
       return partTag(comp, 60, 34, `
-        ${lead(-28, -12)}
-        ${lead(12, 28)}
-        <circle class="glow" cx="0" cy="0" r="18" fill="#ffd166" opacity="0"/>
-        ${diodeBody({ x1: -12, x2: 12 })}
-        <rect class="tri" x="4.4" y="-6.4" width="3.8" height="12.8" rx="1.4" fill="#c9d3db"/>
+        ${lead(-28, -14)}
+        ${lead(14, 28)}
+        <circle class="glow" cx="0" cy="0" r="19" fill="#ffd166" opacity="0"/>
+        ${diodeBody({ x1: -14, x2: 14 })}
+        <rect class="tri" x="5.2" y="-6.4" width="4.2" height="12.8" rx="1.6" fill="#c9d3db"/>
         <text x="0" y="23" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">A→K · 0,65 В</text>`);
     },
     update(g, comp, env) {
@@ -639,14 +638,14 @@ const DISCRETE = {
         ${lead(-32, -16)}
         <line x1="10" y1="-30" x2="10" y2="-12" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
         <line x1="10" y1="12" x2="10" y2="30" stroke="url(#sim-metal-h)" stroke-width="3" stroke-linecap="round"/>
-        <path d="M -16 -20 L 8 -20 A 12 12 0 0 1 8 20 L -16 20 Z" fill="url(#sim-plastic)" stroke="#2b3945" stroke-width="1.2"/>
-        <path d="M -10 -14 L 0 -14" stroke="rgba(255,255,255,.22)" stroke-width="2.6"/>
-        <ellipse cx="-8" cy="-13" rx="5" ry="2.6" fill="rgba(255,255,255,.14)" transform="rotate(-12 -8 -13)"/>
-        <line x1="-16" y1="0" x2="-4" y2="0" stroke="#dfe8ef" stroke-width="1.8"/>
-        <line x1="-4" y1="-11" x2="-4" y2="11" stroke="#dfe8ef" stroke-width="2.4"/>
-        <line x1="-4" y1="-6" x2="10" y2="-12" stroke="#dfe8ef" stroke-width="1.6"/>
-        <line x1="-4" y1="6" x2="10" y2="12" stroke="#dfe8ef" stroke-width="1.6"/>
-        <path class="arrow" d="M 12 12 L 3 11 L 7 5 Z" fill="#dfe8ef"/>
+        <path d="M -16 -20 L 8 -20 A 12 12 0 0 1 8 20 L -16 20 Z" fill="url(#sim-dip)" stroke="#0b0f13" stroke-width="1.2"/>
+        <path d="M -15 -18.6 L 7 -18.6" stroke="rgba(255,255,255,.16)" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M -14 17 L 5 17 L 5 19.4 L -14 19.4 Z" fill="rgba(255,255,255,.05)"/>
+        <line x1="-16" y1="0" x2="-4" y2="0" stroke="#c6d1da" stroke-width="1.8"/>
+        <line x1="-4" y1="-11" x2="-4" y2="11" stroke="#c6d1da" stroke-width="2.4"/>
+        <line x1="-4" y1="-6" x2="10" y2="-12" stroke="#c6d1da" stroke-width="1.6"/>
+        <line x1="-4" y1="6" x2="10" y2="12" stroke="#c6d1da" stroke-width="1.6"/>
+        <path class="arrow" d="M 12 12 L 3 11 L 7 5 Z" fill="#c6d1da"/>
         <circle class="state" cx="15" cy="-16" r="3.2" fill="#3a4b5c" stroke="#1b2530"/>
         <text x="-4" y="17" style="font:5px ui-monospace,monospace;fill:#93a4b2;text-anchor:middle">BC547</text>
         <text x="0" y="50" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">NPN · hFE≈100</text>`);
