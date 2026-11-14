@@ -369,6 +369,29 @@ if (!$noChecks) {
     fail('у задания нет ни одной проверки: ' . implode(', ', $noChecks));
 }
 
+// --------------------------------------------- адресные светодиоды WS2812 ------
+// Лента, кольцо и матрица живут в самом симуляторе: проверяем, что копия внутри
+// плагина не отстала от сайта, а примеры и задания по ним доехали до Moodle.
+$libjs = file_get_contents("$root/simulator/js/libraries.js");
+if (strpos($libjs, 'Adafruit_NeoPixel') === false) {
+    fail('в библиотеках симулятора нет Adafruit_NeoPixel — копия отстала от сайта');
+} else {
+    ok();
+}
+$partsjs = file_get_contents("$root/simulator/js/parts.js");
+if (strpos($partsjs, 'ws2812m') === false || strpos($partsjs, 'ws2812r') === false) {
+    fail('в палитре симулятора нет матрицы и кольца WS2812');
+} else {
+    ok();
+}
+$wsExamples = array_values(array_filter(array_column($examples, 'id'), fn($id) => strpos((string) $id, 'ws2812') === 0));
+$wsTasks = array_values(array_filter(array_column($tasks, 'id'), fn($id) => strpos((string) $id, 'ws2812') !== false));
+if (count($wsExamples) >= 3 && count($wsTasks) >= 2) {
+    ok();
+} else {
+    fail('примеров WS2812: ' . count($wsExamples) . ', заданий WS2812: ' . count($wsTasks));
+}
+
 // ------------------------------------------------------------- итог -----------
 echo "\nПроверок пройдено: $checks\n";
 if ($warnings) {
