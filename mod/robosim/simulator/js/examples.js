@@ -338,7 +338,7 @@ void loop() {
         wire('b1', 'GND2', 'dht', 'GND'),
       ],
     },
-    code: `// DHT11: потяните датчик мышью по вертикали — меняется температура.
+    code: `// DHT11: значения заданы у детали (24 °C и 45 %) — двойной клик меняет их.
 // (Протокол не эмулируется побитово: библиотека берёт значения у детали.)
 
 #include <DHT.h>
@@ -1905,6 +1905,378 @@ void loop() {
 `,
   },
 
+
+  // ------------------------------------------- датчики для метеостанции ----
+  {
+    id: 'mpu-tilt',
+    name: 'MPU-6050: наклон и гироскоп',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'mpu', type: 'mpu6050', x: 210, y: -170, props: { tilt: 0 } },
+      ],
+      wires: [
+        wire('b1', '5V2', 'mpu', 'VCC'), wire('b1', 'GND2', 'mpu', 'GND'),
+        wire('b1', 'A4', 'mpu', 'SDA'), wire('b1', 'A5', 'mpu', 'SCL'),
+      ],
+    },
+    code: `// MPU-6050 — акселерометр, гироскоп и термометр на одной шине I2C.
+// Два ползунка под датчиком: «наклон» — гравитация по осям, «тряска» — гироскоп.
+
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+
+Adafruit_MPU6050 mpu;
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  if (!mpu.begin()) {
+    Serial.println("MPU-6050 не найден: SDA на A4, SCL на A5, питание 5 В");
+  } else {
+    Serial.println("MPU-6050 на связи");
+  }
+}
+
+void loop() {
+  mpu.readSensor();
+  Serial.print("наклон ");
+  Serial.print(round(mpu.pitch()));
+  Serial.print(" град | aZ ");
+  Serial.print(mpu.accelZ());
+  Serial.print(" g | гироскоп Z ");
+  Serial.print(round(mpu.gyroZ()));
+  Serial.println(" град/с");
+  delay(400);
+}
+`,
+  },
+
+  {
+    id: 'bmp-altimeter',
+    name: 'BMP280: барометр, давление и высота',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'bmp', type: 'bmp280', x: 210, y: -170, props: { pressure: 1013, temp: 24 } },
+        { id: 'lcd', type: 'lcd1602', x: 0, y: 250, props: {} },
+      ],
+      wires: [
+        wire('b1', '5V2', 'bmp', 'VCC'), wire('b1', 'GND2', 'bmp', 'GND'),
+        wire('b1', 'A4', 'bmp', 'SDA'), wire('b1', 'A5', 'bmp', 'SCL'),
+        wire('b1', '5V2', 'lcd', 'VCC'), wire('b1', 'GND2', 'lcd', 'GND'),
+        wire('b1', 'A4', 'lcd', 'SDA'), wire('b1', 'A5', 'lcd', 'SCL'),
+      ],
+    },
+    code: `// Два устройства на одной шине I2C: барометр BMP280 и экран LCD 1602.
+// Поднимайте давление ползунком под датчиком — высота считается по формуле.
+
+#include <Wire.h>
+#include <Adafruit_BMP280.h>
+#include <LiquidCrystal_I2C.h>
+
+Adafruit_BMP280 bmp;
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  lcd.init();
+  lcd.backlight();
+  if (!bmp.begin()) Serial.println("BMP280 не найден");
+  Serial.println("Барометр BMP280: ползунок меняет давление");
+}
+
+void loop() {
+  int hPa = round(bmp.readPressure() / 100);
+  int alt = round(bmp.readAltitude(1013));     // высота относительно давления на уровне моря
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("P ");
+  lcd.print(hPa);
+  lcd.print(" hPa");
+  lcd.setCursor(0, 1);
+  lcd.print("T ");
+  lcd.print(round(bmp.readTemperature()));
+  lcd.print(" C");
+  Serial.print(hPa);
+  Serial.print(" гПа, ");
+  Serial.print(round(bmp.readTemperature()));
+  Serial.print(" C, высота ");
+  Serial.print(alt);
+  Serial.println(" м");
+  delay(500);
+}
+`,
+  },
+
+  {
+    id: 'ds18b20-thermo',
+    name: 'DS18B20: термометр на 1-Wire',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 't1', type: 'ds18b20', x: 180, y: -180, props: { temp: 24 } },
+        { id: 'l1', type: 'led', x: -70, y: -190, props: { color: '#ff5544' } },
+        { id: 'r1', type: 'resistor', x: -170, y: -190, props: { value: 220 } },
+      ],
+      wires: [
+        wire('b1', '5V2', 't1', 'VCC'), wire('b1', 'GND2', 't1', 'GND'), wire('b1', 'D2', 't1', 'DATA'),
+        wire('b1', 'D9', 'l1', 'A'), wire('l1', 'K', 'r1', '1'), wire('r1', '2', 'b1', 'GND2'),
+      ],
+    },
+    code: `// DS18B20 — цифровой термометр: данные идут по одному проводу (1-Wire).
+// Двигайте ползунок под датчиком: выше 25 °C загорается светодиод.
+
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+OneWire wire(2);                       // шина 1-Wire на D2
+DallasTemperature sensors(&wire);
+
+const int LED = 9;
+
+void setup() {
+  pinMode(LED, OUTPUT);
+  Serial.begin(9600);
+  sensors.begin();
+  Serial.print("Датчиков на шине: ");
+  Serial.println(sensors.getDeviceCount());
+}
+
+void loop() {
+  sensors.requestTemperatures();
+  float t = sensors.getTempCByIndex(0);
+  Serial.print("T = ");
+  Serial.print(t);
+  Serial.println(" C");
+  if (t > 25) digitalWrite(LED, HIGH);
+  else digitalWrite(LED, LOW);
+  delay(500);
+}
+`,
+  },
+
+  {
+    id: 'bh1750-lux',
+    name: 'BH1750: люксметр на OLED',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'lx', type: 'bh1750', x: 200, y: -175, props: { lux: 300 } },
+        { id: 'oled', type: 'oled', x: 0, y: 230, props: {} },
+      ],
+      wires: [
+        wire('b1', '5V2', 'lx', 'VCC'), wire('b1', 'GND2', 'lx', 'GND'),
+        wire('b1', 'A4', 'lx', 'SDA'), wire('b1', 'A5', 'lx', 'SCL'),
+        wire('b1', '5V2', 'oled', 'VCC'), wire('b1', 'GND2', 'oled', 'GND'),
+        wire('b1', 'A4', 'oled', 'SDA'), wire('b1', 'A5', 'oled', 'SCL'),
+      ],
+    },
+    code: `// BH1750 меряет освещённость в люксах. Утром в классе — 300 лк,
+// у окна — 1000, на улице в пасмурный день — 5000.
+// Ползунок под датчиком меняет свет.
+
+#include <Wire.h>
+#include <BH1750.h>
+#include <Adafruit_SSD1306.h>
+
+BH1750 lightMeter;
+Adafruit_SSD1306 display(128, 64);
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  lightMeter.begin();
+  display.begin();
+  display.clearDisplay();
+  display.display();
+  Serial.println("Люксметр BH1750 запущен");
+}
+
+void loop() {
+  int lux = round(lightMeter.readLightLevel());
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print("Освещённость:");
+  display.setTextSize(2);
+  display.setCursor(0, 16);
+  display.print(lux);
+  display.print(" lx");
+  display.display();
+  Serial.print("свет ");
+  Serial.print(lux);
+  Serial.print(" лк | ");
+  if (lux < 100) Serial.println("темно");
+  else if (lux < 1000) Serial.println("норма");
+  else Serial.println("ярко");
+  delay(500);
+}
+`,
+  },
+
+  {
+    id: 'mq2-gas',
+    name: 'MQ-2: датчик газа и дыма',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'gas', type: 'mq2', x: 190, y: -175, props: { value: 0 } },
+        { id: 'bz1', type: 'buzzer', x: -150, y: -170, props: {} },
+        { id: 'l1', type: 'led', x: -40, y: -190, props: { color: '#ff5544' } },
+        { id: 'r1', type: 'resistor', x: -110, y: -240, props: { value: 220 } },
+      ],
+      wires: [
+        wire('b1', '5V2', 'gas', 'VCC'), wire('b1', 'GND2', 'gas', 'GND'),
+        wire('b1', 'A0', 'gas', 'AO'), wire('b1', 'D3', 'gas', 'DO'),
+        wire('b1', 'D8', 'bz1', '1'), wire('bz1', '2', 'b1', 'GND2'),
+        wire('b1', 'D9', 'l1', 'A'), wire('l1', 'K', 'r1', '1'), wire('r1', '2', 'b1', 'GND2'),
+      ],
+    },
+    code: `// MQ-2 чувствует дым, метан, пропан и водород. Модуль отдаёт и аналоговый
+// уровень (AO), и готовый «есть газ» (DO) — его и читаем.
+// Ползунок под датчиком «пускает газ».
+
+const int GAS_AO = A0;
+const int GAS_DO = 3;
+const int BUZZER = 8;
+const int LED = 9;
+
+void setup() {
+  pinMode(GAS_DO, INPUT);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(LED, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Газоанализатор MQ-2 включён");
+}
+
+void loop() {
+  int level = analogRead(GAS_AO);
+  Serial.print("уровень газа ");
+  Serial.print(level);
+  if (digitalRead(GAS_DO) == HIGH) {
+    Serial.println(" — ГАЗ! сирена");
+    digitalWrite(LED, HIGH);
+    tone(BUZZER, 1200);
+  } else {
+    Serial.println(" — чисто");
+    digitalWrite(LED, LOW);
+    noTone(BUZZER);
+  }
+  delay(300);
+}
+`,
+  },
+
+  {
+    id: 'soil-watering',
+    name: 'Влажность почвы: пора поливать',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'sm', type: 'soil', x: 190, y: -185, props: { value: 0.4 } },
+        { id: 'l1', type: 'led', x: -60, y: -190, props: { color: '#ffd166' } },
+        { id: 'r1', type: 'resistor', x: -160, y: -190, props: { value: 220 } },
+      ],
+      wires: [
+        wire('b1', '5V2', 'sm', 'VCC'), wire('b1', 'GND2', 'sm', 'GND'), wire('b1', 'A0', 'sm', 'AO'),
+        wire('b1', 'D9', 'l1', 'A'), wire('l1', 'K', 'r1', '1'), wire('r1', '2', 'b1', 'GND2'),
+      ],
+    },
+    code: `// Датчик влажности почвы — это два щупа и делитель напряжения.
+// Сухая земля даёт на AO почти всё питание, мокрая — заметно меньше.
+// Ползунок под датчиком: влево — сухо, вправо — полили.
+
+const int SOIL = A0;
+const int LED = 9;
+const int DRY = 700;          // порог «пора поливать»
+
+void setup() {
+  pinMode(LED, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Следим за влажностью почвы");
+}
+
+void loop() {
+  int raw = analogRead(SOIL);
+  int percent = map(raw, 1023, 300, 0, 100);    // 1023 — сухо, 300 — мокро
+  percent = constrain(percent, 0, 100);
+  Serial.print("влажность ");
+  Serial.print(percent);
+  Serial.print(" %, датчик ");
+  Serial.print(raw);
+  if (raw > DRY) {
+    Serial.println(" — СУХО, включите полив");
+    digitalWrite(LED, HIGH);
+  } else {
+    Serial.println(" — норма");
+    digitalWrite(LED, LOW);
+  }
+  delay(400);
+}
+`,
+  },
+
+  {
+    id: 'sound-clap',
+    name: 'Датчик звука: хлопок зажигает свет',
+    autorun: true,
+    schematic: {
+      parts: [
+        board(),
+        { id: 'mic', type: 'sound', x: 190, y: -170, props: { value: 0.1 } },
+        { id: 'l1', type: 'led', x: -60, y: -190, props: { color: '#7ec8ff' } },
+        { id: 'r1', type: 'resistor', x: -160, y: -190, props: { value: 220 } },
+      ],
+      wires: [
+        wire('b1', '5V2', 'mic', 'VCC'), wire('b1', 'GND2', 'mic', 'GND'),
+        wire('b1', 'A0', 'mic', 'AO'), wire('b1', 'D2', 'mic', 'DO'),
+        wire('b1', 'D9', 'l1', 'A'), wire('l1', 'K', 'r1', '1'), wire('r1', '2', 'b1', 'GND2'),
+      ],
+    },
+    code: `// У микрофона два выхода: AO — громкость, DO — «громче порога».
+// Хлопните: ползунок под датчиком резко уходит вправо.
+
+const int MIC_AO = A0;
+const int MIC_DO = 2;
+const int LED = 9;
+
+int quiet = 0;                 // тихий фон, который измеряем в setup
+
+void setup() {
+  pinMode(MIC_DO, INPUT);
+  pinMode(LED, OUTPUT);
+  Serial.begin(9600);
+  quiet = analogRead(MIC_AO);
+  Serial.print("Фон: ");
+  Serial.println(quiet);
+}
+
+void loop() {
+  int loud = analogRead(MIC_AO);
+  int delta = loud - quiet;
+  Serial.print("громкость ");
+  Serial.print(loud);
+  Serial.print(", выше фона на ");
+  Serial.print(delta);
+  if (digitalRead(MIC_DO) == HIGH) {
+    digitalWrite(LED, HIGH);
+    Serial.println(" — хлопок!");
+  } else {
+    digitalWrite(LED, LOW);
+    Serial.println("");
+  }
+  delay(250);
+}
+`,
+  },
 ];
 
 /** Стартовый скетч для платы, добавленной из палитры. */

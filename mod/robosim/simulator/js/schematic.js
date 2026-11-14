@@ -33,6 +33,17 @@ export const WIRE_COLORS = { gnd: '#93a4b4', vcc: '#f2555a', v33: '#f5a25d', vin
 export const SIGNAL_COLORS = ['#f2c94c', '#4ade80', '#5aa9e6', '#c084fc', '#2dd4bf', '#fb923c', '#f472b6', '#a3e635'];
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
+/** Что спрашивать у датчика по двойному клику: подпись, ключ, диапазон. */
+const SENSOR_PROPS = {
+  mpu6050: { key: 'tilt', ask: 'Наклон датчика, градусы (−60…60):', min: -60, max: 60 },
+  bmp280: { key: 'pressure', ask: 'Атмосферное давление, гПа (950…1050):', min: 950, max: 1050 },
+  ds18b20: { key: 'temp', ask: 'Температура, °C (−10…50):', min: -10, max: 50 },
+  bh1750: { key: 'lux', ask: 'Освещённость, люкс (0…2000):', min: 0, max: 2000 },
+  mq2: { key: 'value', ask: 'Концентрация газа, доля от максимума (0…1):', min: 0, max: 1 },
+  soil: { key: 'value', ask: 'Влажность почвы, доля (0 — сухо, 1 — мокро):', min: 0, max: 1 },
+  sound: { key: 'value', ask: 'Громкость, доля от максимума (0…1):', min: 0, max: 1 },
+};
+
 export class Schematic {
   constructor({ svg, onChange }) {
     this.svg = svg;
@@ -98,6 +109,14 @@ export class Schematic {
     if (type === 'dcmotor') return { angle: 0 };
     if (type === 'sr595' || type === 'sr165') return {};
     if (type === 'seg7') return {};
+    // датчики: у каждого своя измеряемая величина, ползунок меняет её мышью
+    if (type === 'mpu6050') return { tilt: 0, shake: 0 };
+    if (type === 'bmp280') return { pressure: 1013, temp: 24 };
+    if (type === 'ds18b20') return { temp: 24 };
+    if (type === 'bh1750') return { lux: 300 };
+    if (type === 'mq2') return { value: 0 };
+    if (type === 'soil') return { value: 0.4 };
+    if (type === 'sound') return { value: 0.1 };
     return {};
   }
 
@@ -418,10 +437,11 @@ export class Schematic {
           return;
         }
         const knob = ev.target.closest('[data-role="knob"]');
+        const knobKey = knob?.dataset?.knob || null;      // у MPU-6050 их два: наклон и тряска
         const stick = ev.target.closest('[data-role="stick"]');
         this.selected = { kind: 'part', id };
         this.drag = {
-          id, startWorld: this._toWorld(ev), partX: part.x, partY: part.y, knob: !!knob,
+          id, startWorld: this._toWorld(ev), partX: part.x, partY: part.y, knob: !!knob, knobKey,
           stick: !!stick, pressPending: false,
         };
         if (part.type === 'button' && !knob) {
@@ -525,6 +545,14 @@ export class Schematic {
           this.onChange();
           return;
         }
+        if (this.drag.knob && part?.__def?.knob) {
+          // ползунок датчика: тянем влево-вправо, значение живёт в props
+          const local = clamp((w.x - part.x + 18) / 36, 0, 1);
+          part.__def.knob.set(part, local, this.drag.knobKey);
+          this.refreshPart(part);
+          this.onChange();
+          return;
+        }
         const dx = w.x - this.drag.startWorld.x, dy = w.y - this.drag.startWorld.y;
         if (Math.abs(dx) + Math.abs(dy) > 2) this.moved = true;
         part.x = snap(this.drag.partX + dx);
@@ -597,6 +625,15 @@ export class Schematic {
     } else if (part.type === 'pot') {
       const v = prompt('Полное сопротивление потенциометра, Ом:', String(part.props.ohms));
       if (v !== null && Number(v) > 0) { part.props.ohms = Number(v); this.onChange(); }
+    } else if (SENSOR_PROPS[part.type]) {
+      const spec = SENSOR_PROPS[part.type];
+      const v = prompt(spec.ask, String(part.props[spec.key] ?? spec.min));
+      if (v === null || v === '') return;
+      const num = Number(String(v).replace(',', '.'));
+      if (!Number.isFinite(num)) return;
+      part.props[spec.key] = Math.min(spec.max, Math.max(spec.min, num));
+      this.refreshPart(part);
+      this.onChange();
     }
   }
 

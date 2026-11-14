@@ -18,6 +18,13 @@ export const INCLUDES = new Map([
   ['wire.h', []],
   ['dht.h', ['DHT', 'DHT11']],
   ['dht_u.h', ['DHT']],
+  ['adafruit_mpu6050.h', ['Adafruit_MPU6050', 'MPU6050']],
+  ['adafruit_bmp280.h', ['Adafruit_BMP280']],
+  ['adafruit_sensor.h', []],
+  ['adafruit_bus_io.h', []],
+  ['onewire.h', ['OneWire']],
+  ['dallastemperature.h', ['DallasTemperature']],
+  ['bh1750.h', ['BH1750']],
   ['liquidcrystal_i2c.h', ['LiquidCrystal_I2C']],
   ['adafruit_ssd1306.h', ['Adafruit_SSD1306']],
   ['adafruit_gfx.h', []],
@@ -159,6 +166,109 @@ export function createLibraries(bus) {
   }
 
   /**
+   * Датчики-модули: значения живут в свойствах детали на схеме (их меняет
+   * ученик мышью), а библиотека их читает — как настоящая, только вместо
+   * байтов по I2C берёт число из «железа» симулятора.
+   */
+  const sensorPart = (cls, type) => {
+    const find = () => bus.firstOfType(type);
+    return { cls, find };
+  };
+
+  /** MPU-6050: акселерометр (±2 g), гироскоп (±250 °/с) и термометр. */
+  class MPU6050 {
+    constructor(addr = 0x68) { this.addr = addr; this._part = null; this._on = false; }
+    _find() { if (!this._part) this._part = bus.firstOfType('mpu6050'); return this._part; }
+    begin() {
+      const p = this._find();
+      this._on = !!p;
+      if (p) { p.props.active = true; bus.changed(p); }
+      return this._on;
+    }
+    /** Учебный метод: пересчитать показания (в железе это делает регистр). */
+    readSensor() {
+      const p = this._find();
+      const tilt = (Number(p?.props?.tilt ?? 0) * Math.PI) / 180;
+      const shake = Math.min(1, Math.max(0, Number(p?.props?.shake ?? 0)));
+      const jitter = shake ? (Math.random() - 0.5) * 0.08 * shake : 0;
+      this._a = { x: Math.sin(tilt) + jitter, y: jitter, z: Math.cos(tilt) + jitter / 2 };
+      this._g = { x: 0, y: 0, z: shake * 250 + (shake ? (Math.random() - 0.5) * 20 : 0) };
+      this._t = Number(p?.props?.temp ?? 28);
+      return true;
+    }
+    _sync() { if (!this._a) this.readSensor(); return this; }
+    accelX() { return this._sync()._a.x; }
+    accelY() { return this._sync()._a.y; }
+    accelZ() { return this._sync()._a.z; }
+    gyroX() { return this._sync()._g.x; }
+    gyroY() { return this._sync()._g.y; }
+    gyroZ() { return this._sync()._g.z; }
+    temperature() { return this._sync()._t; }
+    /** Угол наклона вокруг оси Y — то, что обычно показывают на экране. */
+    pitch() { return (Math.atan2(this.accelX(), this.accelZ()) * 180) / Math.PI; }
+    roll() { return (Math.atan2(this.accelY(), this.accelZ()) * 180) / Math.PI; }
+    getTemp() { return this.temperature(); }
+  }
+  const Adafruit_MPU6050 = MPU6050;
+
+  /** BMP280: давление в паскалях, температура и высота над уровнем моря. */
+  class Adafruit_BMP280 {
+    constructor(addr = 0x76) { this.addr = addr; this._part = null; }
+    _find() { if (!this._part) this._part = bus.firstOfType('bmp280'); return this._part; }
+    begin() {
+      const p = this._find();
+      if (p) { p.props.active = true; bus.changed(p); }
+      return !!p;
+    }
+    setSampling() {}
+    readPressure() { return Number(this._find()?.props?.pressure ?? 1013) * 100; }   // Па
+    readTemperature() { return Number(this._find()?.props?.temp ?? 24); }
+    readAltitude(seaLevelHpa = 1013.25) {
+      const p = this.readPressure() / 100;
+      return 44330 * (1 - Math.pow(p / seaLevelHpa, 1 / 5.255));
+    }
+  }
+
+  /** 1-Wire — заглушка шины: адрес устройства не нужен, датчик один. */
+  class OneWire {
+    constructor(pin) { this.pin = pin; }
+    reset() { return true; }
+    skip() {}
+    write() {}
+    read() { return 0; }
+    select() {}
+  }
+
+  /** DS18B20: как в библиотеке DallasTemperature. */
+  class DallasTemperature {
+    constructor(oneWire = null) { this.wire = oneWire; }
+    begin() { return !!bus.firstOfType('ds18b20'); }
+    getDeviceCount() { return bus.firstOfType('ds18b20') ? 1 : 0; }
+    requestTemperatures() {}
+    getTempCByIndex(index = 0) {
+      if (Number(index) !== 0) return -127;
+      const p = bus.firstOfType('ds18b20');
+      return p ? Number(p.props.temp ?? 24) : -127;
+    }
+    getTempC() { return this.getTempCByIndex(0); }
+    setResolution() {}
+  }
+
+  /** BH1750: люксметр по I2C, показания в люксах. */
+  class BH1750 {
+    constructor(addr = 0x23) { this.addr = addr; this._part = null; }
+    _find() { if (!this._part) this._part = bus.firstOfType('bh1750'); return this._part; }
+    begin(mode = 0x10) {
+      const p = this._find();
+      if (p) { p.props.active = true; bus.changed(p); }
+      return !!p;
+    }
+    configure(mode) {}
+    setMode(mode) {}
+    readLightLevel() { return Number(this._find()?.props?.lux ?? 300); }
+  }
+
+  /**
    * Шаговый двигатель как в библиотеке Stepper: step() не блокирует скетч,
    * а ставит шаги в очередь; сама очередь «проворачивается» драйвером кадров
    * (bus.tickSteppers) — так же, как это делает таймер в железе.
@@ -206,5 +316,9 @@ export function createLibraries(bus) {
     }
   }
 
-  return { Servo, DHT, DHT11, Stepper, LiquidCrystal_I2C, Adafruit_SSD1306, Wire: { begin() {}, setClock() {} } };
+  return {
+    Servo, DHT, DHT11, Stepper, LiquidCrystal_I2C, Adafruit_SSD1306,
+    MPU6050, Adafruit_MPU6050, Adafruit_BMP280, OneWire, DallasTemperature, BH1750,
+    Wire: { begin() {}, setClock() {} },
+  };
 }

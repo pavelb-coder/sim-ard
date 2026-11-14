@@ -558,7 +558,7 @@
    "id": "dht",
    "name": "Датчик DHT11: температура и влажность",
    "board": "uno",
-   "code": "// DHT11: потяните датчик мышью по вертикали — меняется температура.\n// (Протокол не эмулируется побитово: библиотека берёт значения у детали.)\n\n#include <DHT.h>\nDHT dht(2);\n\nvoid setup() {\n  Serial.begin(9600);\n  dht.begin();\n  Serial.println(\"DHT11 запущен\");\n}\n\nvoid loop() {\n  float t = dht.readTemperature();\n  float h = dht.readHumidity();\n  Serial.print(\"T = \");\n  Serial.print(t);\n  Serial.print(\" C,  H = \");\n  Serial.print(h);\n  Serial.println(\" %\");\n  delay(1000);\n}\n",
+   "code": "// DHT11: значения заданы у детали (24 °C и 45 %) — двойной клик меняет их.\n// (Протокол не эмулируется побитово: библиотека берёт значения у детали.)\n\n#include <DHT.h>\nDHT dht(2);\n\nvoid setup() {\n  Serial.begin(9600);\n  dht.begin();\n  Serial.println(\"DHT11 запущен\");\n}\n\nvoid loop() {\n  float t = dht.readTemperature();\n  float h = dht.readHumidity();\n  Serial.print(\"T = \");\n  Serial.print(t);\n  Serial.print(\" C,  H = \");\n  Serial.print(h);\n  Serial.println(\" %\");\n  delay(1000);\n}\n",
    "schematic": {
     "parts": [
      {
@@ -4624,6 +4624,776 @@
       "b": {
        "compId": "srv",
        "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "mpu-tilt",
+   "name": "MPU-6050: наклон и гироскоп",
+   "board": "uno",
+   "code": "// MPU-6050 — акселерометр, гироскоп и термометр на одной шине I2C.\n// Два ползунка под датчиком: «наклон» — гравитация по осям, «тряска» — гироскоп.\n\n#include <Wire.h>\n#include <Adafruit_MPU6050.h>\n\nAdafruit_MPU6050 mpu;\n\nvoid setup() {\n  Serial.begin(9600);\n  Wire.begin();\n  if (!mpu.begin()) {\n    Serial.println(\"MPU-6050 не найден: SDA на A4, SCL на A5, питание 5 В\");\n  } else {\n    Serial.println(\"MPU-6050 на связи\");\n  }\n}\n\nvoid loop() {\n  mpu.readSensor();\n  Serial.print(\"наклон \");\n  Serial.print(round(mpu.pitch()));\n  Serial.print(\" град | aZ \");\n  Serial.print(mpu.accelZ());\n  Serial.print(\" g | гироскоп Z \");\n  Serial.print(round(mpu.gyroZ()));\n  Serial.println(\" град/с\");\n  delay(400);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "mpu",
+      "type": "mpu6050",
+      "x": 210,
+      "y": -170,
+      "props": {
+       "tilt": 0
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "mpu",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "mpu",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "mpu",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "mpu",
+       "pin": "SCL"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "bmp-altimeter",
+   "name": "BMP280: барометр, давление и высота",
+   "board": "uno",
+   "code": "// Два устройства на одной шине I2C: барометр BMP280 и экран LCD 1602.\n// Поднимайте давление ползунком под датчиком — высота считается по формуле.\n\n#include <Wire.h>\n#include <Adafruit_BMP280.h>\n#include <LiquidCrystal_I2C.h>\n\nAdafruit_BMP280 bmp;\nLiquidCrystal_I2C lcd(0x27, 16, 2);\n\nvoid setup() {\n  Serial.begin(9600);\n  Wire.begin();\n  lcd.init();\n  lcd.backlight();\n  if (!bmp.begin()) Serial.println(\"BMP280 не найден\");\n  Serial.println(\"Барометр BMP280: ползунок меняет давление\");\n}\n\nvoid loop() {\n  int hPa = round(bmp.readPressure() / 100);\n  int alt = round(bmp.readAltitude(1013));     // высота относительно давления на уровне моря\n  lcd.clear();\n  lcd.setCursor(0, 0);\n  lcd.print(\"P \");\n  lcd.print(hPa);\n  lcd.print(\" hPa\");\n  lcd.setCursor(0, 1);\n  lcd.print(\"T \");\n  lcd.print(round(bmp.readTemperature()));\n  lcd.print(\" C\");\n  Serial.print(hPa);\n  Serial.print(\" гПа, \");\n  Serial.print(round(bmp.readTemperature()));\n  Serial.print(\" C, высота \");\n  Serial.print(alt);\n  Serial.println(\" м\");\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "bmp",
+      "type": "bmp280",
+      "x": 210,
+      "y": -170,
+      "props": {
+       "pressure": 1013,
+       "temp": 24
+      }
+     },
+     {
+      "id": "lcd",
+      "type": "lcd1602",
+      "x": 0,
+      "y": 250,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "bmp",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "bmp",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "bmp",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "bmp",
+       "pin": "SCL"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "lcd",
+       "pin": "SCL"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "ds18b20-thermo",
+   "name": "DS18B20: термометр на 1-Wire",
+   "board": "uno",
+   "code": "// DS18B20 — цифровой термометр: данные идут по одному проводу (1-Wire).\n// Двигайте ползунок под датчиком: выше 25 °C загорается светодиод.\n\n#include <OneWire.h>\n#include <DallasTemperature.h>\n\nOneWire wire(2);                       // шина 1-Wire на D2\nDallasTemperature sensors(&wire);\n\nconst int LED = 9;\n\nvoid setup() {\n  pinMode(LED, OUTPUT);\n  Serial.begin(9600);\n  sensors.begin();\n  Serial.print(\"Датчиков на шине: \");\n  Serial.println(sensors.getDeviceCount());\n}\n\nvoid loop() {\n  sensors.requestTemperatures();\n  float t = sensors.getTempCByIndex(0);\n  Serial.print(\"T = \");\n  Serial.print(t);\n  Serial.println(\" C\");\n  if (t > 25) digitalWrite(LED, HIGH);\n  else digitalWrite(LED, LOW);\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "t1",
+      "type": "ds18b20",
+      "x": 180,
+      "y": -180,
+      "props": {
+       "temp": 24
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": -70,
+      "y": -190,
+      "props": {
+       "color": "#ff5544"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -170,
+      "y": -190,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "t1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "t1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "t1",
+       "pin": "DATA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "bh1750-lux",
+   "name": "BH1750: люксметр на OLED",
+   "board": "uno",
+   "code": "// BH1750 меряет освещённость в люксах. Утром в классе — 300 лк,\n// у окна — 1000, на улице в пасмурный день — 5000.\n// Ползунок под датчиком меняет свет.\n\n#include <Wire.h>\n#include <BH1750.h>\n#include <Adafruit_SSD1306.h>\n\nBH1750 lightMeter;\nAdafruit_SSD1306 display(128, 64);\n\nvoid setup() {\n  Serial.begin(9600);\n  Wire.begin();\n  lightMeter.begin();\n  display.begin();\n  display.clearDisplay();\n  display.display();\n  Serial.println(\"Люксметр BH1750 запущен\");\n}\n\nvoid loop() {\n  int lux = round(lightMeter.readLightLevel());\n  display.clearDisplay();\n  display.setTextSize(1);\n  display.setCursor(0, 0);\n  display.print(\"Освещённость:\");\n  display.setTextSize(2);\n  display.setCursor(0, 16);\n  display.print(lux);\n  display.print(\" lx\");\n  display.display();\n  Serial.print(\"свет \");\n  Serial.print(lux);\n  Serial.print(\" лк | \");\n  if (lux < 100) Serial.println(\"темно\");\n  else if (lux < 1000) Serial.println(\"норма\");\n  else Serial.println(\"ярко\");\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "lx",
+      "type": "bh1750",
+      "x": 200,
+      "y": -175,
+      "props": {
+       "lux": 300
+      }
+     },
+     {
+      "id": "oled",
+      "type": "oled",
+      "x": 0,
+      "y": 230,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "lx",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "lx",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "lx",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "lx",
+       "pin": "SCL"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "oled",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "oled",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "oled",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "oled",
+       "pin": "SCL"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "mq2-gas",
+   "name": "MQ-2: датчик газа и дыма",
+   "board": "uno",
+   "code": "// MQ-2 чувствует дым, метан, пропан и водород. Модуль отдаёт и аналоговый\n// уровень (AO), и готовый «есть газ» (DO) — его и читаем.\n// Ползунок под датчиком «пускает газ».\n\nconst int GAS_AO = A0;\nconst int GAS_DO = 3;\nconst int BUZZER = 8;\nconst int LED = 9;\n\nvoid setup() {\n  pinMode(GAS_DO, INPUT);\n  pinMode(BUZZER, OUTPUT);\n  pinMode(LED, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Газоанализатор MQ-2 включён\");\n}\n\nvoid loop() {\n  int level = analogRead(GAS_AO);\n  Serial.print(\"уровень газа \");\n  Serial.print(level);\n  if (digitalRead(GAS_DO) == HIGH) {\n    Serial.println(\" — ГАЗ! сирена\");\n    digitalWrite(LED, HIGH);\n    tone(BUZZER, 1200);\n  } else {\n    Serial.println(\" — чисто\");\n    digitalWrite(LED, LOW);\n    noTone(BUZZER);\n  }\n  delay(300);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "gas",
+      "type": "mq2",
+      "x": 190,
+      "y": -175,
+      "props": {
+       "value": 0
+      }
+     },
+     {
+      "id": "bz1",
+      "type": "buzzer",
+      "x": -150,
+      "y": -170,
+      "props": {}
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": -40,
+      "y": -190,
+      "props": {
+       "color": "#ff5544"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -110,
+      "y": -240,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "gas",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "gas",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A0"
+      },
+      "b": {
+       "compId": "gas",
+       "pin": "AO"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D3"
+      },
+      "b": {
+       "compId": "gas",
+       "pin": "DO"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "bz1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "bz1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "soil-watering",
+   "name": "Влажность почвы: пора поливать",
+   "board": "uno",
+   "code": "// Датчик влажности почвы — это два щупа и делитель напряжения.\n// Сухая земля даёт на AO почти всё питание, мокрая — заметно меньше.\n// Ползунок под датчиком: влево — сухо, вправо — полили.\n\nconst int SOIL = A0;\nconst int LED = 9;\nconst int DRY = 700;          // порог «пора поливать»\n\nvoid setup() {\n  pinMode(LED, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Следим за влажностью почвы\");\n}\n\nvoid loop() {\n  int raw = analogRead(SOIL);\n  int percent = map(raw, 1023, 300, 0, 100);    // 1023 — сухо, 300 — мокро\n  percent = constrain(percent, 0, 100);\n  Serial.print(\"влажность \");\n  Serial.print(percent);\n  Serial.print(\" %, датчик \");\n  Serial.print(raw);\n  if (raw > DRY) {\n    Serial.println(\" — СУХО, включите полив\");\n    digitalWrite(LED, HIGH);\n  } else {\n    Serial.println(\" — норма\");\n    digitalWrite(LED, LOW);\n  }\n  delay(400);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "sm",
+      "type": "soil",
+      "x": 190,
+      "y": -185,
+      "props": {
+       "value": 0.4
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": -60,
+      "y": -190,
+      "props": {
+       "color": "#ffd166"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -160,
+      "y": -190,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "sm",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "sm",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A0"
+      },
+      "b": {
+       "compId": "sm",
+       "pin": "AO"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "sound-clap",
+   "name": "Датчик звука: хлопок зажигает свет",
+   "board": "uno",
+   "code": "// У микрофона два выхода: AO — громкость, DO — «громче порога».\n// Хлопните: ползунок под датчиком резко уходит вправо.\n\nconst int MIC_AO = A0;\nconst int MIC_DO = 2;\nconst int LED = 9;\n\nint quiet = 0;                 // тихий фон, который измеряем в setup\n\nvoid setup() {\n  pinMode(MIC_DO, INPUT);\n  pinMode(LED, OUTPUT);\n  Serial.begin(9600);\n  quiet = analogRead(MIC_AO);\n  Serial.print(\"Фон: \");\n  Serial.println(quiet);\n}\n\nvoid loop() {\n  int loud = analogRead(MIC_AO);\n  int delta = loud - quiet;\n  Serial.print(\"громкость \");\n  Serial.print(loud);\n  Serial.print(\", выше фона на \");\n  Serial.print(delta);\n  if (digitalRead(MIC_DO) == HIGH) {\n    digitalWrite(LED, HIGH);\n    Serial.println(\" — хлопок!\");\n  } else {\n    digitalWrite(LED, LOW);\n    Serial.println(\"\");\n  }\n  delay(250);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "mic",
+      "type": "sound",
+      "x": 190,
+      "y": -170,
+      "props": {
+       "value": 0.1
+      }
+     },
+     {
+      "id": "l1",
+      "type": "led",
+      "x": -60,
+      "y": -190,
+      "props": {
+       "color": "#7ec8ff"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": -160,
+      "y": -190,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V2"
+      },
+      "b": {
+       "compId": "mic",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "mic",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A0"
+      },
+      "b": {
+       "compId": "mic",
+       "pin": "AO"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "mic",
+       "pin": "DO"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "l1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "l1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
       }
      }
     ]
