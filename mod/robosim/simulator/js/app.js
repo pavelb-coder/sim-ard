@@ -768,6 +768,7 @@ function reviveBurned() {
     if (!p.props?.burned) continue;
     delete p.props.burned;
     p.__over = 0;
+    p.__burnShown = false;      // чтобы новое перегорание снова нарисовало копоть
     schematic.refreshPart(p);
     n++;
   }

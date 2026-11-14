@@ -24,6 +24,10 @@ const SOURCES = new Set(['battery9', 'batteryAA', 'psu']);
 const TEST_I = 20e-6;      // 20 мкА — как у настоящего цифрового мультиметра в режиме Ω
 const OHM_PARALLEL = 10e6; // входное сопротивление прибора в режиме Ω
 const METER_MAX_A = 0.5;   // предел 0,5 А (в приборе предохранитель)
+/** Питание платы: предохранитель на входе и защита от переполюсовки. */
+const BOARD_FUSE = 1.5;    // А — больше плата не отдаёт в нагрузку
+const FUSE_TIME = 0.15;    // с — столько держится КЗ, пока сгорит предохранитель
+const VIN_MIN = -0.7;      // В — на входе питания отрицательное напряжение
 const KE = 0.02;           // В·с/рад у мотора: 5 В без нагрузки ≈ 2400 об/мин
 const HFE = 100;                 // усиление BC547 — для модели ключа
 // последовательность фаз 28BYJ-48 (IN1…IN4): полушаги по кругу
@@ -132,6 +136,7 @@ export class Circuit {
     const diodeIdx = new Map();
     const multiIdx = new Map();   // partId -> { канал: индекс диода } для RGB и 7-сегментника
     const sourceIdx = new Map();  // partId -> индекс источника (для тока)
+    const supplyIdx = new Map();  // `${плата}:vcc` / `${плата}:${вывод}` -> индекс источника платы
     const elemIdx = new Map();    // partId -> индекс элемента (для тока через резистор)
     const pwmNets = new Map();
     this.time += dt;
@@ -170,15 +175,19 @@ export class Circuit {
     for (const board of this.boards) {
       const spec = board.spec;
       const g = board.gndNet || gnd;
+      // сгоревшая плата — как вынутая из макетки: не питает и не управляет
+      if (board.part?.props?.burned) continue;
       if (g !== gnd) push({ type: 'R', n1: g, n2: gnd, value: 0.001 });
-      if (board.vccNet && board.vccNet !== g) push({ type: 'V', n1: board.vccNet, n2: g, value: spec.vcc });
-      else if (board.vccNet && board.vccNet === g) this.warnings.push({ text: `${spec.name}: питание замкнуто на землю`, level: 'danger' });
+      // Шину, замкнутую на землю проводом, источником не делаем: это не питание,
+      // а короткое замыкание — его разберёт проверка питания в конце solve().
+      if (board.vccNet && board.vccNet !== g) {
+        supplyIdx.set(`${board.part.id}:vcc`, push({ type: 'V', n1: board.vccNet, n2: g, value: spec.vcc }));
+      }
       // дополнительные шины платы: у Raspberry Pi 5 рядом с 3,3 В есть честные 5 В
       for (const rail of spec.rails || []) {
         const net = this.pinNet.get(`${board.part.id}:${rail.pin}`);
-        if (!net) continue;
-        if (net !== g) push({ type: 'V', n1: net, n2: g, value: rail.volts });
-        else this.warnings.push({ text: `${spec.name}: шина ${rail.pin} замкнута на землю`, level: 'danger' });
+        if (!net || net === g) continue;
+        supplyIdx.set(`${board.part.id}:${rail.pin}`, push({ type: 'V', n1: net, n2: g, value: rail.volts }));
       }
 
       const rt = runtimes?.get?.(board.part.id) || null;
@@ -809,6 +818,13 @@ export class Circuit {
       const I = Math.abs(res.currents[idx] || 0);
       info.current = I;
       const p = this.parts.find((q) => q.id === partId);
+      // клеммы источника, соединённые проводом: у лабораторного блока питания
+      // сработает защита, а батарейка просто выйдет из строя
+      if (p && info.shorted && p.type !== 'psu') {
+        this._burn(p, `«${this.nameOf(partId)}» сгорел: короткое замыкание — клеммы «+» и «−» `
+          + 'соединены проводом. Замените источник: кнопка «Сброс» берёт новый.', 'КЗ: клеммы источника');
+        continue;
+      }
       if (I > 2.5) {
         this.warnings.push({
           text: `«${this.nameOf(partId)}»: ток ${I.toFixed(1)} А — это короткое замыкание, в железе источник бы сел или сработала защита.`,
@@ -956,26 +972,114 @@ export class Circuit {
       if (rate.pMax && info.power > rate.pMax) {
         over.push({ ratio: info.power / rate.pMax, txt: `${fmtW(info.power)} вместо ${fmtW(rate.pMax)}` });
       }
+      // полярность: детали с «плюсом» и «минусом» не терпят обратного напряжения
+      if (rate.vMin && rate.plus && rate.minus) {
+        const a = this.netOf(p.id, rate.plus), b = this.netOf(p.id, rate.minus);
+        if (a && b && a !== b) {
+          const v = (res.v.get(a) ?? 0) - (res.v.get(b) ?? 0);
+          if (v < rate.vMin) {
+            over.push({
+              ratio: v / rate.vMin,
+              rev: true,
+              txt: `${fmtV(Math.abs(v))} наоборот — ${rate.plus} на минусе, ${rate.minus} на плюсе`,
+            });
+          }
+        }
+      }
       if (!over.length) { p.__over = 0; continue; }
 
       const worst = p.__burnWorst = over.reduce((a, b) => (b.ratio > a.ratio ? b : a));
       const time = (p.__over = (p.__over || 0) + dt);
       if (time < 0.25) continue;          // 0,25 с перегрузки: короткий выброс деталь переживает
 
-      p.props = p.props || {};
-      p.props.burned = true;
-      p.__over = 0;
       const name = p.ref ? `${def.name} (${p.ref})` : def.name;
-      const msg = `${name} сгорел: ${worst.txt}`
-        + (rate.hint ? ` — ${rate.hint}.` : '.')
+      const hint = worst.rev ? rate.revHint : rate.hint;
+      const msg = `${name} сгорел: ${worst.rev ? 'перепутана полярность — ' : ''}${worst.txt}`
+        + (hint ? ` — ${hint}.` : '.')
         + ' Замените деталь: кнопка «Сброс» берёт новые.';
-      this.warnings.push({ text: msg, level: 'danger' });
-      this.burnedNow.push({ partId: p.id, text: msg, cause: worst.txt });
+      this._burn(p, msg, worst.rev ? 'переполюсовка' : worst.txt);
+    }
+
+    // ---- питание плат: короткое замыкание и переполюсовка ------------------
+    // Плата — не «деталь с паспортом»: у неё на входе предохранитель и защита
+    // от переполюсовки. Поэтому проверяем именно питание: шина, соединённая
+    // с землёй проводом, и минус на VIN убивают плату, а слишком большой ток
+    // через шину говорит о коротком замыкании где-то в монтаже.
+    for (const board of this.boards) {
+      const part = board.part, spec = board.spec;
+      if (!part || part.props?.burned) continue;
+      const info = partInfo.get(part.id) || (partInfo.set(part.id, {}), partInfo.get(part.id));
+      const g = board.gndNet || gnd;
+      const name = part.ref ? `${spec.name} (${part.ref})` : spec.name;
+      const V = (net) => (net && res.v.has(net) ? res.v.get(net) : 0);
+      const replace = ' Замените плату: кнопка «Сброс» берёт новую.';
+
+      // 1) провод между шиной питания и землёй — классическое КЗ
+      if (board.vccNet && board.vccNet === g) {
+        this._burn(part, `${name} сгорела: короткое замыкание — вывод ${fmtV(spec.vcc)} соединён с GND проводом.${replace}`, 'КЗ: питание на земле');
+        continue;
+      }
+      let railShort = null;
+      for (const rail of spec.rails || []) {
+        const net = this.pinNet.get(`${part.id}:${rail.pin}`);
+        if (net && net === g) { railShort = rail; break; }
+      }
+      if (railShort) {
+        this._burn(part, `${name} сгорела: короткое замыкание — шина ${railShort.pin} (${fmtV(railShort.volts)}) соединена с GND.${replace}`, `КЗ: шина ${railShort.pin} на земле`);
+        continue;
+      }
+      // 1) переполюсовка: плюс источника пришёл на землю платы, а минус — на VIN.
+      // Смотрим именно на соединения: земли всех плат в модели общие, поэтому
+      // «минус на VIN» по напряжениям не отличить от нормального питания.
+      const vinNet = this.pinNet.get(`${part.id}:VIN`);
+      if (vinNet && vinNet !== g) {
+        const rev = this.parts.find((s) => {
+          if (!SOURCES.has(s.type) || s.props?.burned) return false;
+          const plus = this.netOf(s.id, '+'), minus = this.netOf(s.id, '−');
+          return plus && minus && plus === g && minus === vinNet;
+        });
+        if (rev) {
+          this._burn(part, `${name} сгорела: переполюсовка питания — плюс источника пришёл на GND, `
+            + `а минус на VIN. Поменяйте местами провода питания.${replace}`, 'переполюсовка питания');
+          continue;
+        }
+        const v = V(vinNet) - V(g);
+        if (v < VIN_MIN) {
+          this._burn(part, `${name} сгорела: переполюсовка питания — на VIN ${fmtV(v)} вместо плюса. `
+            + 'Поменяйте местами плюс и минус источника.' + replace, 'переполюсовка питания');
+          continue;
+        }
+      }
+      // 3) слишком большой ток через шину — где-то короткое замыкание в монтаже
+      const idxs = [`${part.id}:vcc`, ...(spec.rails || []).map((r) => `${part.id}:${r.pin}`)]
+        .map((k) => supplyIdx.get(k)).filter((i) => i != null);
+      if (!idxs.length) continue;
+      const amps = Math.max(0, ...idxs.map((i) => Math.abs(res.currents[i] || 0)));
+      info.current = Math.max(info.current || 0, amps);
+      if (amps <= BOARD_FUSE) { part.__over = 0; continue; }
+      if ((part.__over = (part.__over || 0) + dt) < FUSE_TIME) continue;
+      this._burn(part, `${name} сгорела: короткое замыкание — через питание идёт ${fmtA(amps)}, `
+        + `предохранитель платы держит ${fmtA(BOARD_FUSE)}.${replace}`, 'КЗ: перегрузка по току');
     }
 
     this._last = res.v;
     try { this._duty = dutyOf; } catch { this._duty = null; }
     return { ok: true, voltages: res.v, partInfo, warnings: this.warnings, iterations: res.iterations };
+  }
+
+  /**
+   * Сжечь деталь или плату: помечаем сгоревшей, пишем сообщение в монитор и в
+   * очередь интерфейса. Сгоревшее — это разрыв: пока не нажмут «Сброс», деталь
+   * не проводит ток, а плата ничего не питает.
+   */
+  _burn(part, msg, cause) {
+    if (!part) return;
+    part.props = part.props || {};
+    part.props.burned = true;
+    part.__over = 0;
+    part.__burnedAt = this.time;
+    this.warnings.push({ text: msg, level: 'danger' });
+    this.burnedNow.push({ partId: part.id, text: msg, cause });
   }
 
   _netHasSource(elements, net) {
