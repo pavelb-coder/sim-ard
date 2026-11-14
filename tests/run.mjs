@@ -1518,8 +1518,175 @@ console.log('\nНоминалы: детали горят, когда напря�
   check('номиналы заданы для светодиодов, резисторов, конденсаторов и модулей',
     ['led', 'resistor', 'electrolytic', 'oled', 'dht11', 'sr595', 'sr165', 'servo']
       .every((t) => PARTS[t]?.rating && Object.keys(PARTS[t].rating).length > 0));
-  check('у плат и измерительных приборов номинала нет — они не горят',
+  check('у плат и измерительных приборов номинала нет — они горят только от КЗ и переполюсовки',
     !PARTS.uno.rating && !PARTS.multimeter.rating && !PARTS.scope.rating);
+}
+
+console.log('\nКороткое замыкание и полярность: сгорает деталь или плата');
+
+{
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type], ref: id.toUpperCase() });
+  const wire = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  const run = (c, frames) => {
+    const m = new Map([['b1', { pins: new Map([[9, { value: 1, pwm: 255, mode: 'OUTPUT' }]]) }]]);
+    let r = null;
+    const burned = [];
+    for (let i = 0; i < frames; i++) {
+      r = c.solve(m, 1 / 60);
+      if (c.burnedNow?.length) burned.push(...c.burnedNow.map((b) => b.text));
+    }
+    r.burned = burned;
+    return r;
+  };
+  const revive = (c, parts, wires) => {
+    for (const p of parts) { if (p.props?.burned) { delete p.props.burned; p.__over = 0; } }
+    c.setSchematic(parts, wires);
+  };
+
+  // 1. провод между 5 В и GND — короткое замыкание питания платы
+  {
+    const parts = [mk('uno', 'b1')];
+    const wires = [wire(1, 'b1', '5V', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    const res = run(c, 3);
+    check('провод 5 В → GND сжигает плату', parts[0].props.burned === true,
+      res.burned.join(' | ').slice(0, 90));
+    check('в сообщении сказано про короткое замыкание',
+      res.burned.some((t) => /короткое замыкание/i.test(t)) || res.warned?.some((t) => /короткое замыкание/i.test(t)),
+      res.burned.join(' | ').slice(0, 120) || 'нет сообщения');
+    check('сгоревшая плата уже не даёт питание',
+      !(res.partInfo.get('b1')?.current > 0) && parts[0].props.burned === true);
+  }
+
+  // 2. у Raspberry Pi 5 так же горит шина 5 В
+  {
+    const parts = [mk('rpi5', 'b1')];
+    const wires = [wire(1, 'b1', '5V', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    run(c, 3);
+    check('замкнутая шина 5 В у Pi 5 сжигает плату', parts[0].props.burned === true);
+  }
+
+  // 3. нагрузка 2 Ом — это КЗ: предохранитель платы не выдерживает
+  {
+    const parts = [mk('uno', 'b1'), mk('resistor', 'r1', { value: 2 })];
+    const wires = [wire(1, 'b1', '5V', 'r1', '1'), wire(2, 'r1', '2', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    const res = run(c, 12);
+    check('ток 2,5 А через шину сжигает предохранитель платы', parts[0].props.burned === true,
+      res.burned.join(' | ').slice(0, 100));
+    check('предохранитель платы держит 1,5 А (сообщение с током)',
+      res.burned.some((t) => /предохранитель/i.test(t)), res.burned.join(' | ').slice(0, 120));
+  }
+
+  // 4. нормальная нагрузка плату не трогает
+  {
+    const parts = [mk('uno', 'b1'), mk('resistor', 'r1', { value: 220 }), mk('led', 'd1')];
+    const wires = [wire(1, 'b1', 'D9', 'r1', '1'), wire(2, 'r1', '2', 'd1', 'A'), wire(3, 'd1', 'K', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    run(c, 60);
+    check('обычная схема со светодиодом не сжигает ни плату, ни деталь',
+      !parts[0].props.burned && !parts[2].props.burned);
+  }
+
+  // 5. переполюсовка питания платы: минус батарейки на VIN
+  {
+    const parts = [mk('battery9', 'g1', { voltage: 9 }), mk('uno', 'b1')];
+    const wires = [wire(1, 'g1', '+', 'b1', 'GND'), wire(2, 'g1', '−', 'b1', 'VIN')];
+    const c = new Circuit(parts, wires);
+    const res = run(c, 3);
+    check('минус на VIN сжигает плату', parts[1].props.burned === true, res.burned.join(' | ').slice(0, 90));
+    check('в сообщении сказано про переполюсовку',
+      res.burned.some((t) => /переполюсовк/i.test(t)), res.burned.join(' | ').slice(0, 120));
+  }
+
+  // 6. та же батарейка, но подключена правильно
+  {
+    const parts = [mk('battery9', 'g1', { voltage: 9 }), mk('uno', 'b1')];
+    const wires = [wire(1, 'g1', '+', 'b1', 'VIN'), wire(2, 'g1', '−', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    run(c, 60);
+    check('правильная полярность источника плату не трогает', !parts[1].props.burned);
+  }
+
+  // 7. электролит, включённый наоборот
+  {
+    const bad = [mk('battery9', 'g1', { voltage: 9 }), mk('electrolytic', 'c1')];
+    const wires = [wire(1, 'g1', '−', 'c1', '1'), wire(2, 'c1', '2', 'g1', '+')];
+    const c = new Circuit(bad, wires);
+    const res = run(c, 20);
+    check('перевёрнутый электролит сгорает', bad[1].props.burned === true, res.burned.join(' | ').slice(0, 90));
+    check('сообщение объясняет, где плюс электролита',
+      res.burned.some((t) => /полярность/i.test(t) && /электролит/i.test(t)), res.burned.join(' | ').slice(0, 140));
+
+    const good = [mk('battery9', 'g1', { voltage: 9 }), mk('electrolytic', 'c1')];
+    const c2 = new Circuit(good, [wire(1, 'g1', '+', 'c1', '1'), wire(2, 'c1', '2', 'g1', '−')]);
+    run(c2, 30);
+    check('электролит, включённый правильно, живёт', !good[1].props.burned);
+  }
+
+  // 8. светодиод наоборот: катод на плюс, анод на землю
+  {
+    const parts = [mk('uno', 'b1'), mk('resistor', 'r1', { value: 220 }), mk('led', 'd1')];
+    const wires = [wire(1, 'b1', '5V', 'r1', '1'), wire(2, 'r1', '2', 'd1', 'K'), wire(3, 'd1', 'A', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    const res = run(c, 20);
+    check('перевёрнутый светодиод сгорает', parts[2].props.burned === true, res.burned.join(' | ').slice(0, 90));
+    check('и не светится', !(res.partInfo.get('d1')?.brightness > 0.01));
+  }
+
+  // 9. модуль с перепутанным питанием: GND на 5 В, VCC на землю
+  {
+    const parts = [mk('uno', 'b1'), mk('lcd1602', 'ds1')];
+    const wires = [wire(1, 'ds1', 'VCC', 'b1', 'GND'), wire(2, 'ds1', 'GND', 'b1', '5V')];
+    const c = new Circuit(parts, wires);
+    const res = run(c, 20);
+    check('модуль LCD с перепутанным питанием сгорает', parts[1].props.burned === true,
+      res.burned.join(' | ').slice(0, 90));
+    check('сообщение подсказывает, что VCC — это плюс',
+      res.burned.some((t) => /VCC/.test(t) && /GND/.test(t)), res.burned.join(' | ').slice(0, 140));
+
+    const ok = [mk('uno', 'b1'), mk('lcd1602', 'ds1')];
+    const c2 = new Circuit(ok, [wire(1, 'ds1', 'VCC', 'b1', '5V'), wire(2, 'ds1', 'GND', 'b1', 'GND')]);
+    run(c2, 30);
+    check('модуль с правильным питанием живёт', !ok[1].props.burned);
+
+    const dht = [mk('uno', 'b1'), mk('dht11', 'h1')];
+    const c3 = new Circuit(dht, [wire(1, 'h1', 'VCC', 'b1', 'GND'), wire(2, 'h1', 'GND', 'b1', '5V')]);
+    run(c3, 20);
+    check('датчик DHT11 с перепутанным питанием тоже сгорает', dht[1].props.burned === true);
+  }
+
+  // 10. замкнутые клеммы источника: батарейка умирает, блок питания — нет
+  {
+    const bat = [mk('battery9', 'g1', { voltage: 9 })];
+    const c = new Circuit(bat, [wire(1, 'g1', '+', 'g1', '−')]);
+    const res = run(c, 3);
+    check('батарейка с замкнутыми клеммами сгорает', bat[0].props.burned === true,
+      res.burned.join(' | ').slice(0, 90));
+
+    const psu = [mk('psu', 'g1', { voltage: 5 })];
+    const c2 = new Circuit(psu, [wire(1, 'g1', '+', 'g1', '−')]);
+    const res2 = run(c2, 3);
+    check('у лабораторного блока питания срабатывает защита, а не пожар',
+      !psu[0].props.burned && res2.warnings.some((w) => /замыкание/i.test(w.text)));
+  }
+
+  // 11. «Сброс» возвращает схему к жизни
+  {
+    const parts = [mk('uno', 'b1'), mk('resistor', 'r1', { value: 220 }), mk('led', 'd1')];
+    const wires = [wire(1, 'b1', '5V', 'r1', '1'), wire(2, 'r1', '2', 'd1', 'K'), wire(3, 'd1', 'A', 'b1', 'GND')];
+    const c = new Circuit(parts, wires);
+    run(c, 20);
+    revive(c, parts, [wire(1, 'b1', 'D9', 'r1', '1'), wire(2, 'r1', '2', 'd1', 'A'), wire(3, 'd1', 'K', 'b1', 'GND')]);
+    const back = run(c, 2);
+    check('после замены деталь снова работает', !parts[2].props.burned && back.partInfo.get('d1').brightness > 0.5,
+      `яркость ${(back.partInfo.get('d1').brightness || 0).toFixed(2)}`);
+  }
+
+  check('у полярных деталей в паспорте есть плюс, минус и предел обратного напряжения',
+    ['led', 'electrolytic', 'buzzer', 'lcd1602', 'oled', 'dht11', 'hcsr04', 'pir', 'relay', 'servo', 'stepper28byj']
+      .every((t) => PARTS[t].rating.vMin < 0 && PARTS[t].rating.plus && PARTS[t].rating.minus && PARTS[t].rating.revHint));
 }
 
 console.log('\nКомпилятор: наборы «Эвольвектор»');
