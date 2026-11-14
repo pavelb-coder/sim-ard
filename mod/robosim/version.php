@@ -14,8 +14,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'mod_robosim';
-$plugin->version   = 2026111501;
+$plugin->version   = 2026111601;
 $plugin->requires  = 2022041900;      // Moodle 4.0 и новее.
 $plugin->supported = [400, 500];      // Проверено на 4.0 … 5.x.
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.0.5 (2026-11-15)';
+$plugin->release   = '1.0.6 (2026-11-16)';
