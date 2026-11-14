@@ -2480,6 +2480,70 @@ void loop() {
   },
 
   {
+    id: 'ws2812-garland',
+    name: 'Гирлянда: лента + кольцо + матрица на одном выводе',
+    autorun: true,
+    schematic: {
+      parts: [
+        { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+        { id: 'w1', type: 'ws2812', x: -150, y: 210, props: {} },
+        { id: 'w2', type: 'ws2812r', x: 150, y: 230, props: {} },
+        { id: 'w3', type: 'ws2812m', x: 0, y: 460, props: {} },
+      ],
+      wires: [
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'w1', pin: '5V' } },
+        { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'w1', pin: 'GND' } },
+        { a: { compId: 'b1', pin: 'D6' }, b: { compId: 'w1', pin: 'DIN' } },
+        // данные идут от модуля к модулю: DOUT → DIN следующего
+        { a: { compId: 'w1', pin: 'DOUT' }, b: { compId: 'w2', pin: 'DIN' } },
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'w2', pin: '5V' } },
+        { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'w2', pin: 'GND' } },
+        { a: { compId: 'w2', pin: 'DOUT' }, b: { compId: 'w3', pin: 'DIN' } },
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'w3', pin: '5V' } },
+        { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'w3', pin: 'GND' } },
+      ],
+    },
+    code: `// Гирлянда из трёх модулей на одном выводе.
+// Провод данных всего один: он входит в DIN ленты, выходит из её DOUT и идёт
+// на DIN кольца, а оттуда — на DIN матрицы. Для скетча это одна длинная лента:
+// адреса идут подряд — 0…7 лента, 8…19 кольцо, 20…83 матрица, всего 84.
+
+#include <Adafruit_NeoPixel.h>
+
+const int LED_PIN = 6;
+const int LEDS = 8 + 12 + 64;     // 84 адреса на три модуля
+
+Adafruit_NeoPixel garland(LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// Цвет по кругу: 0 — красный, 85 — зелёный, 170 — синий, 255 — снова красный
+uint32_t wheel(byte pos) {
+  if (pos < 85)  return garland.Color(255 - pos * 3, pos * 3, 0);
+  if (pos < 170) { pos -= 85;  return garland.Color(0, 255 - pos * 3, pos * 3); }
+  pos -= 170;    return garland.Color(pos * 3, 0, 255 - pos * 3);
+}
+
+void setup() {
+  garland.begin();
+  garland.setBrightness(60);      // 84 белых светодиода — это 5 А, так что не на полную
+  garland.show();
+  Serial.begin(9600);
+  Serial.print("Светодиодов в гирлянде: ");
+  Serial.println(garland.numPixels());
+}
+
+void loop() {
+  for (int step = 0; step < 256; step += 4) {
+    for (int i = 0; i < LEDS; i++) {
+      garland.setPixelColor(i, wheel((i * 3 + step) & 255));
+    }
+    garland.show();
+    delay(40);
+  }
+}
+`,
+  },
+
+  {
     id: 'linecar-line',
     name: 'Робот-тележка «Эвольвектор»: езда по линии',
     autorun: true,
@@ -2732,6 +2796,329 @@ void loop() {
     motors(SPEED, 0);
   }
   delay(5);
+}
+`,
+  },
+
+  {
+    id: 'acs712-ammeter',
+    name: 'Амперметр на ACS712: ток через нагрузку',
+    autorun: true,
+    schematic: {
+      parts: [
+        { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+        { id: 'rv1', type: 'pot', x: -150, y: 210, props: { value: 0.5, ohms: 22 } },
+        { id: 'acs1', type: 'acs712', x: 120, y: 210, props: {} },
+      ],
+      wires: [
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'rv1', pin: 'A' } },
+        { a: { compId: 'rv1', pin: 'W' }, b: { compId: 'acs1', pin: 'IP+' } },
+        { a: { compId: 'acs1', pin: 'IP-' }, b: { compId: 'b1', pin: 'GND2' } },
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'acs1', pin: 'VCC' } },
+        { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'acs1', pin: 'GND' } },
+        { a: { compId: 'acs1', pin: 'OUT' }, b: { compId: 'b1', pin: 'A0' } },
+      ],
+    },
+    code: `// Амперметр на датчике тока ACS712.
+// Датчик стоит в разрыв провода: ток нагрузки идёт через его шунт (1,2 мОм),
+// а на выводе OUT появляется напряжение 2,5 В + 185 мВ на каждый ампер.
+// Крутите потенциометр — ток меняется, показания растут.
+
+const int ACS = A0;              // OUT датчика → A0
+const float MV_PER_A = 0.185;    // 185 мВ на ампер — паспорт ACS712-5A
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Амперметр ACS712 готов");
+}
+
+void loop() {
+  int raw = analogRead(ACS);                 // 0…1023
+  float volts = raw * 5.0 / 1023.0;
+  float amps = (volts - 2.5) / MV_PER_A;     // 2,5 В — это ноль ампер
+
+  Serial.print("U = ");
+  Serial.print(volts, 3);
+  Serial.print(" В,  I = ");
+  Serial.print(amps, 3);
+  Serial.println(" А");
+  delay(500);
+}
+`,
+  },
+
+  {
+    id: 'rtc-clock',
+    name: 'Часы на OLED с DS3231',
+    autorun: true,
+    schematic: {
+      parts: [
+        { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+        { id: 'ds1', type: 'rtc', x: -150, y: 220, props: {} },
+        { id: 'oled1', type: 'oled', x: 120, y: 220, props: {} },
+      ],
+      wires: [
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'ds1', pin: 'VCC' } },
+        { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'ds1', pin: 'GND' } },
+        { a: { compId: 'b1', pin: 'A4' }, b: { compId: 'ds1', pin: 'SDA' } },
+        { a: { compId: 'b1', pin: 'A5' }, b: { compId: 'ds1', pin: 'SCL' } },
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'oled1', pin: 'VCC' } },
+        { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'oled1', pin: 'GND' } },
+        { a: { compId: 'b1', pin: 'A4' }, b: { compId: 'oled1', pin: 'SDA' } },
+        { a: { compId: 'b1', pin: 'A5' }, b: { compId: 'oled1', pin: 'SCL' } },
+      ],
+    },
+    code: `// Часы на OLED: время берём у модуля DS3231 по шине I²C.
+// У модуля своя батарейка CR2032, поэтому часы идут, даже когда плата выключена.
+
+#include <Wire.h>
+#include <RTClib.h>
+#include <Adafruit_SSD1306.h>
+
+RTC_DS3231 rtc;
+Adafruit_SSD1306 screen(128, 64, &Wire, -1);
+
+void setup() {
+  Serial.begin(9600);
+  screen.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  screen.clearDisplay();
+
+  if (!rtc.begin()) {
+    Serial.println("Модуль часов не найден");
+    return;
+  }
+  if (rtc.lostPower()) {                 // села батарейка — часы сбились
+    rtc.adjust(DateTime(2026, 11, 12, 9, 0, 0));
+  }
+  Serial.println("Часы DS3231 на связи");
+}
+
+void loop() {
+  DateTime now = rtc.now();
+
+  screen.clearDisplay();
+  screen.setTextSize(2);
+  screen.setCursor(10, 8);
+  screen.print(now.hour());
+  screen.print(":");
+  if (now.minute() < 10) screen.print("0");
+  screen.print(now.minute());
+  screen.print(":");
+  if (now.second() < 10) screen.print("0");
+  screen.print(now.second());
+  screen.setTextSize(1);
+  screen.setCursor(10, 40);
+  screen.print(now.day());
+  screen.print(".");
+  screen.print(now.month());
+  screen.print(".");
+  screen.print(now.year());
+  screen.display();
+
+  delay(200);
+}
+`,
+  },
+
+  {
+    id: 'max7219-face',
+    name: 'Матрица MAX7219: смайлик и бегущая рамка',
+    autorun: true,
+    schematic: {
+      parts: [
+        { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+        { id: 'mx1', type: 'max7219', x: 0, y: 230, props: {} },
+      ],
+      wires: [
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'mx1', pin: 'VCC' } },
+        { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'mx1', pin: 'GND' } },
+        { a: { compId: 'b1', pin: 'D12' }, b: { compId: 'mx1', pin: 'DIN' } },
+        { a: { compId: 'b1', pin: 'D11' }, b: { compId: 'mx1', pin: 'CLK' } },
+        { a: { compId: 'b1', pin: 'D10' }, b: { compId: 'mx1', pin: 'CS' } },
+      ],
+    },
+    code: `// Матрица 8×8 на MAX7219: библиотека LedControl.
+// Драйвер сам переключает 64 светодиода, поэтому от платы нужны всего три
+// провода (DIN, CLK, CS) плюс питание.
+
+#include <LedControl.h>
+
+// LedControl(DIN, CLK, CS, сколько матриц в цепочке)
+LedControl matrix(12, 11, 10, 1);
+
+void setup() {
+  matrix.shutdown(0, false);     // вывести драйвер из спящего режима
+  matrix.setIntensity(0, 6);     // яркость 0…15
+  matrix.clearDisplay(0);
+  Serial.begin(9600);
+  Serial.println("Матрица MAX7219 готова");
+}
+
+// Смайлик: рамка из точек и улыбка
+void face() {
+  matrix.clearDisplay(0);
+  for (int i = 1; i <= 6; i++) {
+    matrix.setLed(0, 0, i, true);
+    matrix.setLed(0, 7, i, true);
+    matrix.setLed(0, i, 0, true);
+    matrix.setLed(0, i, 7, true);
+  }
+  matrix.setLed(0, 2, 2, true);   // глаза
+  matrix.setLed(0, 2, 5, true);
+  matrix.setLed(0, 4, 1, true);   // улыбка
+  matrix.setLed(0, 5, 2, true);
+  matrix.setLed(0, 5, 3, true);
+  matrix.setLed(0, 5, 4, true);
+  matrix.setLed(0, 5, 5, true);
+  matrix.setLed(0, 4, 6, true);
+}
+
+void loop() {
+  face();
+  delay(1200);
+
+  // бегущая рамка: строка битов сдвигается на один столбец
+  for (int shift = 0; shift < 8; shift++) {
+    matrix.clearDisplay(0);
+    for (int row = 0; row < 8; row++) {
+      matrix.setRow(0, row, (0b00011000 << shift) & 0b11111111 | (0b00011000 >> (8 - shift)));
+    }
+    delay(180);
+  }
+}
+`,
+  },
+
+  {
+    id: 'reed-alarm',
+    name: 'Охрана: геркон, зуммер и светодиод',
+    autorun: true,
+    schematic: {
+      parts: [
+        { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+        { id: 'sf1', type: 'reed', x: -150, y: 220, props: { magnet: true } },
+        { id: 'r1', type: 'resistor', x: 100, y: 330, props: { value: 220 } },
+        { id: 'd1', type: 'led', x: 190, y: 330, props: { color: '#ff5544' } },
+        { id: 'bz1', type: 'buzzer', x: 130, y: 210, props: {} },
+      ],
+      wires: [
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'sf1', pin: '1' } },
+        { a: { compId: 'sf1', pin: '2' }, b: { compId: 'b1', pin: 'D2' } },
+        { a: { compId: 'b1', pin: 'D8' }, b: { compId: 'bz1', pin: '1' } },
+        { a: { compId: 'bz1', pin: '2' }, b: { compId: 'b1', pin: 'GND2' } },
+        { a: { compId: 'b1', pin: 'D9' }, b: { compId: 'r1', pin: '1' } },
+        { a: { compId: 'r1', pin: '2' }, b: { compId: 'd1', pin: 'A' } },
+        { a: { compId: 'd1', pin: 'K' }, b: { compId: 'b1', pin: 'GND2' } },
+      ],
+    },
+    code: `// Охрана на герконе.
+// Геркон — это два контакта в стеклянной колбе: пока магнит рядом (дверь закрыта),
+// контакты замкнуты и на выводе D2 высокий уровень. Убрали магнит — контакты
+// разомкнулись, подтяжка INPUT_PULLUP вернула на выводе низкий уровень,
+// и включается сигнализация: пищит зуммер, горит светодиод.
+// Кликните по геркону на схеме, чтобы «убрать магнит».
+
+const int REED = 2;      // геркон между 5 В и D2 (внутренняя подтяжка)
+const int BUZZER = 8;
+const int LED = 9;
+
+bool alarm = false;
+
+void setup() {
+  pinMode(REED, INPUT_PULLUP);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(LED, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Охрана включена");
+}
+
+void loop() {
+  bool closed = digitalRead(REED) == HIGH;  // магнит рядом — контакты замкнуты
+
+  if (!closed && !alarm) {
+    alarm = true;
+    Serial.println("Тревога: дверь открыта!");
+  }
+  if (closed && alarm) {
+    alarm = false;
+    Serial.println("Дверь закрыта, охрана на месте");
+  }
+
+  digitalWrite(LED, alarm ? HIGH : LOW);
+  if (alarm) {
+    tone(BUZZER, 880);
+  } else {
+    noTone(BUZZER);
+  }
+  delay(50);
+}
+`,
+  },
+
+  {
+    id: 'encoder-menu',
+    name: 'Энкодер KY-040: счёт шагов и кнопка',
+    autorun: true,
+    schematic: {
+      parts: [
+        { id: 'b1', type: 'uno', x: 0, y: 0, props: {} },
+        { id: 'enc1', type: 'encoder', x: -60, y: 230, props: {} },
+        { id: 'led1', type: 'led', x: 150, y: 230, props: { color: '#28d17c' } },
+        { id: 'r1', type: 'resistor', x: 150, y: 320, props: { value: 220 } },
+      ],
+      wires: [
+        { a: { compId: 'b1', pin: '5V' }, b: { compId: 'enc1', pin: 'VCC' } },
+        { a: { compId: 'b1', pin: 'GND2' }, b: { compId: 'enc1', pin: 'GND' } },
+        { a: { compId: 'b1', pin: 'D2' }, b: { compId: 'enc1', pin: 'CLK' } },
+        { a: { compId: 'b1', pin: 'D3' }, b: { compId: 'enc1', pin: 'DT' } },
+        { a: { compId: 'b1', pin: 'D4' }, b: { compId: 'enc1', pin: 'SW' } },
+        { a: { compId: 'b1', pin: 'D9' }, b: { compId: 'r1', pin: '1' } },
+        { a: { compId: 'r1', pin: '2' }, b: { compId: 'led1', pin: 'A' } },
+        { a: { compId: 'led1', pin: 'K' }, b: { compId: 'b1', pin: 'GND2' } },
+      ],
+    },
+    code: `// Энкодер KY-040: два выхода CLK и DT переключаются по очереди —
+// по тому, какая из них «догнала» другую, видно направление поворота.
+// Потяните ручку энкодера на схеме влево-вправо: счётчик будет расти и падать.
+
+const int CLK = 2;
+const int DT = 3;
+const int SW = 4;
+const int LED = 9;
+
+int lastClk = HIGH;
+int counter = 0;
+
+void setup() {
+  pinMode(CLK, INPUT);
+  pinMode(DT, INPUT);
+  pinMode(SW, INPUT_PULLUP);
+  pinMode(LED, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Энкодер готов: крутите ручку");
+}
+
+void loop() {
+  int clk = digitalRead(CLK);
+
+  if (clk != lastClk && clk == LOW) {       // щелчок энкодера
+    if (digitalRead(DT) != clk) {
+      counter++;                            // поворот по часовой
+    } else {
+      counter--;                            // против часовой
+    }
+    Serial.print("шаг = ");
+    Serial.println(counter);
+  }
+  lastClk = clk;
+
+  if (digitalRead(SW) == LOW) {             // нажали на ручку
+    counter = 0;
+    Serial.println("сброс");
+  }
+
+  analogWrite(LED, abs(counter) * 8 % 255);
+  delay(2);
 }
 `,
   },

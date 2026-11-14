@@ -147,6 +147,11 @@ function iconFor(type) {
     case 'soil': return `<svg ${c} aria-hidden="true"><rect x="7" y="2" width="12" height="7" rx="1.5"/><path d="M10 9v7M16 9v7"/><path d="M4 16h18" stroke="#8ce8a4"/></svg>`;
     case 'sound': return `<svg ${c} aria-hidden="true"><circle cx="9" cy="9" r="4"/><path d="M15 5a6 6 0 0 1 0 8M18 3a9 9 0 0 1 0 12"/></svg>`;
     case 'servo': return `<svg ${c} aria-hidden="true"><rect x="5" y="6" width="16" height="8" rx="2"/><circle cx="13" cy="6" r="3"/><path d="M13 3v-3"/></svg>`;
+    case 'acs712': return `<svg ${c} aria-hidden="true"><rect x="6" y="4" width="14" height="10" rx="1.5"/><path d="M2 6h4M2 12h4" stroke="#d9b52a"/><path d="M10 7h6M10 11h4" stroke="#8ce8a4"/></svg>`;
+    case 'reed': return `<svg ${c} aria-hidden="true"><rect x="4" y="7" width="16" height="5" rx="2.5"/><path d="M8 9.5h5"/><rect x="17" y="3" width="6" height="4" rx="1" fill="#c0392b" stroke="#c0392b"/></svg>`;
+    case 'encoder': return `<svg ${c} aria-hidden="true"><circle cx="13" cy="8" r="5"/><circle cx="13" cy="8" r="1.6"/><path d="M6 15v2M10 15v2M14 15v2M18 15v2"/></svg>`;
+    case 'rtc': return `<svg ${c} aria-hidden="true"><rect x="3" y="3" width="20" height="13" rx="2" fill="#1d5f97" stroke="#1d5f97"/><circle cx="9" cy="9" r="3" fill="#c3ccd4" stroke="#9aa7b2"/><rect x="15" y="6" width="6" height="6" rx="1" fill="#15181c"/></svg>`;
+    case 'max7219': return `<svg ${c} aria-hidden="true"><rect x="4" y="2" width="18" height="14" rx="1.5" fill="#15181c"/><g fill="#ff5544" stroke="none">${[0, 1, 2].map((r) => [0, 1, 2, 3].map((q) => `<circle cx="${8 + q * 3.4}" cy="${5.5 + r * 3.6}" r="1.1"/>`).join('')).join('')}</g></svg>`;
     case 'linecar': return `<svg ${c} aria-hidden="true"><ellipse cx="13" cy="9" rx="10" ry="6" stroke="#4b5a68"/><rect x="8" y="6" width="9" height="6" rx="1.5" fill="#d9b52a" stroke="#d9b52a"/><circle cx="8" cy="5" r="1.6" fill="#2b3138"/><circle cx="8" cy="13" r="1.6" fill="#2b3138"/><path d="M17 7v4" stroke="#5ee0a0"/></svg>`;
     case 'lcd1602': return `<svg ${c} aria-hidden="true"><rect x="2" y="4" width="22" height="11" rx="1" fill="#0d3a1f" stroke="#1d6b38"/><path d="M5 8h16M5 11h10" stroke="#7ef29d"/></svg>`;
     case 'lcd1602p': return `<svg ${c} aria-hidden="true"><rect x="1" y="5" width="24" height="11" rx="1" fill="#0d3a1f" stroke="#1d6b38"/><path d="M4 9h18M4 12h11" stroke="#7ef29d"/><path d="M3 19v3M6 19v3M9 19v3M12 19v3M15 19v3M18 19v3M21 19v3" stroke="#8fa3b5"/></svg>`;
@@ -449,6 +454,28 @@ function makeBus(boardPart) {
       return schematic.parts.find((p) => p.type === type && pinsOf(p).some((pp) => circuit.netOf(p.id, pp.id) === net)) || null;
     },
     firstOfType(type) { return schematic.parts.find((p) => p.type === type) || null; },
+    /** Сколько светодиодов у модуля WS2812 «физически» (паспорт детали). */
+    wsCapacity(part) { return Number(PARTS[part?.type]?.pixels) || 8; },
+    /**
+     * Цепочка WS2812 от вывода платы: DIN первой ленты → DOUT → DIN следующей.
+     * Так же, как в железе: данные идут по проводу от модуля к модулю, и одна
+     * библиотечная переменная может управлять сразу несколькими модулями.
+     */
+    wsChain(pinNum) {
+      const WS_TYPES = ['ws2812', 'ws2812m', 'ws2812r'];
+      const pin = spec.pins.find((p) => p.num === Number(pinNum));
+      if (!pin) return [];
+      let net = circuit.netOf(boardPart.id, pin.id);
+      const chain = [];
+      for (let hop = 0; hop < 12 && net; hop++) {
+        const part = schematic.parts.find((p) => WS_TYPES.includes(p.type) && !chain.includes(p)
+          && circuit.netOf(p.id, 'DIN') === net);
+        if (!part) break;
+        chain.push(part);
+        net = circuit.netOf(part.id, 'DOUT');
+      }
+      return chain;
+    },
     partsOfType(type) { return schematic.parts.filter((p) => p.type === type); },
     /** Вывод платы и вывод детали на одном узле? (по ним библиотека находит экран) */
     sameNet(pinNum, part, pinId) {
@@ -1265,6 +1292,8 @@ const trace = {
   lcd: {},             // 'lcd' → строки на экране
   pixels: {},          // 'ws1' → цвета адресной ленты/матрицы после show()
   linecar: {},          // 'rb1' → сколько проехала, сколько времени видела линию
+  grids: {},            // 'mx1' → точечная картинка матрицы MAX7219 8×8
+  acs: {},              // 'acs1' → самый большой ток, который видел датчик
   sonarDistances: [],  // расстояния, которые прочитал скетч
   pressSeen: false,
   ledWhilePressed: 0,
@@ -1286,6 +1315,8 @@ function resetTrace() {
   trace.lcd = {};
   trace.pixels = {};
   trace.linecar = {};
+  trace.grids = {};
+  trace.acs = {};
   trace.sonarDistances = [];
   trace.pressSeen = false;
   trace.ledWhilePressed = 0;
@@ -1373,14 +1404,19 @@ function sampleTrace(res) {
       car.speed = Math.abs(Number(p.props?.speed) || 0);
       car.pose = { x: p.props?.pose?.x || 0, y: p.props?.pose?.y || 0, th: p.props?.pose?.th || 0 };
       trace.linecar[p.id] = car;
+    } else if (p.type === 'max7219') {
+      const grid = Array.isArray(p.props?.grid) ? p.props.grid : [];
+      trace.grids[p.id] = grid.map((row) => (Array.isArray(row) ? row.map(Boolean) : []));
     } else if (p.type === 'servo') {
       const a = Number(p.props?.angle ?? 0);
       const s = trace.servos[p.id] || { min: a, max: a };
       s.min = Math.min(s.min, a);
       s.max = Math.max(s.max, a);
       trace.servos[p.id] = s;
-    } else if (p.type === 'lcd1602' || p.type === 'lcd1602p') {
+    } else if (p.type === 'lcd1602' || p.type === 'lcd1602p' || p.type === 'oled') {
       trace.lcd[p.id] = [...(p.props?.lines || [])];
+    } else if (p.type === 'acs712') {
+      trace.acs[p.id] = Math.max(trace.acs[p.id] || 0, Number(p.__acsI) || 0);
     }
   }
 }

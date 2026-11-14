@@ -1,0 +1,1512 @@
+{
+ "boot": {
+  "errors": [],
+  "parts": 0,
+  "status": "Симуляция идёт",
+  "tabs": [
+   "Uno C++"
+  ]
+ },
+ "blink": {
+  "status": "Симуляция идёт",
+  "parts": 0,
+  "wires": 0,
+  "serial": "Blink: поехали!\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "led": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 3,
+  "serial": "Три коротких, один длинный\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "button": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 5,
+  "serial": "Нажмите кнопку на схеме\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "pot": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 6,
+  "serial": "A0 = 511  ->  ШИМ 127\nA0 = 511  ->  ШИМ 127\nA0 = 511  ->  ШИМ 127\nA0 = 511  ->  ШИМ 127\nA0 = 511  ->  ШИМ 127\nA0 = 511  ->  ШИМ 127\nA0 = 511  ->  ШИМ 127\nA0 = 511  ->  ШИМ 127\nA0 = 511  ->  ШИМ 127\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": true,
+  "channels": [
+   "Uno · A0",
+   "Uno · D9",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": [],
+  "scope_data": [
+   {
+    "on": true,
+    "label": "Uno A0",
+    "count": 584
+   },
+   {
+    "on": true,
+    "label": "Uno D9",
+    "count": 584
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   }
+  ]
+ },
+ "rc": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 4,
+  "serial": "Заряд/разряд RC-цепи\nзаряд, напряжение: 647\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": true,
+  "channels": [
+   "Uno · A0",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": [],
+  "scope_data": [
+   {
+    "on": true,
+    "label": "Uno A0",
+    "count": 440
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   }
+  ]
+ },
+ "servo": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 3,
+  "serial": "Серво: 0 → 180 → 0\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "lcd": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 4,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "oled": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 4,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "dht": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 3,
+  "serial": "DHT11 запущен\nT = 24 C,  H = 45 %\nT = 24 C,  H = 45 %\nT = 24 C,  H = 45 %\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "sonar": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 4,
+  "serial": "эхо 2900 мкс -> 50 см\nэхо 2900 мкс -> 50 см\nэхо 2900 мкс -> 50 см\nэхо 2900 мкс -> 50 см\nэхо 2900 мкс -> 50 см\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "danger": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 2,
+  "serial": "\n✗ Светодиод (D1) сгорел: ток 257 мА вместо 30 мА — поставьте резистор 220–330 Ом. Замените деталь: кнопка «Сброс» берёт новые.\n",
+  "warn": "⚠ Светодиод (D1) сгорел: ток 257 мА вместо 30 мА — поставьте резистор 220–330 Ом. Замените деталь: кнопка «Сброс» берёт новые.",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "esp32": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 6,
+  "serial": "127\nGPIO32 = 2047  ->  LED 127\nGPIO32 = 2047  ->  LED 127\nGPIO32 = 2047  ->  LED 127\nGPIO32 = 2047  ->  LED 127\nGPIO32 = 2047  ->  LED 127\nGPIO32 = 2047  ->  LED 127\nGPIO32 = 2047  ->  LED 127\nGPIO32 = 2047  ->  LED 127\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": true,
+  "channels": [
+   "ESP32 · G33",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "ESP32 C++"
+  ],
+  "errors": [],
+  "console": [],
+  "scope_data": [
+   {
+    "on": true,
+    "label": "ESP32 G33",
+    "count": 648
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   }
+  ]
+ },
+ "pico": {
+  "status": "Симуляция идёт",
+  "parts": 0,
+  "wires": 0,
+  "serial": "мигание 1\nмигание 2\nмигание 3\nмигание 4\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Pico MICROPYTHON"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "pico-pwm": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 6,
+  "serial": "767\nADC 32767 -> duty 32767\nADC 32767 -> duty 32767\nADC 32767 -> duty 32767\nADC 32767 -> duty 32767\nADC 32767 -> duty 32767\nADC 32767 -> duty 32767\nADC 32767 -> duty 32767\nADC 32767 -> duty 32767\nADC 32767 -> duty 32767\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": true,
+  "channels": [
+   "Pico · GP28",
+   "Pico · GP11",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Pico MICROPYTHON"
+  ],
+  "errors": [],
+  "console": [],
+  "scope_data": [
+   {
+    "on": true,
+    "label": "Pico GP28",
+    "count": 736
+   },
+   {
+    "on": true,
+    "label": "Pico GP11",
+    "count": 736
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   }
+  ]
+ },
+ "two-boards": {
+  "status": "Симуляция идёт",
+  "parts": 0,
+  "wires": 0,
+  "serial": "[Uno] Uno на связи\n[ESP32] ESP32 на связи\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++",
+   "ESP32 C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "rgb": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 7,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "relay": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 8,
+  "serial": "Реле: раз в секунду\nщёлк: лампа горит\nотпустило: лампа погасла\nщёлк: лампа горит\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "joystick": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 8,
+  "serial": "X 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\nX 511  Y 511\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "seg7": {
+  "status": "Симуляция идёт",
+  "parts": 8,
+  "wires": 15,
+  "serial": "цифра 0\nцифра 1\nцифра 2\nцифра 3\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "stepper": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 6,
+  "serial": "Шаговик: вперёд и назад\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "power": {
+  "status": "Схема под питанием",
+  "parts": 4,
+  "wires": 5,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [],
+  "errors": [],
+  "console": []
+ },
+ "scope-pwm": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 6,
+  "serial": "Осциллограф на D9\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": true,
+  "channels": [
+   "Uno · D9",
+   "Uno · A0",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": [],
+  "scope_data": [
+   {
+    "on": true,
+    "label": "Uno D9",
+    "count": 844
+   },
+   {
+    "on": true,
+    "label": "Uno A0",
+    "count": 844
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   },
+   {
+    "on": false,
+    "label": "",
+    "count": 0
+   }
+  ]
+ },
+ "multimeter": {
+  "status": "Схема под питанием",
+  "parts": 5,
+  "wires": 7,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [],
+  "errors": [],
+  "console": []
+ },
+ "probe": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 7,
+  "serial": "Пробник на D9\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "shift595": {
+  "status": "Симуляция идёт",
+  "parts": 9,
+  "wires": 17,
+  "serial": "74HC595: бегущий огонь\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "motor": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 7,
+  "serial": "L298N: вперёд-назад\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "keypad": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 12,
+  "serial": "Нажмите клавишу на схеме\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "overvolt": {
+  "status": "Схема под питанием",
+  "parts": 3,
+  "wires": 4,
+  "serial": "\n✗ Датчик DHT11 (DHT1) сгорел: 9 В вместо 5,5 В — рабочее напряжение 3–5,5 В. Замените деталь: кнопка «Сброс» берёт новые.\n",
+  "warn": "⚠ Датчик DHT11 (DHT1) сгорел: 9 В вместо 5,5 В — рабочее напряжение 3–5,5 В. Замените деталь: кнопка «Сброс» берёт новые.",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [],
+  "errors": [],
+  "console": []
+ },
+ "short": {
+  "status": "Симуляция идёт",
+  "parts": 0,
+  "wires": 1,
+  "serial": "5 В на земле — короткое замыкание\n\n✗ Arduino Uno (A1) сгорела: короткое замыкание — вывод 5 В соединён с GND проводом. Замените плату: кнопка «Сброс» берёт новую.\n",
+  "warn": "⚠ Arduino Uno (A1) сгорела: короткое замыкание — вывод 5 В соединён с GND проводом. Замените плату: кнопка «Сброс» берёт новую.",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "rpi5-led": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 3,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "RPi 5 MICROPYTHON"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "usb-uno-pi": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 5,
+  "serial": "no: Uno готова, шлю показания A0\n[RPi 5] от Arduino: A0=511\n[Uno] A0=511\n[RPi 5] от Arduino: A0=511\n[Uno] A0=511\n[RPi 5] от Arduino: A0=511\n[Uno] A0=511\n[RPi 5] от Arduino: A0=511\n[Uno] A0=511\n[RPi 5] от Arduino: A0=511\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++",
+   "RPi 5 MICROPYTHON"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "two-leds": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 6,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "button-toggle": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 5,
+  "serial": "нажмите кнопку\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "fade": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 3,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "ldr-nightlight": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 7,
+  "serial": "свет=140\nсвет=140\nсвет=140\nсвет=140\nсвет=140\nсвет=140\nсвет=140\nсвет=140\nсвет=140\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "buzzer-button": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 4,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "transistor-motor": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 7,
+  "serial": "",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "for-loop": {
+  "status": "Симуляция идёт",
+  "parts": 6,
+  "wires": 9,
+  "serial": "бегущий огонь\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "array-pattern": {
+  "status": "Симуляция идёт",
+  "parts": 6,
+  "wires": 9,
+  "serial": "1\n2\n4\n7\n0\n1\n2\n4\n7\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "functions": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 6,
+  "serial": "два ритма\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "switch-menu": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 7,
+  "serial": "r/g/b — цвет, x — погасить\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "serial-echo": {
+  "status": "Симуляция идёт",
+  "parts": 0,
+  "wires": 0,
+  "serial": "напишите что-нибудь — я повторю\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "string-cmd": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 6,
+  "serial": "формат команды: LED 9 1\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "random-dice": {
+  "status": "Симуляция идёт",
+  "parts": 8,
+  "wires": 15,
+  "serial": "бросаем кубик\nвыпало 5\nвыпало 1\nвыпало 5\nвыпало 3\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "millis-blink": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 3,
+  "serial": "мигаем без delay\nмиг, светодиод горит\nмиг, светодиод погас\nмиг, светодиод горит\nмиг, светодиод погас\nмиг, светодиод горит\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "servo-pot": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 6,
+  "serial": "90\n90\n90\n90\n90\n90\n90\n90\n90\n90\n90\n90\n90\n90\n90\n90\n90\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "mpu-tilt": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 4,
+  "serial": "н 0 град | aZ 1 g | гироскоп Z 0 град/с\nнаклон 0 град | aZ 1 g | гироскоп Z 0 град/с\nнаклон 0 град | aZ 1 g | гироскоп Z 0 град/с\nнаклон 0 град | aZ 1 g | гироскоп Z 0 град/с\nнаклон 0 град | aZ 1 g | гироскоп Z 0 град/с\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "bmp-altimeter": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 8,
+  "serial": "Барометр BMP280: ползунок меняет давление\n1013 гПа, 24 C, высота 0 м\n1013 гПа, 24 C, высота 0 м\n1013 гПа, 24 C, высота 0 м\n1013 гПа, 24 C, высота 0 м\n1013 гПа, 24 C, высота 0 м\n1013 гПа, 24 C, высота 0 м\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "ds18b20-thermo": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 6,
+  "serial": "Датчиков на шине: 1\nT = 24 C\nT = 24 C\nT = 24 C\nT = 24 C\nT = 24 C\nT = 24 C\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "bh1750-lux": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 8,
+  "serial": "Люксметр BH1750 запущен\nсвет 300 лк | норма\nсвет 300 лк | норма\nсвет 300 лк | норма\nсвет 300 лк | норма\nсвет 300 лк | норма\nсвет 300 лк | норма\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "mq2-gas": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 9,
+  "serial": "MQ-2 включён\nуровень газа 1 — чисто\nуровень газа 1 — чисто\nуровень газа 1 — чисто\nуровень газа 1 — чисто\nуровень газа 1 — чисто\nуровень газа 1 — чисто\nуровень газа 1 — чисто\nуровень газа 1 — чисто\nуровень газа 1 — чисто\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "soil-watering": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 6,
+  "serial": "4 — норма\nвлажность 57 %, датчик 614 — норма\nвлажность 57 %, датчик 614 — норма\nвлажность 57 %, датчик 614 — норма\nвлажность 57 %, датчик 614 — норма\nвлажность 57 %, датчик 614 — норма\nвлажность 57 %, датчик 614 — норма\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "sound-clap": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 7,
+  "serial": "фона на 0\nгромкость 103, выше фона на 0\nгромкость 103, выше фона на 0\nгромкость 103, выше фона на 0\nгромкость 103, выше фона на 0\nгромкость 103, выше фона на 0\nгромкость 103, выше фона на 0\nгромкость 103, выше фона на 0\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "lcd-parallel": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 11,
+  "serial": "Экран подключён по четырём проводам данных\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "ws2812-rainbow": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 3,
+  "serial": "Лента на 8 светодиодов готова\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "ws2812-matrix": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 3,
+  "serial": "Матрица 8x8: 64 светодиода\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "ws2812-ring": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 3,
+  "serial": "Кольцо на 12 светодиодов готово\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "linecar-line": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 16,
+  "serial": "Тележка на старте: ищу линию\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "linecar-pwm": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 16,
+  "serial": "Плавный ход: ШИМ 130 из 255\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "linecar-laps": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 16,
+  "serial": "Едем 1 круга\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "ws2812-garland": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 9,
+  "serial": "Светодиодов в гирлянде: 84\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "acs712-ammeter": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 6,
+  "serial": "Амперметр ACS712 готов\nU = 2.593 В,  I = 0.463 А\nU = 2.593 В,  I = 0.463 А\nU = 2.593 В,  I = 0.463 А\nU = 2.593 В,  I = 0.463 А\nU = 2.593 В,  I = 0.463 А\nU = 2.593 В,  I = 0.463 А\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "rtc-clock": {
+  "status": "Симуляция идёт",
+  "parts": 2,
+  "wires": 8,
+  "serial": "Часы DS3231 на связи\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "max7219-face": {
+  "status": "Симуляция идёт",
+  "parts": 1,
+  "wires": 5,
+  "serial": "Матрица MAX7219 готова\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "reed-alarm": {
+  "status": "Симуляция идёт",
+  "parts": 4,
+  "wires": 7,
+  "serial": "Охрана включена\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "encoder-menu": {
+  "status": "Симуляция идёт",
+  "parts": 3,
+  "wires": 8,
+  "serial": "Энкодер готов: крутите ручку\n",
+  "warn": "",
+  "problems": "",
+  "running": true,
+  "scope": false,
+  "channels": [
+   "—",
+   "—",
+   "—",
+   "—"
+  ],
+  "tabs": [
+   "Uno C++"
+  ],
+  "errors": [],
+  "console": []
+ },
+ "two_boards_switch": {
+  "tabs": [
+   "b1",
+   "b2"
+  ],
+  "code_head": "// Второй скетч — для ESP32 (встроенный светодиод GPIO2).",
+  "badge": "Arduino C++",
+  "serial": "[Uno] Uno на связи\n[ESP32] ESP32 на связи\n"
+ },
+ "fatal_errors": []
+}

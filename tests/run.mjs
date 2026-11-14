@@ -547,6 +547,139 @@ console.log('\nROS 2: команды терминала');
   check('пустой топик для echo — ошибка', execute('ros2 topic echo /нет', ctx).error === true);
 }
 
+console.log('\nНовые датчики и модули: ток, магнит, энкодер, часы, матрица');
+
+{
+  const P = (type) => PARTS[type];
+  check('пять новых деталей на месте и с выводами',
+    ['acs712', 'reed', 'encoder', 'rtc', 'max7219'].every((t) => P(t) && P(t).pins({}).length >= 2),
+    ['acs712', 'reed', 'encoder', 'rtc', 'max7219'].filter((t) => !P(t)).join(', '));
+  check('категории и подписи новых деталей заполнены',
+    P('acs712').category === 'Датчики' && P('reed').category === 'Датчики' && P('encoder').category === 'Датчики'
+    && P('rtc').category === 'Модули' && P('max7219').category === 'Модули'
+    && P('acs712').name.includes('ACS712') && P('max7219').name.includes('MAX7219'));
+
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type] });
+  const w = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  const solve = (parts, wires, rounds = 3) => {
+    const c = new Circuit(parts, wires);
+    let res = null;
+    for (let i = 0; i < rounds; i++) res = c.solve(new Map([['b1', { pins: new Map() }]]), 1 / 120);
+    return { c, res };
+  };
+  const A0 = 14;
+
+  // --- датчик тока: шунт в разрыв, выход 2,5 В + 185 мВ/А
+  {
+    const { c, res } = solve([mk('uno', 'b1'), mk('resistor', 'r1', { value: 10 }), mk('acs712', 'a1')],
+      [w(1, 'b1', '5V', 'r1', '1'), w(2, 'r1', '2', 'a1', 'IP+'), w(3, 'a1', 'IP-', 'b1', 'GND'),
+       w(4, 'b1', '5V', 'a1', 'VCC'), w(5, 'b1', 'GND2', 'a1', 'GND'), w(6, 'a1', 'OUT', 'b1', 'A0')]);
+    const amps = res.partInfo.get('a1')?.amps ?? 0;
+    const vOut = res.voltages.get(c.netOf('b1', 'A0')) ?? 0;
+    check('ACS712: ток идёт через шунт, на OUT — 2,5 В плюс 185 мВ на ампер',
+      Math.abs(amps - 0.5) < 0.05 && Math.abs(vOut - (2.5 + 0.185 * amps)) < 0.05,
+      `${amps.toFixed(3)} А → ${vOut.toFixed(3)} В`);
+    const idle = solve([mk('uno', 'b1'), mk('acs712', 'a2')],
+      [w(1, 'b1', '5V', 'a2', 'VCC'), w(2, 'b1', 'GND2', 'a2', 'GND'), w(3, 'a2', 'OUT', 'b1', 'A0')]);
+    const vIdle = idle.res.voltages.get(idle.c.netOf('b1', 'A0')) ?? 0;
+    check('ACS712 без тока: выход в покое 2,5 В (±0,05 В)', Math.abs(vIdle - 2.5) < 0.05, `${vIdle.toFixed(3)} В`);
+  }
+
+  // --- геркон: магнит рядом замыкает контакты
+  {
+    const build = (magnet) => {
+      const c = new Circuit([mk('uno', 'b1'), mk('resistor', 'r1', { value: 220 }), mk('led', 'd1'), mk('reed', 'sf1', { magnet })],
+        [w(1, 'b1', 'D9', 'r1', '1'), w(2, 'r1', '2', 'd1', 'A'), w(3, 'd1', 'K', 'sf1', '1'), w(4, 'sf1', '2', 'b1', 'GND')]);
+      const rt = { pins: new Map([[9, { mode: 'OUTPUT', pwm: 255 }]]) };
+      let res = null;
+      for (let i = 0; i < 3; i++) res = c.solve(new Map([['b1', rt]]), 1 / 120);
+      return res.partInfo.get('d1')?.brightness ?? 0;
+    };
+    check('геркон: с магнитом цепь замыкается, светодиод горит',
+      build(true) > 0.5 && build(false) < 0.02,
+      `${(build(true) * 100).toFixed(0)} % / ${(build(false) * 100).toFixed(0)} %`);
+  }
+
+  // --- энкодер: квадратурные уровни на CLK и DT
+  {
+    const pair = (steps) => {
+      const c = new Circuit([mk('uno', 'b1'), mk('encoder', 'e1', { steps })],
+        [w(1, 'b1', '5V', 'e1', 'VCC'), w(2, 'b1', 'GND2', 'e1', 'GND'),
+         w(3, 'e1', 'CLK', 'b1', 'D2'), w(4, 'e1', 'DT', 'b1', 'D3')]);
+      const res = c.solve(new Map([['b1', { pins: new Map(), mode: 'RUN' }]]), 1 / 120);
+      const hi = (pin) => (res.voltages.get(c.netOf('b1', pin)) ?? 0) > 2.5 ? 1 : 0;
+      return `${hi('D2')}${hi('D3')}`;
+    };
+    const seq = [0, 1, 2, 3].map(pair).join(' ');
+    check('энкодер выдаёт квадратурную последовательность 10 → 11 → 01 → 00', seq === '10 11 01 00', seq);
+    const swV = (pressed) => {
+      const c = new Circuit([mk('uno', 'b1'), mk('encoder', 'e2', { steps: 0, pressed })],
+        [w(1, 'b1', '5V', 'e2', 'VCC'), w(2, 'b1', 'GND2', 'e2', 'GND'), w(3, 'e2', 'SW', 'b1', 'D2')]);
+      const res = c.solve(new Map([['b1', { pins: new Map(), mode: 'RUN' }]]), 1 / 120);
+      return res.voltages.get(c.netOf('b1', 'D2')) ?? 0;
+    };
+    check('кнопка энкодера SW замыкает вывод на землю при нажатии',
+      swV(false) > 4 && swV(true) < 0.5, `${swV(false).toFixed(1)} / ${swV(true).toFixed(1)} В`);
+  }
+
+  // --- часы DS3231 (RTClib)
+  {
+    const part = { id: 'ds1', type: 'rtc', props: {} };
+    const clockBus = {
+      partOnPin: () => null, firstOfType: (t) => (t === 'rtc' ? part : null),
+      partsOfType: (t) => (t === 'rtc' ? [part] : []), sameNet: () => false,
+      voltageOfPin: () => 5, poweredOn: () => true, changed: () => {},
+      addStepper: () => {}, stepMotor: () => {},
+    };
+    const { RTC_DS3231, DateTime } = createLibraries(clockBus);
+    const rtc = new RTC_DS3231();
+    const began = rtc.begin();
+    const now = rtc.now();
+    const real = new Date();
+    check('DS3231: begin() находит модуль, now() отдаёт текущее время',
+      began && now.hour() === real.getHours() && now.minute() === real.getMinutes() && now.year() === real.getFullYear(),
+      now.toString());
+    rtc.adjust(new DateTime(2026, 3, 14, 15, 9, 26));
+    const set = rtc.now();
+    check('DS3231: adjust() переставляет часы, время идёт от новой точки',
+      set.hour() === 15 && set.minute() === 9 && Math.abs(set.second() - 26) <= 2, set.toString());
+    check('DS3231: на детали видно время, lostPower() — false',
+      typeof part.props.offsetSec === 'number' && rtc.lostPower() === false);
+    check('#include <RTClib.h> поддерживается',
+      checkIncludes('#include <RTClib.h>\nvoid setup(){}\nvoid loop(){}').length === 0);
+  }
+
+  // --- матрица MAX7219 (LedControl)
+  {
+    const part = { id: 'mx1', type: 'max7219', props: { grid: [] } };
+    const mtxBus = {
+      partOnPin: (p, t) => (t === 'max7219' ? part : null), firstOfType: () => part,
+      partsOfType: () => [part], sameNet: () => false, voltageOfPin: () => 5,
+      poweredOn: () => true, changed: () => {}, addStepper: () => {}, stepMotor: () => {},
+    };
+    const { LedControl } = createLibraries(mtxBus);
+    const lc = new LedControl(12, 11, 10, 1);
+    lc.shutdown(0, false);
+    lc.setIntensity(0, 5);
+    lc.setLed(0, 3, 4, true);
+    check('MAX7219: setLed() зажигает точку в нужной строке и столбце',
+      part.props.grid[3][4] === true && part.props.grid[0][0] === false && part.props.intensity === 5,
+      JSON.stringify(part.props.grid[3]));
+    lc.setRow(0, 1, 0b10000001);
+    check('MAX7219: setRow() заливает строку битовой маской',
+      part.props.grid[1][0] === true && part.props.grid[1][7] === true && part.props.grid[1][3] === false);
+    lc.clearDisplay(0);
+    check('MAX7219: clearDisplay() гасит все точки',
+      part.props.grid.every((row) => row.every((v) => v === false)));
+    lc.shutdown(0, true);
+    lc.setLed(0, 0, 0, true);
+    check('MAX7219: после shutdown() матрица не принимает новые точки',
+      part.props.grid[0][0] === false && part.props.active === false);
+    check('#include <LedControl.h> поддерживается',
+      checkIncludes('#include <LedControl.h>\nvoid setup(){}\nvoid loop(){}').length === 0);
+  }
+}
+
 console.log('\nROS 2: задания');
 
 {
@@ -1760,8 +1893,8 @@ console.log('\nЗадания «Эвольвектора»: эталоны пр�
   const examples = EXAMPLES;
   const byId = Object.fromEntries(examples.map((e) => [e.id, e]));
 
-  check('в курсе 42 задания: 8 базовых, 28 из наборов «Эвольвектор», 5 датчиков, экран, лента WS2812 и тележка',
-    TASKS.length === 42 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 34,
+  check('в курсе 46 заданий: 8 базовых, 32 из наборов «Эвольвектор», 5 датчиков, экран, лента, тележка, гирлянда, ток, часы и матрица',
+    TASKS.length === 46 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 38,
     `всего ${TASKS.length}`);
   check('у заданий уникальные id и заполнены уровень, тема, минуты, цели и проверки',
     new Set(TASKS.map((t) => t.id)).size === TASKS.length
@@ -2046,12 +2179,15 @@ console.log('\nWS2812: адресная лента, матрица и кольц
   const mtx = PARTS.ws2812m;
   const ring = PARTS.ws2812r;
   const ids = (def) => def.pins({}).map((p) => p.id);
-  check('лента WS2812: три вывода — 5V, DIN, GND',
-    strip && ids(strip).length === 3 && ['5V', 'DIN', 'GND'].every((x) => ids(strip).includes(x))
+  check('лента WS2812: четыре вывода — 5V, DIN, GND и DOUT для цепочки',
+    strip && ids(strip).length === 4 && ['5V', 'DIN', 'GND', 'DOUT'].every((x) => ids(strip).includes(x))
     && strip.w > 150, `выводы: ${ids(strip).join(' ')}`);
-  check('матрица 8×8 и кольцо на 12 — такие же три вывода',
-    ids(mtx).join(',') === 'GND,DIN,5V' && ids(ring).length === 3 && mtx.w === mtx.h,
+  check('матрица 8×8 и кольцо на 12 — тоже с DOUT, чтобы соединяться в гирлянду',
+    ids(mtx).slice(0, 3).join(',') === 'GND,DIN,5V' && ids(ring).length === 4
+    && ids(mtx).includes('DOUT') && ids(ring).includes('DOUT') && mtx.w === mtx.h,
     `${ids(mtx).join(' ')} / ${ids(ring).join(' ')}`);
+  check('у модулей WS2812 в паспорте записано число светодиодов',
+    strip.pixels === 8 && mtx.pixels === 64 && ring.pixels === 12);
   check('у деталей есть паспорт: питание 5 В и полярность',
     PARTS.ws2812m.__rating ? true : true);   // заполняется ниже из RATED-таблицы
 
@@ -2137,6 +2273,54 @@ console.log('\nWS2812: адресная лента, матрица и кольц
       part.props.pixels.length === 64 && part.props.pixels[63][0] === 252,
       `${part.props.pixels.length} адресов`);
   }
+  // --- цепочка модулей: DOUT одной ленты → DIN следующей
+  {
+    const strip1 = { id: 'w1', type: 'ws2812', props: {} };
+    const ring1 = { id: 'w2', type: 'ws2812r', props: {} };
+    const mtx1 = { id: 'w3', type: 'ws2812m', props: {} };
+    const chainBus = {
+      ...wsBus(strip1),
+      wsChain: (pin) => (Number(pin) === 6 ? [strip1, ring1, mtx1] : []),
+      wsCapacity: (part) => ({ ws2812: 8, ws2812r: 12, ws2812m: 64 }[part.type] || 8),
+    };
+    const { Adafruit_NeoPixel } = createLibraries(chainBus);
+    const neo = new Adafruit_NeoPixel(84, 6, 0);      // 8 + 12 + 64
+    neo.begin();
+    for (let i = 0; i < 84; i++) neo.setPixelColor(i, 0, 0, 0);
+    neo.setPixelColor(0, 255, 0, 0);                  // первый светодиод ленты
+    neo.setPixelColor(8, 0, 255, 0);                  // первый светодиод кольца
+    neo.setPixelColor(20, 0, 0, 255);                 // первый светодиод матрицы
+    neo.setPixelColor(83, 255, 255, 0);               // последний у матрицы
+    neo.show();
+    check('гирлянда: адреса идут подряд — 0…7 лента, 8…19 кольцо, 20…83 матрица',
+      strip1.props.pixels.length === 8 && ring1.props.pixels.length === 12 && mtx1.props.pixels.length === 64
+      && strip1.props.pixels[0].join(',') === '255,0,0'
+      && ring1.props.pixels[0].join(',') === '0,255,0'
+      && mtx1.props.pixels[0].join(',') === '0,0,255'
+      && mtx1.props.pixels[63].join(',') === '255,255,0',
+      `${strip1.props.pixels[0]} / ${ring1.props.pixels[0]} / ${mtx1.props.pixels[0]}`);
+
+    // объект на 8 адресов управляет только лентой: до кольца данные не доходят
+    const small = new Adafruit_NeoPixel(8, 6, 0);
+    small.begin();
+    small.fill(small.Color(9, 9, 9));
+    small.show();
+    check('если в объекте меньше адресов, чем в цепочке, «хвост» держит прежний цвет',
+      strip1.props.pixels.every((c) => c.join(',') === '9,9,9')
+      && ring1.props.pixels[0].join(',') === '0,255,0' && ring1.props.pixels.every((c) => c.join(',') !== '9,9,9'),
+      `${ring1.props.pixels[0]}`);
+  }
+  {
+    const stripA = { id: 'w1', type: 'ws2812', props: {} };
+    const { Adafruit_NeoPixel } = createLibraries(wsBus(stripA, 3));
+    const neo = new Adafruit_NeoPixel(8, 9, 0);       // вывод 9, лента на 3
+    neo.begin();
+    neo.fill(neo.Color(200, 0, 0));
+    neo.show();
+    check('цепочка ищется от вывода платы: чужой вывод гирлянду не зажигает',
+      (stripA.props.pixels || []).every((c) => c[0] === 0));
+  }
+
   {
     const part = stripPart();
     const { Adafruit_NeoPixel } = createLibraries(wsBus(part, 9));

@@ -30,6 +30,8 @@ export const INCLUDES = new Map([
   ['adafruit_ssd1306.h', ['Adafruit_SSD1306']],
   ['adafruit_gfx.h', []],
   ['adafruit_neopixel.h', ['Adafruit_NeoPixel']],
+  ['rtclib.h', ['RTC_DS3231', 'RTC_DS1307', 'DateTime']],
+  ['ledcontrol.h', ['LedControl']],
   ['spi.h', []],
   ['stepper.h', ['Stepper']],
   ['math.h', []],
@@ -259,7 +261,7 @@ export function createLibraries(bus) {
       this._size = 1; this._x = 0; this._y = 0;
       this._rows = Array.from({ length: Math.floor(height / 8) }, () => '');
     }
-    begin() { return true; }
+    begin() { return true; }          // аргументы (тип питания, адрес) не важны
     clearDisplay() { this._rows = Array.from({ length: Math.floor(this.h / 8) }, () => ''); this._dirty = true; }
     display() { this._push(); }
     setTextSize(n) { this._size = n || 1; }
@@ -456,6 +458,149 @@ export function createLibraries(bus) {
   };
   const packColor = ([r, g, b]) => ((clamp8(r) << 16) | (clamp8(g) << 8) | clamp8(b)) >>> 0;
 
+  // ---------------------------------------------------------------- часы ----
+  /**
+   * DS3231 по I²C — библиотека RTClib.
+   *
+   * Часы идут по-настоящему: модуль отдаёт текущее время, как настоящая
+   * микросхема с батарейкой CR2032. Пока скетч работает, now() каждый раз
+   * возвращает новое время, а adjust() переставляет часы.
+   */
+  const pad2 = (v) => String(v).padStart(2, '0');
+  class DateTime {
+    constructor(...args) {
+      if (args.length >= 6) {
+        this._d = new Date(args[0], args[1] - 1, args[2], args[3], args[4], args[5] || 0);
+      } else if (args.length === 1 && args[0] instanceof Date) {
+        this._d = new Date(args[0].getTime());
+      } else if (args.length === 1 && typeof args[0] === 'number') {
+        this._d = new Date(args[0] * 1000);
+      } else {
+        this._d = new Date();
+      }
+    }
+    year() { return this._d.getFullYear(); }
+    month() { return this._d.getMonth() + 1; }
+    day() { return this._d.getDate(); }
+    hour() { return this._d.getHours(); }
+    minute() { return this._d.getMinutes(); }
+    second() { return this._d.getSeconds(); }
+    dayOfTheWeek() { return this._d.getDay(); }
+    unixtime() { return Math.floor(this._d.getTime() / 1000); }
+    toString() {
+      return `${this.year()}-${pad2(this.month())}-${pad2(this.day())} ${pad2(this.hour())}:${pad2(this.minute())}:${pad2(this.second())}`;
+    }
+  }
+
+  class RTC_DS3231 {
+    constructor() { this._part = null; this._offset = 0; this._adjusted = null; }
+    _find() {
+      if (!this._part) this._part = bus.firstOfType('rtc');
+      return this._part;
+    }
+    begin() { this._find(); return !!this._part; }
+    adjust(dt) {
+      this._adjusted = dt instanceof DateTime ? dt : new DateTime(dt);
+      this._offset = this._adjusted._d.getTime() - Date.now();
+      const part = this._find();
+      if (part) { part.props.offsetSec = Math.round(this._offset / 1000); bus.changed(part); }
+      return true;
+    }
+    now() { return new DateTime(Math.floor((Date.now() + this._offset) / 1000)); }   // unix-время, как в RTClib
+    lostPower() { return false; }
+    temperature() { return 24.5; }
+    disable32K() {}
+    writeSqwPinMode() {}
+  }
+  const RTC_DS1307 = RTC_DS3231;
+
+  // ------------------------------------------------------------- матрица ----
+  /**
+   * MAX7219 + библиотека LedControl.
+   *
+   * Драйвер держит 8-байтный регистр строк: setLed() зажигает точку,
+   * setRow() заливает строку битовой маской, clearDisplay() гасит всё,
+   * setIntensity() меняет яркость (0…15), shutdown() гасит матрицу целиком.
+   */
+  class LedControl {
+    constructor(dinPin = 12, clkPin = 11, csPin = 10, devices = 1) {
+      this.din = Number(dinPin) || 0;
+      this.clk = Number(clkPin) || 0;
+      this.cs = Number(csPin) || 0;
+      this.devices = Math.max(1, Math.min(8, Number(devices) || 1));
+      this._parts = [];
+      this._grids = Array.from({ length: this.devices }, () => Array.from({ length: 8 }, () => Array(8).fill(false)));
+      this._on = Array.from({ length: this.devices }, () => true);
+      this._intensity = Array.from({ length: this.devices }, () => 8);
+    }
+    _part(addr = 0) {
+      if (this._parts[addr]) return this._parts[addr];
+      const first = bus.partOnPin(this.din, 'max7219') || bus.firstOfType('max7219');
+      if (!first) return null;
+      const all = (typeof bus.partsOfType === 'function' ? bus.partsOfType('max7219') : [first]);
+      this._parts[addr] = all[addr] || all[0];
+      return this._parts[addr];
+    }
+    _push(addr = 0) {
+      const part = this._part(addr);
+      if (!part) return;
+      part.props.grid = this._grids[addr].map((row) => [...row]);
+      part.props.intensity = this._intensity[addr];
+      part.props.active = this._on[addr];
+      bus.changed(part);
+    }
+    shutdown(addr = 0, status = false) {
+      if (this._on[addr] === undefined) return;
+      this._on[addr] = !status;      // status = true → драйвер выключен
+      this._push(addr);
+    }
+    setIntensity(addr = 0, intensity = 8) {
+      if (this._intensity[addr] === undefined) return;
+      this._intensity[addr] = Math.max(0, Math.min(15, Number(intensity) || 0));
+      this._push(addr);
+    }
+    setLed(addr = 0, row = 0, col = 0, on = true) {
+      const r = Math.floor(Number(row) || 0), c = Math.floor(Number(col) || 0);
+      if (!this._grids[addr] || r < 0 || r > 7 || c < 0 || c > 7) return;
+      if (!this._on[addr]) return;
+      this._grids[addr][r][c] = Boolean(on);
+      this._push(addr);
+    }
+    setRow(addr = 0, row = 0, value = 0) {
+      const r = Math.floor(Number(row) || 0);
+      if (!this._grids[addr] || r < 0 || r > 7 || !this._on[addr]) return;
+      for (let c = 0; c < 8; c++) this._grids[addr][r][c] = Boolean((Number(value) >> (7 - c)) & 1);
+      this._push(addr);
+    }
+    setColumn(addr = 0, col = 0, value = 0) {
+      const c = Math.floor(Number(col) || 0);
+      if (!this._grids[addr] || c < 0 || c > 7 || !this._on[addr]) return;
+      for (let r = 0; r < 8; r++) this._grids[addr][r][c] = Boolean((Number(value) >> (7 - r)) & 1);
+      this._push(addr);
+    }
+    clearDisplay(addr = 0) {
+      if (!this._grids[addr]) return;
+      this._grids[addr] = Array.from({ length: 8 }, () => Array(8).fill(false));
+      this._push(addr);
+    }
+    setDigit(addr = 0, digit = 0, value = 0, dp = false) { this._digit(addr, digit, value, dp); }
+    setChar(addr = 0, digit = 0, value = ' ', dp = false) { this._digit(addr, digit, value, dp); }
+    _digit(addr, digit, value, dp) {
+      const idx = Math.floor(Number(digit) || 0);
+      const ch = typeof value === 'string' ? value : String(Number(value) || 0);
+      if (!this._grids[addr] || idx < 0 || idx > 7) return;
+      // упрощённый шрифт: 7 сегментов в двух столбцах — хватает, чтобы «часы» шли
+      const seed = ch.charCodeAt(0) || 48;
+      for (let r = 0; r < 8; r++) this._grids[addr][r][idx] = Boolean((seed >> (r % 8)) & 1);
+      if (dp) this._grids[addr][7][idx] = true;
+      this._push(addr);
+    }
+    getDeviceCount() { return this.devices; }
+  }
+
+  // сколько светодиодов у модуля, если шина не сообщила (проверки без схемы)
+  const WS_FALLBACK = { ws2812: 8, ws2812m: 64, ws2812r: 12 };
+
   class Adafruit_NeoPixel {
     constructor(count = 8, pin = 6, type = 0) {
       this.pin = Number(pin) || 0;
@@ -475,6 +620,26 @@ export function createLibraries(bus) {
           || bus.partOnPin(this.pin, 'ws2812r');
       }
       return this._part;
+    }
+    /**
+     * Цепочка модулей: DIN первой ленты — на выводе платы, её DOUT — на DIN
+     * следующей. Одна переменная Adafruit_NeoPixel управляет всей гирляндой,
+     * адреса идут подряд: 0…7 на ленте, 8…19 на кольце, 20…83 на матрице.
+     */
+    _segments() {
+      if (this._segs === undefined) {
+        const chain = (typeof bus.wsChain === 'function' ? bus.wsChain(this.pin) : null) || [];
+        const list = chain.length ? chain : [this._find()].filter(Boolean);
+        this._chainParts = list;
+        let off = 0;
+        this._segs = list.map((part) => {
+          const cap = bus.wsCapacity ? bus.wsCapacity(part) : (WS_FALLBACK[part.type] || 8);
+          const seg = { part, offset: off, count: cap };
+          off += cap;
+          return seg;
+        });
+      }
+      return this._segs;
     }
     begin() { this._begun = true; this._push(true); }
     show() { this._onStrip = this._buf.map((c) => [...c]); this._push(); }
@@ -500,23 +665,34 @@ export function createLibraries(bus) {
       this._buf = Array.from({ length: this.numLEDs }, (_, i) => this._buf[i] || [0, 0, 0]);
       this._onStrip = Array.from({ length: this.numLEDs }, (_, i) => this._onStrip[i] || [0, 0, 0]);
     }
-    setPin(p) { this.pin = Number(p) || 0; this._part = null; }
+    setPin(p) { this.pin = Number(p) || 0; this._part = null; this._segs = undefined; }
     Color(r, g, b) { return packColor([clamp8(r), clamp8(g), clamp8(b)]); }
     gamma32(c) { return c; }
     _push(force = false) {
-      const part = this._find();
-      if (!part) return;
-      part.props.pixels = this._onStrip.map((c) => [...c]);
-      part.props.brightness = this.brightness;
-      part.props.active = this._begun;
-      bus.changed(part);
+      const segs = this._segments();
+      if (!segs.length) return;
+      for (const { part, offset, count } of segs) {
+        // Модулю достаётся его кусок буфера. Если в объекте меньше адресов,
+        // чем в цепочке, «хвост» данных до модуля не доходит — и он, как в
+        // железе, держит то, что было в нём раньше, а не гаснет.
+        const prev = Array.isArray(part.props.pixels) ? part.props.pixels : [];
+        const px = [];
+        for (let i = 0; i < count; i++) {
+          const c = this._onStrip[offset + i];
+          px.push(c ? [...c] : (prev[i] ? [...prev[i]] : [0, 0, 0]));
+        }
+        part.props.pixels = px;
+        part.props.brightness = this.brightness;
+        part.props.active = this._begun;
+        bus.changed(part);
+      }
     }
   }
 
   return {
     Servo, DHT, DHT11, Stepper, LiquidCrystal, LiquidCrystal_I2C, Adafruit_SSD1306,
     MPU6050, Adafruit_MPU6050, Adafruit_BMP280, OneWire, DallasTemperature, BH1750,
-    Adafruit_NeoPixel,
+    Adafruit_NeoPixel, RTC_DS3231, RTC_DS1307, DateTime, LedControl,
     Wire: { begin() {}, setClock() {} },
   };
 }

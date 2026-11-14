@@ -117,6 +117,11 @@ export class Schematic {
     if (type === 'bh1750') return { lux: 300 };
     if (type === 'mq2') return { value: 0 };
     if (type === 'soil') return { value: 0.4 };
+    if (type === 'acs712') return { amps: 0 };
+    if (type === 'reed') return { magnet: false };
+    if (type === 'encoder') return { steps: 0, pressed: false, clicks: 0 };
+    if (type === 'rtc') return { offsetSec: 0 };
+    if (type === 'max7219') return { grid: Array.from({ length: 8 }, () => Array(8).fill(false)), intensity: 8 };
     if (type === 'sound') return { value: 0.1 };
     return {};
   }
@@ -467,6 +472,17 @@ export class Schematic {
           ev.preventDefault();
           return;
         }
+        if (part.type === 'reed') {
+          // клик по геркону — «поднесли магнит»: контакты замыкаются
+          part.props.magnet = !part.props.magnet;
+          this.refreshPart(part);
+          this.onChange();
+        }
+        if (part.type === 'encoder' && !knob && part.__def?.knob) {
+          part.props.pressed = true;      // нажали на ручку — сработала кнопка SW
+          this.drag.pressPending = true;
+          this.refreshPart(part);
+        }
         if (part.type === 'toggle') {
           part.props.on = !part.props.on;
           this.refreshPart(part);
@@ -575,6 +591,7 @@ export class Schematic {
           this.onChange();
         }
         if (part?.type === 'joystick' && part.props.pressed) { part.props.pressed = false; this.refreshPart(part); }
+        if (part?.type === 'encoder' && part.props.pressed) { part.props.pressed = false; this.refreshPart(part); }
         if (this.moved) this.onChange();
         this.drag = null;
       }

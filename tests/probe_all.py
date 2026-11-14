@@ -22,7 +22,9 @@ IDS = ["blink", "led", "button", "pot", "rc", "servo", "lcd", "oled",
        "mpu-tilt", "bmp-altimeter", "ds18b20-thermo", "bh1750-lux", "mq2-gas",
        "soil-watering", "sound-clap", "lcd-parallel",
        "ws2812-rainbow", "ws2812-matrix", "ws2812-ring",
-       "linecar-line", "linecar-pwm", "linecar-laps"]
+       "linecar-line", "linecar-pwm", "linecar-laps",
+       "ws2812-garland", "acs712-ammeter", "rtc-clock", "max7219-face",
+       "reed-alarm", "encoder-menu"]
 
 
 async def main():
@@ -89,7 +91,9 @@ async def main():
 
         rep["fatal_errors"] = errs
         await b.close()
-    print(json.dumps(rep, ensure_ascii=False, indent=1))
+    text = json.dumps(rep, ensure_ascii=False, indent=1)
+    (OUT / "report.json").write_text(text, encoding="utf-8")
+    print(text)
 
 
 asyncio.run(main())
