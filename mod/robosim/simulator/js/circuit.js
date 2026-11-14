@@ -302,6 +302,45 @@ export class Circuit {
           if (w && b && w !== b) push({ type: 'R', n1: w, n2: b, value: Math.max(1, R * (1 - alpha)) });
           break;
         }
+        case 'acs712': {
+          // Датчик тока: между IP+ и IP− лежит шунт 1,2 мОм — ток идёт через него.
+          // Выход OUT — настоящий активный выход: 2,5 В в покое плюс 185 мВ на ампер.
+          const ip = n('IP+'), im = n('IP-');
+          if (ip && im && ip !== im) info.shuntIdx = push({ type: 'R', n1: ip, n2: im, value: 0.0012 });
+          const out = n('OUT');
+          const measured = Number(p.__acsI) || 0;          // ток, измеренный на прошлом шаге
+          if (out) {
+            const inner = `acs_${p.id}`;
+            push({ type: 'R', n1: out, n2: inner, value: 22 });
+            push({ type: 'V', n1: inner, n2: gnd, value: 2.5 + 0.185 * measured });
+          }
+          const vcc = n('VCC') || this.vccNet(), g2 = n('GND') || gnd;
+          if (vcc && g2 && vcc !== g2) push({ type: 'R', n1: vcc, n2: g2, value: 3300 });
+          break;
+        }
+        case 'reed': {
+          // Геркон: контакты в стеклянной колбе. Поднесли магнит — цепь замкнута.
+          const a1 = n('1'), b1 = n('2');
+          if (a1 && b1 && a1 !== b1) {
+            push({ type: 'R', n1: a1, n2: b1, value: p.props?.magnet ? 0.08 : 1e9 });
+          }
+          break;
+        }
+        case 'encoder': {
+          // Квадратурный выход: CLK и DT переключаются со сдвигом на четверть
+          // периода, а шаги считаются по последовательности этих уровней.
+          const vcc = n('VCC') || this.vccNet(), g3 = n('GND') || gnd;
+          const steps = Math.round(Number(p.props?.steps) || 0);
+          const phase = ((steps % 4) + 4) % 4;
+          const CLK = [1, 1, 0, 0][phase];
+          const DT = [0, 1, 1, 0][phase];
+          const clk = n('CLK'), dt = n('DT');
+          if (clk) push({ type: 'R', n1: clk, n2: CLK ? (vcc || g3) : g3, value: 1000 });
+          if (dt) push({ type: 'R', n1: dt, n2: DT ? (vcc || g3) : g3, value: 1000 });
+          const sw = n('SW');
+          if (sw) push({ type: 'R', n1: sw, n2: p.props?.pressed ? g3 : (vcc || g3), value: 1000 });
+          break;
+        }
         case 'pir': {
           // выход «тянет» либо к питанию, либо к земле — как настоящий push-pull
           const out = n('OUT'), vcc = n('VCC') || this.vccNet();
@@ -335,6 +374,26 @@ export class Circuit {
         }
         // Шины I2C и 1-Wire: подтяжки к питанию. Плата видит на SDA/SCL
         // высокий уровень, как и на настоящей шине в покое.
+        case 'rtc': {
+          // DS3231 висит на I²C: подтяжки шины и небольшое питание самой платы.
+          const vcc = n('VCC') || this.vccNet(), g4 = n('GND') || gnd;
+          if (vcc && g4 && vcc !== g4) push({ type: 'R', n1: vcc, n2: g4, value: 12000 });
+          for (const id of ['SDA', 'SCL']) {
+            const pin = n(id);
+            if (pin && vcc && pin !== vcc) push({ type: 'R', n1: pin, n2: vcc, value: 10000 });
+          }
+          break;
+        }
+        case 'max7219': {
+          // Плата матрицы: входы SPI — обычные КМОП-входы, питание 5 В.
+          const vcc = n('VCC') || this.vccNet(), g5 = n('GND') || gnd;
+          if (vcc && g5 && vcc !== g5) push({ type: 'R', n1: vcc, n2: g5, value: 2200 });
+          for (const id of ['DIN', 'CS', 'CLK']) {
+            const pin = n(id);
+            if (pin && g5 && pin !== g5) push({ type: 'R', n1: pin, n2: g5, value: 100000 });
+          }
+          break;
+        }
         case 'mpu6050':
         case 'bmp280':
         case 'bh1750': {
@@ -1121,6 +1180,12 @@ export class Circuit {
         amps = Math.abs(res.currents[ri] || 0);
         info.current = amps;
         info.power = amps * amps * (info.ohms || 220);
+      }
+      if (p.type === 'acs712') {
+        const I = info.shuntIdx != null ? Math.abs(res.currents[info.shuntIdx] || 0) : 0;
+        p.__acsI = I;                        // понадобится на следующем шаге для выхода
+        info.amps = I;
+        info.sensorVolts = 2.5 + 0.185 * I;
       }
       const m = multiIdx.get(p.id);
       if (m) {

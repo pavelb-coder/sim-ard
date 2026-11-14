@@ -5704,6 +5704,136 @@
    }
   },
   {
+   "id": "ws2812-garland",
+   "name": "Гирлянда: лента + кольцо + матрица на одном выводе",
+   "board": "uno",
+   "code": "// Гирлянда из трёх модулей на одном выводе.\n// Провод данных всего один: он входит в DIN ленты, выходит из её DOUT и идёт\n// на DIN кольца, а оттуда — на DIN матрицы. Для скетча это одна длинная лента:\n// адреса идут подряд — 0…7 лента, 8…19 кольцо, 20…83 матрица, всего 84.\n\n#include <Adafruit_NeoPixel.h>\n\nconst int LED_PIN = 6;\nconst int LEDS = 8 + 12 + 64;     // 84 адреса на три модуля\n\nAdafruit_NeoPixel garland(LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);\n\n// Цвет по кругу: 0 — красный, 85 — зелёный, 170 — синий, 255 — снова красный\nuint32_t wheel(byte pos) {\n  if (pos < 85)  return garland.Color(255 - pos * 3, pos * 3, 0);\n  if (pos < 170) { pos -= 85;  return garland.Color(0, 255 - pos * 3, pos * 3); }\n  pos -= 170;    return garland.Color(pos * 3, 0, 255 - pos * 3);\n}\n\nvoid setup() {\n  garland.begin();\n  garland.setBrightness(60);      // 84 белых светодиода — это 5 А, так что не на полную\n  garland.show();\n  Serial.begin(9600);\n  Serial.print(\"Светодиодов в гирлянде: \");\n  Serial.println(garland.numPixels());\n}\n\nvoid loop() {\n  for (int step = 0; step < 256; step += 4) {\n    for (int i = 0; i < LEDS; i++) {\n      garland.setPixelColor(i, wheel((i * 3 + step) & 255));\n    }\n    garland.show();\n    delay(40);\n  }\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "w1",
+      "type": "ws2812",
+      "x": -150,
+      "y": 210,
+      "props": {}
+     },
+     {
+      "id": "w2",
+      "type": "ws2812r",
+      "x": 150,
+      "y": 230,
+      "props": {}
+     },
+     {
+      "id": "w3",
+      "type": "ws2812m",
+      "x": 0,
+      "y": 460,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "w1",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "w1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D6"
+      },
+      "b": {
+       "compId": "w1",
+       "pin": "DIN"
+      }
+     },
+     {
+      "a": {
+       "compId": "w1",
+       "pin": "DOUT"
+      },
+      "b": {
+       "compId": "w2",
+       "pin": "DIN"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "w2",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "w2",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "w2",
+       "pin": "DOUT"
+      },
+      "b": {
+       "compId": "w3",
+       "pin": "DIN"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "w3",
+       "pin": "5V"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "w3",
+       "pin": "GND"
+      }
+     }
+    ]
+   }
+  },
+  {
    "id": "linecar-line",
    "name": "Робот-тележка «Эвольвектор»: езда по линии",
    "board": "uno",
@@ -6277,6 +6407,538 @@
       "b": {
        "compId": "rb1",
        "pin": "M2-"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "acs712-ammeter",
+   "name": "Амперметр на ACS712: ток через нагрузку",
+   "board": "uno",
+   "code": "// Амперметр на датчике тока ACS712.\n// Датчик стоит в разрыв провода: ток нагрузки идёт через его шунт (1,2 мОм),\n// а на выводе OUT появляется напряжение 2,5 В + 185 мВ на каждый ампер.\n// Крутите потенциометр — ток меняется, показания растут.\n\nconst int ACS = A0;              // OUT датчика → A0\nconst float MV_PER_A = 0.185;    // 185 мВ на ампер — паспорт ACS712-5A\n\nvoid setup() {\n  Serial.begin(9600);\n  Serial.println(\"Амперметр ACS712 готов\");\n}\n\nvoid loop() {\n  int raw = analogRead(ACS);                 // 0…1023\n  float volts = raw * 5.0 / 1023.0;\n  float amps = (volts - 2.5) / MV_PER_A;     // 2,5 В — это ноль ампер\n\n  Serial.print(\"U = \");\n  Serial.print(volts, 3);\n  Serial.print(\" В,  I = \");\n  Serial.print(amps, 3);\n  Serial.println(\" А\");\n  delay(500);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "rv1",
+      "type": "pot",
+      "x": -150,
+      "y": 210,
+      "props": {
+       "value": 0.5,
+       "ohms": 22
+      }
+     },
+     {
+      "id": "acs1",
+      "type": "acs712",
+      "x": 120,
+      "y": 210,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "rv1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "rv1",
+       "pin": "W"
+      },
+      "b": {
+       "compId": "acs1",
+       "pin": "IP+"
+      }
+     },
+     {
+      "a": {
+       "compId": "acs1",
+       "pin": "IP-"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "acs1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "acs1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "acs1",
+       "pin": "OUT"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "A0"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "rtc-clock",
+   "name": "Часы на OLED с DS3231",
+   "board": "uno",
+   "code": "// Часы на OLED: время берём у модуля DS3231 по шине I²C.\n// У модуля своя батарейка CR2032, поэтому часы идут, даже когда плата выключена.\n\n#include <Wire.h>\n#include <RTClib.h>\n#include <Adafruit_SSD1306.h>\n\nRTC_DS3231 rtc;\nAdafruit_SSD1306 screen(128, 64, &Wire, -1);\n\nvoid setup() {\n  Serial.begin(9600);\n  screen.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n  screen.clearDisplay();\n\n  if (!rtc.begin()) {\n    Serial.println(\"Модуль часов не найден\");\n    return;\n  }\n  if (rtc.lostPower()) {                 // села батарейка — часы сбились\n    rtc.adjust(DateTime(2026, 11, 12, 9, 0, 0));\n  }\n  Serial.println(\"Часы DS3231 на связи\");\n}\n\nvoid loop() {\n  DateTime now = rtc.now();\n\n  screen.clearDisplay();\n  screen.setTextSize(2);\n  screen.setCursor(10, 8);\n  screen.print(now.hour());\n  screen.print(\":\");\n  if (now.minute() < 10) screen.print(\"0\");\n  screen.print(now.minute());\n  screen.print(\":\");\n  if (now.second() < 10) screen.print(\"0\");\n  screen.print(now.second());\n  screen.setTextSize(1);\n  screen.setCursor(10, 40);\n  screen.print(now.day());\n  screen.print(\".\");\n  screen.print(now.month());\n  screen.print(\".\");\n  screen.print(now.year());\n  screen.display();\n\n  delay(200);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "ds1",
+      "type": "rtc",
+      "x": -150,
+      "y": 220,
+      "props": {}
+     },
+     {
+      "id": "oled1",
+      "type": "oled",
+      "x": 120,
+      "y": 220,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "ds1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "ds1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "ds1",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "ds1",
+       "pin": "SCL"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "oled1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "oled1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A4"
+      },
+      "b": {
+       "compId": "oled1",
+       "pin": "SDA"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "A5"
+      },
+      "b": {
+       "compId": "oled1",
+       "pin": "SCL"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "max7219-face",
+   "name": "Матрица MAX7219: смайлик и бегущая рамка",
+   "board": "uno",
+   "code": "// Матрица 8×8 на MAX7219: библиотека LedControl.\n// Драйвер сам переключает 64 светодиода, поэтому от платы нужны всего три\n// провода (DIN, CLK, CS) плюс питание.\n\n#include <LedControl.h>\n\n// LedControl(DIN, CLK, CS, сколько матриц в цепочке)\nLedControl matrix(12, 11, 10, 1);\n\nvoid setup() {\n  matrix.shutdown(0, false);     // вывести драйвер из спящего режима\n  matrix.setIntensity(0, 6);     // яркость 0…15\n  matrix.clearDisplay(0);\n  Serial.begin(9600);\n  Serial.println(\"Матрица MAX7219 готова\");\n}\n\n// Смайлик: рамка из точек и улыбка\nvoid face() {\n  matrix.clearDisplay(0);\n  for (int i = 1; i <= 6; i++) {\n    matrix.setLed(0, 0, i, true);\n    matrix.setLed(0, 7, i, true);\n    matrix.setLed(0, i, 0, true);\n    matrix.setLed(0, i, 7, true);\n  }\n  matrix.setLed(0, 2, 2, true);   // глаза\n  matrix.setLed(0, 2, 5, true);\n  matrix.setLed(0, 4, 1, true);   // улыбка\n  matrix.setLed(0, 5, 2, true);\n  matrix.setLed(0, 5, 3, true);\n  matrix.setLed(0, 5, 4, true);\n  matrix.setLed(0, 5, 5, true);\n  matrix.setLed(0, 4, 6, true);\n}\n\nvoid loop() {\n  face();\n  delay(1200);\n\n  // бегущая рамка: строка битов сдвигается на один столбец\n  for (int shift = 0; shift < 8; shift++) {\n    matrix.clearDisplay(0);\n    for (int row = 0; row < 8; row++) {\n      matrix.setRow(0, row, (0b00011000 << shift) & 0b11111111 | (0b00011000 >> (8 - shift)));\n    }\n    delay(180);\n  }\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "mx1",
+      "type": "max7219",
+      "x": 0,
+      "y": 230,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "mx1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "mx1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D12"
+      },
+      "b": {
+       "compId": "mx1",
+       "pin": "DIN"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D11"
+      },
+      "b": {
+       "compId": "mx1",
+       "pin": "CLK"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D10"
+      },
+      "b": {
+       "compId": "mx1",
+       "pin": "CS"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "reed-alarm",
+   "name": "Охрана: геркон, зуммер и светодиод",
+   "board": "uno",
+   "code": "// Охрана на герконе.\n// Геркон — это два контакта в стеклянной колбе: пока магнит рядом (дверь закрыта),\n// контакты замкнуты и на выводе D2 высокий уровень. Убрали магнит — контакты\n// разомкнулись, подтяжка INPUT_PULLUP вернула на выводе низкий уровень,\n// и включается сигнализация: пищит зуммер, горит светодиод.\n// Кликните по геркону на схеме, чтобы «убрать магнит».\n\nconst int REED = 2;      // геркон между 5 В и D2 (внутренняя подтяжка)\nconst int BUZZER = 8;\nconst int LED = 9;\n\nbool alarm = false;\n\nvoid setup() {\n  pinMode(REED, INPUT_PULLUP);\n  pinMode(BUZZER, OUTPUT);\n  pinMode(LED, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Охрана включена\");\n}\n\nvoid loop() {\n  bool closed = digitalRead(REED) == HIGH;  // магнит рядом — контакты замкнуты\n\n  if (!closed && !alarm) {\n    alarm = true;\n    Serial.println(\"Тревога: дверь открыта!\");\n  }\n  if (closed && alarm) {\n    alarm = false;\n    Serial.println(\"Дверь закрыта, охрана на месте\");\n  }\n\n  digitalWrite(LED, alarm ? HIGH : LOW);\n  if (alarm) {\n    tone(BUZZER, 880);\n  } else {\n    noTone(BUZZER);\n  }\n  delay(50);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "sf1",
+      "type": "reed",
+      "x": -150,
+      "y": 220,
+      "props": {
+       "magnet": true
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 100,
+      "y": 330,
+      "props": {
+       "value": 220
+      }
+     },
+     {
+      "id": "d1",
+      "type": "led",
+      "x": 190,
+      "y": 330,
+      "props": {
+       "color": "#ff5544"
+      }
+     },
+     {
+      "id": "bz1",
+      "type": "buzzer",
+      "x": 130,
+      "y": 210,
+      "props": {}
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "sf1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "sf1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "D2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D8"
+      },
+      "b": {
+       "compId": "bz1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "bz1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "d1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "d1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "encoder-menu",
+   "name": "Энкодер KY-040: счёт шагов и кнопка",
+   "board": "uno",
+   "code": "// Энкодер KY-040: два выхода CLK и DT переключаются по очереди —\n// по тому, какая из них «догнала» другую, видно направление поворота.\n// Потяните ручку энкодера на схеме влево-вправо: счётчик будет расти и падать.\n\nconst int CLK = 2;\nconst int DT = 3;\nconst int SW = 4;\nconst int LED = 9;\n\nint lastClk = HIGH;\nint counter = 0;\n\nvoid setup() {\n  pinMode(CLK, INPUT);\n  pinMode(DT, INPUT);\n  pinMode(SW, INPUT_PULLUP);\n  pinMode(LED, OUTPUT);\n  Serial.begin(9600);\n  Serial.println(\"Энкодер готов: крутите ручку\");\n}\n\nvoid loop() {\n  int clk = digitalRead(CLK);\n\n  if (clk != lastClk && clk == LOW) {       // щелчок энкодера\n    if (digitalRead(DT) != clk) {\n      counter++;                            // поворот по часовой\n    } else {\n      counter--;                            // против часовой\n    }\n    Serial.print(\"шаг = \");\n    Serial.println(counter);\n  }\n  lastClk = clk;\n\n  if (digitalRead(SW) == LOW) {             // нажали на ручку\n    counter = 0;\n    Serial.println(\"сброс\");\n  }\n\n  analogWrite(LED, abs(counter) * 8 % 255);\n  delay(2);\n}\n",
+   "schematic": {
+    "parts": [
+     {
+      "id": "b1",
+      "type": "uno",
+      "x": 0,
+      "y": 0,
+      "props": {}
+     },
+     {
+      "id": "enc1",
+      "type": "encoder",
+      "x": -60,
+      "y": 230,
+      "props": {}
+     },
+     {
+      "id": "led1",
+      "type": "led",
+      "x": 150,
+      "y": 230,
+      "props": {
+       "color": "#28d17c"
+      }
+     },
+     {
+      "id": "r1",
+      "type": "resistor",
+      "x": 150,
+      "y": 320,
+      "props": {
+       "value": 220
+      }
+     }
+    ],
+    "wires": [
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "5V"
+      },
+      "b": {
+       "compId": "enc1",
+       "pin": "VCC"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "GND2"
+      },
+      "b": {
+       "compId": "enc1",
+       "pin": "GND"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D2"
+      },
+      "b": {
+       "compId": "enc1",
+       "pin": "CLK"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D3"
+      },
+      "b": {
+       "compId": "enc1",
+       "pin": "DT"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D4"
+      },
+      "b": {
+       "compId": "enc1",
+       "pin": "SW"
+      }
+     },
+     {
+      "a": {
+       "compId": "b1",
+       "pin": "D9"
+      },
+      "b": {
+       "compId": "r1",
+       "pin": "1"
+      }
+     },
+     {
+      "a": {
+       "compId": "r1",
+       "pin": "2"
+      },
+      "b": {
+       "compId": "led1",
+       "pin": "A"
+      }
+     },
+     {
+      "a": {
+       "compId": "led1",
+       "pin": "K"
+      },
+      "b": {
+       "compId": "b1",
+       "pin": "GND2"
       }
      }
     ]

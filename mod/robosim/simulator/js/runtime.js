@@ -528,6 +528,10 @@ export class ArduinoRuntime {
       rt: this,
       HIGH: 1, LOW: 0, INPUT: 0, OUTPUT: 1, INPUT_PULLUP: 2,
       LED_BUILTIN: this.spec.builtinLed,
+      // константы из библиотечных заголовков, которые пишут в скетчах
+      SSD1306_SWITCHCAPVCC: 0x02, SSD1306_EXTERNALVCC: 0x01,
+      SSD1306_WHITE: 1, SSD1306_BLACK: 0, SSD1306_INVERSE: 2,
+      NEO_GRB: 0x52, NEO_RGB: 0x06, NEO_KHZ800: 0x0000, NEO_KHZ400: 0x0100,
       PI: Math.PI, HALF_PI: Math.PI / 2, TWO_PI: Math.PI * 2,
       min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.sqrt,
       pow: Math.pow, sin: Math.sin, cos: Math.cos, tan: Math.tan,

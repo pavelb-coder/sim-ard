@@ -325,6 +325,29 @@ export class CheckContext {
     return t > 0.2 ? c.onLine / t : 0;
   }
 
+  /** Точечная картинка матрицы MAX7219: сколько точек горит и где. */
+  grid(partId = null) {
+    const grids = this.trace.grids || {};
+    const g = partId ? grids[partId] : Object.values(grids)[0];
+    return Array.isArray(g) ? g : [];
+  }
+
+  /** Наибольший ток, который видел датчик ACS712 (амперы). */
+  currentSeen(partId = null) {
+    const all = this.trace.acs || {};
+    return Number(partId ? all[partId] : Math.max(0, ...Object.values(all))) || 0;
+  }
+
+  /** Текст, который виден на дисплеях (LCD или OLED). */
+  displays() {
+    return Object.values(this.trace.lcd || {}).map((lines) => (Array.isArray(lines) ? lines.join(' ') : ''));
+  }
+
+  /** Сколько точек горит на матрице. */
+  litDots(partId = null) {
+    return this.grid(partId).flat().filter(Boolean).length;
+  }
+
   serialText() { return (this.trace.serial || []).join('\n'); }
   ran() { return Boolean(this.trace.hasRun); }
 }

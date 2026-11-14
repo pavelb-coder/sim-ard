@@ -41,6 +41,8 @@ export const SHORT_NAME = {
   usbcable: 'USB-кабель',
   mpu6050: 'MPU-6050', bmp280: 'BMP280', ds18b20: 'DS18B20', bh1750: 'BH1750',
   mq2: 'датчик газа', soil: 'влажность почвы', sound: 'датчик звука',
+  acs712: 'датчик тока', reed: 'геркон', encoder: 'энкодер KY-040',
+  rtc: 'часы DS3231', max7219: 'матрица MAX7219',
 };
 
 export const REF_PREFIX = {
@@ -54,6 +56,7 @@ export const REF_PREFIX = {
   mpu6050: 'MPU', bmp280: 'BMP', ds18b20: 'T', bh1750: 'LX', mq2: 'GAS', soil: 'SM', sound: 'MIC',
   l298n: 'DA', dcmotor: 'M', keypad: 'SB', sr595: 'DD', sr165: 'DD',
   ws2812: 'D', ws2812m: 'D', ws2812r: 'D', linecar: 'RB',
+  acs712: 'ACS', reed: 'SF', encoder: 'ENC', rtc: 'DS', max7219: 'HG',
   nano: 'A', promini: 'A', leonardo: 'A', mega: 'A',
 };
 
@@ -92,12 +95,12 @@ const sensorKnob = (cx, cy, alpha, w = 42, key = '') => `
         fill="transparent" style="cursor:ew-resize"/>`;
 
 /** Плата датчика-модуля: зелёный текстолит и два крепёжных отверстия. */
-const sensorBoard = (comp, w, h, body) => partTag(comp, w, h, `
+const sensorBoard = (comp, w, h, body, extra = '', readout = '') => partTag(comp, w, h, `
   <rect x="${-w / 2 + 4}" y="${-h / 2 + 4}" width="${w - 8}" height="${h - 8}" rx="3"
         fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.1"/>
   <circle cx="${-w / 2 + 11}" cy="${-h / 2 + 11}" r="2.2" fill="#0d2a1d" stroke="#2c5c46" stroke-width=".6"/>
   <circle cx="${w / 2 - 11}" cy="${-h / 2 + 11}" r="2.2" fill="#0d2a1d" stroke="#2c5c46" stroke-width=".6"/>
-  ${body}`);
+  ${body}`, extra, readout);
 
 const partTag = (comp, w, h, body, extra = '', readout = '') => {
   const label = partLabel(comp, comp.type);
@@ -1854,11 +1857,12 @@ function wsUpdate(g, comp, env) {
 
 const WS2812 = {
   ws2812: {
-    name: 'Лента WS2812 (8)', category: 'Компоненты', w: 216, h: 48,
+    name: 'Лента WS2812 (8)', category: 'Компоненты', w: 216, h: 48, pixels: 8,
     pins: () => [
       { id: '5V', label: '5V', x: -108, y: -12, dir: 'left' },
       { id: 'DIN', label: 'DIN', x: -108, y: 0, dir: 'left' },
       { id: 'GND', label: 'GND', x: -108, y: 12, dir: 'left' },
+      { id: 'DOUT', label: 'DOUT', x: 108, y: 0, dir: 'right' },
     ],
     render(comp) {
       const pins = this.pins(comp);
@@ -1871,17 +1875,19 @@ const WS2812 = {
         ${Array.from({ length: 7 }, (_, i) => `<path d="M ${-55 + i * 22} -15 l 5 3 l -5 3" fill="none" stroke="#3d4b57" stroke-width="1.2"/>`).join('')}
         ${WS_PADS(pins)}
         ${['5V', 'DIN', 'GND'].map((t, i) => `<text x="-97" y="${-8 + i * 12}" style="font:4.6px ui-monospace,monospace;fill:#8fa4b6">${t}</text>`).join('')}
+        <text x="97" y="-8" style="font:4.6px ui-monospace,monospace;fill:#8fa4b6;text-anchor:end">DOUT</text>
         <text x="56" y="17" style="font:4.6px ui-monospace,monospace;fill:#4d5c69">WS2812B · 5 В</text>`);
     },
     update: wsUpdate,
   },
 
   ws2812m: {
-    name: 'Матрица WS2812 8×8', category: 'Компоненты', w: 132, h: 132,
+    name: 'Матрица WS2812 8×8', category: 'Компоненты', w: 132, h: 132, pixels: 64,
     pins: () => [
       { id: 'GND', label: 'GND', x: -26, y: 66, dir: 'down' },
       { id: 'DIN', label: 'DIN', x: 0, y: 66, dir: 'down' },
       { id: '5V', label: '5V', x: 26, y: 66, dir: 'down' },
+      { id: 'DOUT', label: 'DOUT', x: 0, y: -66, dir: 'up' },
     ],
     render(comp) {
       const pins = this.pins(comp);
@@ -1903,11 +1909,12 @@ const WS2812 = {
   },
 
   ws2812r: {
-    name: 'Кольцо WS2812 (12)', category: 'Компоненты', w: 120, h: 120,
+    name: 'Кольцо WS2812 (12)', category: 'Компоненты', w: 120, h: 120, pixels: 12,
     pins: () => [
       { id: '5V', label: '5V', x: -22, y: 56, dir: 'down' },
       { id: 'DIN', label: 'DIN', x: 0, y: 56, dir: 'down' },
       { id: 'GND', label: 'GND', x: 22, y: 56, dir: 'down' },
+      { id: 'DOUT', label: 'DOUT', x: 0, y: -56, dir: 'up' },
     ],
     render(comp) {
       const pins = this.pins(comp);
@@ -2082,7 +2089,224 @@ const LINECAR = {
   },
 };
 
-export const PARTS = { ...DISCRETE, ...MODULES, ...POWER, ...EXTRA, ...WS2812, ...LINECAR };
+
+/* --------------------------------------------------------------------------
+ * Датчики и модули второго набора: ток, магнит, энкодер, часы и матрица.
+ * ------------------------------------------------------------------------ */
+
+/** Толстая медная дорожка силового шунта — как на плате ACS712. */
+const acsTrace = (x1, y1, x2, y2, w = 6) =>
+  `<path d="M ${x1} ${y1} L ${x2} ${y2}" stroke="url(#sim-gold)" stroke-width="${w}" stroke-linecap="round" opacity=".85"/>`;
+
+const NEWPARTS = {
+  acs712: {
+    name: 'Датчик тока ACS712 (5 А)', category: 'Датчики', w: 88, h: 74,
+    pins: () => [
+      { id: 'IP+', label: 'IP+', x: -44, y: -14, dir: 'left' },
+      { id: 'IP-', label: 'IP−', x: -44, y: 14, dir: 'left' },
+      { id: 'VCC', label: '+', x: -26, y: 31, dir: 'down' },
+      { id: 'GND', label: '−', x: -6, y: 31, dir: 'down' },
+      { id: 'OUT', label: 'OUT', x: 22, y: 31, dir: 'down' },
+    ],
+    render(comp) {
+      const amps = Number(comp.props?.amps ?? 0);   // обновится из телеметрии цепи
+      return sensorBoard(comp, 88, 74, `
+        ${acsTrace(-40, -14, -8, -6, 7)}
+        ${acsTrace(-40, 14, -8, 6, 7)}
+        <rect x="-14" y="-16" width="30" height="32" rx="2" fill="#15181c" stroke="#2b3138"/>
+        <rect x="-11" y="-13" width="24" height="6" rx="1" fill="#20262c"/>
+        <text x="1" y="8" style="font:4.6px ui-monospace;fill:#8fa4b6;text-anchor:middle">ACS712</text>
+        <rect x="-42" y="-20" width="8" height="14" rx="1.5" fill="#126b3f" stroke="#0b3a25"/>
+        <rect x="-42" y="8" width="8" height="14" rx="1.5" fill="#126b3f" stroke="#0b3a25"/>
+        <circle cx="-38" cy="-13" r="1.8" fill="#c9d6df"/>
+        <circle cx="-38" cy="15" r="1.8" fill="#c9d6df"/>
+        <text class="val" x="30" y="-3" style="font:6px ui-monospace;fill:${amps > 0.02 ? '#8ce8a4' : '#6f8a9b'};text-anchor:middle">${amps.toFixed(2)} А</text>
+        <text x="30" y="7" style="font:4px ui-monospace;fill:#6f8a9b;text-anchor:middle">185 мВ/А</text>`);
+    },
+    update(g, comp, env) {
+      const amps = Number(env?.info?.amps ?? comp.props?.amps ?? 0);
+      const t = g.querySelector('.val');
+      if (t) {
+        t.textContent = `${amps.toFixed(2)} А`;
+        t.setAttribute('fill', amps > 0.02 ? '#8ce8a4' : '#6f8a9b');
+      }
+    },
+  },
+
+  reed: {
+    name: 'Геркон (датчик магнита)', category: 'Датчики', w: 84, h: 62,
+    pins: () => [
+      { id: '1', label: '1', x: -22, y: 27, dir: 'down' },
+      { id: '2', label: '2', x: 22, y: 27, dir: 'down' },
+    ],
+    render(comp) {
+      const magnet = Boolean(comp.props?.magnet);
+      return partTag(comp, 84, 62, `
+        <rect x="-32" y="-6" width="64" height="24" rx="2.5" fill="url(#sim-pcb-soft)" stroke="#0b3a25" stroke-width="1.1"/>
+        <circle cx="-27" cy="0" r="1.8" fill="#0d2a1d" stroke="#2c5c46" stroke-width=".6"/>
+        <circle cx="27" cy="0" r="1.8" fill="#0d2a1d" stroke="#2c5c46" stroke-width=".6"/>
+        <text x="0" y="3" style="font:4.2px ui-monospace;fill:#7fae95;text-anchor:middle">ГЕРКОН</text>
+        <!-- стеклянная колба с двумя контактами -->
+        <rect x="-19" y="-24" width="38" height="11" rx="5.5" fill="#cfe0ec" opacity=".14" stroke="#a9c3d6" stroke-width=".9"/>
+        <line x1="-22" y1="-18.5" x2="-11" y2="-18.5" stroke="#c9d6df" stroke-width="1.6"/>
+        <line x1="11" y1="-18.5" x2="22" y2="-18.5" stroke="#c9d6df" stroke-width="1.6"/>
+        <line x1="-12" y1="-18.5" x2="${magnet ? 6 : -3}" y2="-18.5" stroke="#eef4f9" stroke-width="1.6"/>
+        <line x1="${magnet ? 6 : 2}" y1="-18.5" x2="12" y2="-18.5" stroke="#eef4f9" stroke-width="1.6"/>
+        <line x1="-22" y1="-18.5" x2="-22" y2="27" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="22" y1="-18.5" x2="22" y2="27" stroke="#8aa4b8" stroke-width="1.4"/>
+        <text class="st" x="0" y="14.5" style="font:4.2px ui-monospace;fill:${magnet ? '#5ee0a0' : '#6f8a9b'};text-anchor:middle">${magnet ? 'магнит — замкнут' : 'разомкнут'}</text>
+        <g class="magnet" opacity="${magnet ? 1 : 0}" transform="translate(30 -26) rotate(-16)">
+          <rect x="-14" y="-7" width="28" height="14" rx="2" fill="#c0392b" stroke="#7c241a"/>
+          <rect x="1" y="-7" width="13" height="14" rx="2" fill="#2c4a7a" stroke="#1b2f4d"/>
+          <text x="-6.5" y="3.4" style="font:6px ui-monospace;fill:#fff;text-anchor:middle">N</text>
+          <text x="7.5" y="3.4" style="font:6px ui-monospace;fill:#fff;text-anchor:middle">S</text>
+        </g>`);
+    },
+    update(g, comp) {
+      const closed = Boolean(comp.props?.magnet);
+      const mag = g.querySelector('.magnet');
+      if (mag) mag.setAttribute('opacity', closed ? '1' : '0');
+      const st = g.querySelector('.st');
+      if (st) {
+        st.textContent = closed ? 'магнит — замкнут' : 'разомкнут';
+        st.setAttribute('fill', closed ? '#5ee0a0' : '#6f8a9b');
+      }
+      const blade = g.querySelectorAll('.body line');
+      if (blade.length >= 5) blade[3].setAttribute('x2', closed ? '6' : '-3');
+    },
+  },
+
+  encoder: {
+    name: 'Энкодер KY-040', category: 'Датчики', w: 92, h: 88,
+    pins: () => [
+      { id: 'CLK', label: 'CLK', x: -34, y: 40, dir: 'down' },
+      { id: 'DT', label: 'DT', x: -12, y: 40, dir: 'down' },
+      { id: 'SW', label: 'SW', x: 10, y: 40, dir: 'down' },
+      { id: 'VCC', label: '+', x: 32, y: 40, dir: 'down' },
+      { id: 'GND', label: '−', x: 46, y: 40, dir: 'down' },
+    ],
+    knob: {
+      set(part, a) {
+        // поворот ручки мышью: −32…32 «щелчка», как у настоящего энкодера
+        part.props.steps = Math.round((a - 0.5) * 64);
+        part.props.clicks = (Number(part.props.clicks) || 0) + 1;
+      },
+    },
+    render(comp) {
+      const steps = Number(comp.props?.steps) || 0;
+      const pressed = Boolean(comp.props?.pressed);
+      const ang = (steps * 9) % 360;
+      return sensorBoard(comp, 92, 88, `
+        <circle cx="0" cy="-10" r="24" fill="#1d2429" stroke="#39424a" stroke-width="1.1"/>
+        <circle cx="0" cy="-10" r="18" fill="url(#sim-metal-h)" stroke="#6a7680"/>
+        <g transform="translate(0 -10) rotate(${ang})">
+          <rect x="-14" y="-2.6" width="28" height="5.2" rx="2.6" fill="#39424a"/>
+          <rect x="-2.6" y="-14" width="5.2" height="28" rx="2.6" fill="#39424a"/>
+        </g>
+        <circle cx="0" cy="-10" r="5.5" fill="${pressed ? '#ffb066' : '#4a545c'}" stroke="#151a1e"/>
+        <text x="-38" y="20" style="font:4px ui-monospace;fill:#7fae95">KY-040</text>
+        <rect data-role="knob" x="-30" y="-34" width="60" height="48" fill="transparent"
+              style="cursor:grab"/>`, '', `${steps} щелчк.`);
+    },
+    update(g, comp) {
+      const steps = Number(comp.props?.steps) || 0;
+      const t = g.querySelector('.readout text');
+      if (t) t.textContent = `${steps} щелчк.`;
+      const handle = g.querySelector('.body > g[transform]');
+      if (handle) handle.setAttribute('transform', `translate(0 -10) rotate(${(steps * 9) % 360})`);
+    },
+  },
+};
+
+
+/* --------------------------------------------------------------------------
+ * Модули с библиотеками: часы реального времени DS3231 и матрица MAX7219.
+ * ------------------------------------------------------------------------ */
+
+/** Время на плате часов: «ЧЧ:ММ:СС» — то, что отдают rtc.now(). */
+function rtcClockText(comp) {
+  const d = new Date(Date.now() + (Number(comp.props?.offsetSec) || 0) * 1000);
+  const p2 = (v) => String(v).padStart(2, '0');
+  return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+}
+
+const LIBPARTS = {
+  rtc: {
+    name: 'Часы реального времени DS3231', category: 'Модули', w: 96, h: 78,
+    pins: () => [
+      { id: 'VCC', label: '+', x: -33, y: 34, dir: 'down' },
+      { id: 'GND', label: '−', x: -11, y: 34, dir: 'down' },
+      { id: 'SDA', label: 'SDA', x: 11, y: 34, dir: 'down' },
+      { id: 'SCL', label: 'SCL', x: 33, y: 34, dir: 'down' },
+    ],
+    render(comp) {
+      const pins = this.pins(comp);
+      const now = rtcClockText(comp);
+      return partTag(comp, 96, 78, `
+        <rect x="-44" y="-35" width="88" height="62" rx="3" fill="url(#sim-pcb-blue)" stroke="#0d3350" stroke-width="1.1"/>
+        <circle cx="-24" cy="-10" r="17" fill="#20262c" stroke="#3a444d" stroke-width="1.2"/>
+        <circle cx="-24" cy="-10" r="13" fill="url(#sim-metal-h)" stroke="#7d8b96" stroke-width=".8"/>
+        <text x="-24" y="-7.5" style="font:4.4px ui-monospace;fill:#25313b;text-anchor:middle">CR2032</text>
+        <rect x="2" y="-26" width="30" height="18" rx="1.5" fill="#15181c" stroke="#2b3138"/>
+        <rect x="5" y="-23" width="24" height="3" rx="1" fill="#232a30"/>
+        <text x="17" y="-13" style="font:4.4px ui-monospace;fill:#8fa4b6;text-anchor:middle">DS3231</text>
+        <rect x="2" y="-2" width="18" height="12" rx="1.2" fill="#15181c" stroke="#2b3138"/>
+        <text x="11" y="6" style="font:3.8px ui-monospace;fill:#8fa4b6;text-anchor:middle">24C32</text>
+        <text x="-42" y="20" style="font:4.6px ui-monospace;fill:#bcd8ef">DS3231 · I²C</text>
+        ${WS_PADS(pins)}`, '', now);
+    },
+    update(g, comp) {
+      const t = g.querySelector('.readout text');
+      if (t) t.textContent = rtcClockText(comp);
+    },
+  },
+
+  max7219: {
+    name: 'Матрица 8×8 на MAX7219', category: 'Модули', w: 116, h: 124, rows: 8, cols: 8,
+    pins: () => [
+      { id: 'VCC', label: '+', x: -42, y: 58, dir: 'down' },
+      { id: 'GND', label: '−', x: -24, y: 58, dir: 'down' },
+      { id: 'DIN', label: 'DIN', x: -6, y: 58, dir: 'down' },
+      { id: 'CS', label: 'CS', x: 12, y: 58, dir: 'down' },
+      { id: 'CLK', label: 'CLK', x: 30, y: 58, dir: 'down' },
+    ],
+    render(comp) {
+      const pins = this.pins(comp);
+      const grid = comp.props?.grid || [];
+      const dots = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const on = Boolean(grid[r]?.[c]);
+          dots.push(`<circle class="dot" data-r="${r}" data-c="${c}" cx="${-31 + c * 8.6}" cy="${-40 + r * 8.6}"
+            r="2.9" fill="${on ? '#ff3b2f' : '#2a1010'}" opacity="${on ? 1 : '.85'}"/>`);
+        }
+      }
+      return partTag(comp, 116, 124, `
+        <rect x="-54" y="-57" width="108" height="94" rx="2" fill="#101418" stroke="#2b3138" stroke-width="1.1"/>
+        <rect x="-38" y="-47" width="76" height="76" rx="2" fill="#08090b" stroke="#1b2026"/>
+        ${dots.join('')}
+        <rect x="24" y="-52" width="26" height="17" rx="1.2" fill="#15181c" stroke="#2b3138"/>
+        <text x="37" y="-41.5" style="font:3.6px ui-monospace;fill:#8fa4b6;text-anchor:middle">MAX7219</text>
+        <text x="46" y="-14" style="font:4.2px ui-monospace;fill:#6f8a9b;text-anchor:middle">8×8</text>
+        <text x="-52" y="36" style="font:4.4px ui-monospace;fill:#6f8a9b">SPI · 5 В</text>
+        ${WS_PADS(pins)}`);
+    },
+    update(g, comp) {
+      const grid = comp.props?.grid || [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const el = g.querySelector(`.dot[data-r="${r}"][data-c="${c}"]`);
+          if (!el) continue;
+          const on = Boolean(grid[r]?.[c]);
+          el.setAttribute('fill', on ? '#ff3b2f' : '#2a1010');
+          el.setAttribute('opacity', on ? '1' : '.85');
+        }
+      }
+    },
+  },
+};
+
+export const PARTS = { ...DISCRETE, ...MODULES, ...POWER, ...EXTRA, ...WS2812, ...LINECAR, ...NEWPARTS, ...LIBPARTS };
 
 /**
  * Полярность у готовых модулей: плюс питания — на выводе VCC, минус — на GND.

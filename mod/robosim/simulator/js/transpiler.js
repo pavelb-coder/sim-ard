@@ -40,6 +40,8 @@ const LIB_CLASSES = new Set([
   // датчики-модули: у каждого своя библиотека
   'MPU6050', 'Adafruit_MPU6050', 'Adafruit_BMP280', 'OneWire', 'DallasTemperature', 'BH1750',
   'Adafruit_NeoPixel',
+  // часы реального времени и драйвер матрицы: RTC_DS3231 rtc; LedControl matrix(12, 11, 10, 1);
+  'RTC_DS3231', 'RTC_DS1307', 'DateTime', 'LedControl',
 ]);
 
 /** new Array(m).fill(0) для последней размерности. */
@@ -484,6 +486,14 @@ export function transpile(source) {
           }
           args = joinToks(argToks);
           after = nextMeaningful(toks, m + 1);
+        }
+        // DateTime now = rtc.now(); — это не вызов конструктора, а переменная
+        // с инициализатором: объявляем имя и отдаём «= …» общему разбору.
+        if (toks[after] && toks[after].t === 'op' && toks[after].v === '=') {
+          emit(`const ${nameTok.v} `);
+          i = after;
+          pendingType = false; declConst = false;
+          continue;
         }
         emit(`const ${nameTok.v} = new ${tk.v}(${args});`);
         i = (toks[after] && toks[after].t === 'op' && toks[after].v === ';') ? after + 1 : Math.max(after, j + 1);

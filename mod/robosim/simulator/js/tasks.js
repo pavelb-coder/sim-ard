@@ -2232,6 +2232,340 @@ export const TASKS = [
     solutionExample: 'linecar-laps',
   },
 
+  // ------------------------------------------------------------ гирлянда ----
+
+  {
+    id: 'ev-ws2812-chain',
+    title: 'Гирлянда: несколько модулей на одном выводе',
+    level: 3,
+    topic: 'Адресные светодиоды',
+    minutes: 25,
+    brief: 'У адресных светодиодов данные идут по цепочке: DOUT одного модуля — на DIN следующего. Соберите гирлянду из ленты, кольца и матрицы на одном выводе платы и заставьте одну переменную Adafruit_NeoPixel управлять всеми 84 светодиодами сразу.',
+    goals: [
+      'Три модуля WS2812 на схеме: лента, кольцо, матрица',
+      'Данные идут по цепочке: DOUT → DIN → DOUT → DIN',
+      'Одна переменная Adafruit_NeoPixel на все 84 светодиода',
+      'Светятся все три модуля, и по гирлянде бежит цвет',
+    ],
+    start: {
+      parts: [
+        board(),
+        { id: 'w1', type: 'ws2812', x: -150, y: 210, props: {} },
+        { id: 'w2', type: 'ws2812r', x: 150, y: 230, props: {} },
+        { id: 'w3', type: 'ws2812m', x: 0, y: 460, props: {} },
+      ],
+      wires: [],
+      code: SKELETON_CPP,
+    },
+    checks: [
+      {
+        id: 'three', kind: 'schema', text: 'На схеме три разных модуля WS2812',
+        hint: 'В палитре: лента на 8, кольцо на 12 и матрица 8×8 на 64 светодиода.',
+        test: (cx) => ({
+          ok: cx.partsOf('ws2812').length > 0 && cx.partsOf('ws2812r').length > 0 && cx.partsOf('ws2812m').length > 0,
+          detail: '',
+        }),
+      },
+      {
+        id: 'chain', kind: 'schema', text: 'Данные идут по цепочке: DOUT одного модуля — на DIN следующего',
+        hint: 'Провод данных начинается на выводе платы (DIN первой ленты), а дальше DOUT предыдущего модуля соединяется с DIN следующего. Питание при этом подаётся на каждый модуль.',
+        test: (cx) => {
+          const mods = cx.parts.filter((p) => ['ws2812', 'ws2812r', 'ws2812m'].includes(p.type));
+          let links = 0;
+          for (const a of mods) {
+            const out = cx.netOf(a.id, 'DOUT');
+            if (!out) continue;
+            if (mods.some((b) => b !== a && cx.netOf(b.id, 'DIN') === out)) links++;
+          }
+          return { ok: links >= 2, detail: `соединений DOUT → DIN: ${links}` };
+        },
+      },
+      {
+        id: 'power', kind: 'schema', text: 'Питание подано на каждый модуль (5V и GND)',
+        hint: 'Каждому модулю нужны свои 5 В и земля: данные по цепочке идут, а питание — нет.',
+        test: (cx) => {
+          const mods = cx.parts.filter((p) => ['ws2812', 'ws2812r', 'ws2812m'].includes(p.type));
+          const ok = mods.length > 0 && mods.every((m) => cx.toVcc(m.id, '5V') && cx.toGround(m.id, 'GND'));
+          return { ok, detail: '' };
+        },
+      },
+      {
+        id: 'count', kind: 'code', text: 'Одна переменная Adafruit_NeoPixel сразу на все светодиоды',
+        hint: 'Adafruit_NeoPixel garland(8 + 12 + 64, 6, NEO_GRB + NEO_KHZ800); — одна переменная, а адреса идут подряд через все модули.',
+        test: (cx) => {
+          const m = /Adafruit_NeoPixel\s+\w+\s*\(\s*([^,]+),/.exec(cx.code);
+          if (!m) return { ok: false, detail: 'объект Adafruit_NeoPixel не найден' };
+          const expr = m[1].trim();
+          const num = Number(expr);
+          const ok = (Number.isFinite(num) && num >= 20) || /\+/.test(expr) || /LEDS|TOTAL|SUM/.test(expr);
+          return { ok, detail: `светодиодов в объекте: ${expr}` };
+        },
+      },
+      {
+        id: 'show', kind: 'code', text: 'Картинка выводится через show()',
+        test: (cx) => cx.codeHas(/\.show\s*\(\s*\)/),
+      },
+      {
+        id: 'all-lit', kind: 'behavior', text: 'Светятся все три модуля',
+        hint: 'Если горит только первый — данные не дошли: проверьте провода DOUT → DIN между модулями.',
+        test: (cx) => {
+          const px = Object.entries(cx.trace.pixels || {});
+          const lit = px.filter(([, arr]) => arr.filter((c) => c[0] + c[1] + c[2] > 12).length >= 8);
+          return { ok: lit.length >= 3, detail: `светится модулей: ${lit.length} из ${px.length}` };
+        },
+      },
+      {
+        id: 'colour', kind: 'behavior', text: 'По гирлянде бежит цвет: у соседних светодиодов разные оттенки',
+        hint: 'Сдвигайте оттенок от адреса к адресу: wheel((i * 3 + step) & 255) — тогда на стыке модулей цвет продолжается, а не начинается заново.',
+        test: (cx) => {
+          const all = Object.values(cx.trace.pixels || {}).flat();
+          const colours = new Set(all.filter((c) => c[0] + c[1] + c[2] > 12).map((c) => c.join(',')));
+          return { ok: colours.size >= 8, detail: `разных оттенков: ${colours.size}` };
+        },
+      },
+    ],
+    solutionExample: 'ws2812-garland',
+  },
+
+  // ------------------------------------------------- ток, часы и матрица ----
+
+  {
+    id: 'ev-acs712-ammeter',
+    title: 'Амперметр на датчике тока ACS712',
+    level: 3,
+    topic: 'Датчики',
+    minutes: 30,
+    brief: 'Датчик тока ACS712 включают в разрыв провода: весь ток нагрузки идёт через его шунт 1,2 мОм, а на выводе OUT появляется напряжение 2,5 В плюс 185 мВ на каждый ампер. Соберите амперметр, который показывает ток нагрузки в мониторе порта.',
+    goals: [
+      'ACS712 стоит в разрыве: IP+ и IP− в разных точках цепи',
+      'Выход OUT датчика — на аналоговом входе платы',
+      'Скетч считает ток по формуле (U − 2,5) / 0,185',
+      'Показания совпадают с настоящим током в цепи',
+    ],
+    start: {
+      parts: [
+        board(),
+        { id: 'rv1', type: 'pot', x: -150, y: 210, props: { value: 0.5, ohms: 22 } },
+        { id: 'acs1', type: 'acs712', x: 120, y: 210, props: {} },
+      ],
+      wires: [],
+      code: SKELETON_CPP,
+    },
+    checks: [
+      {
+        id: 'has-acs', kind: 'schema', text: 'На схеме есть датчик тока ACS712 и нагрузка',
+        hint: 'В палитре: «Датчик тока ACS712 (5 А)» в разделе «Датчики». Нагрузкой может быть потенциометр, мотор или резистор.',
+        test: (cx) => ({ ok: cx.partsOf('acs712').length > 0, detail: '' }),
+      },
+      {
+        id: 'in-series', kind: 'schema', text: 'Датчик включён в разрыв: IP+ и IP− — в разных узлах цепи',
+        hint: 'Ток должен идти через датчик: питание → нагрузка → IP+, из IP− → земля. Если оба вывода на одном узле, ток через шунт не идёт и прибор покажет ноль.',
+        test: (cx) => ({
+          ok: cx.partsOf('acs712').some((m) => {
+            const a = cx.netOf(m.id, 'IP+');
+            const b = cx.netOf(m.id, 'IP-');
+            return Boolean(a && b && a !== b);
+          }),
+          detail: '',
+        }),
+      },
+      {
+        id: 'out-pin', kind: 'schema', text: 'Выход OUT датчика подключён к аналоговому входу',
+        hint: 'OUT → A0 (или другой аналоговый вход). Ток — величина непрерывная, поэтому читать её надо через analogRead().',
+        test: (cx) => {
+          const pin = ['A0', 'A1', 'A2', 'A3'].map((n) => cx.boardPin(n)).find(Boolean);
+          const ok = cx.partsOf('acs712').some((m) => ['A0', 'A1', 'A2', 'A3']
+            .some((n) => cx.boardPin(n) && cx.boardPin(n).net === cx.netOf(m.id, 'OUT')));
+          return { ok, detail: pin ? '' : 'на плате нет аналоговых входов' };
+        },
+      },
+      {
+        id: 'power', kind: 'schema', text: 'Питание датчика: VCC на 5 В, GND на землю',
+        test: (cx) => ({
+          ok: cx.partsOf('acs712').some((m) => cx.toVcc(m.id, 'VCC') && cx.toGround(m.id, 'GND')),
+          detail: '',
+        }),
+      },
+      {
+        id: 'formula', kind: 'code', text: 'Скетч переводит напряжение в амперы (0,185 В на ампер)',
+        hint: 'float amps = (volts - 2.5) / 0.185; — 2,5 В соответствует нулю ампер, 185 мВ — одному амперу.',
+        test: (cx) => ({
+          ok: cx.codeHas(/0?\.185|185|MV_PER_A/)
+            && cx.codeHas(/analogRead\s*\(/),
+          detail: '',
+        }),
+      },
+      {
+        id: 'current', kind: 'behavior', text: 'Через датчик шёл ток не меньше 0,1 А',
+        hint: 'Покрутите потенциометр на схеме: при сопротивлении около 10 Ом ток будет примерно 0,45 А.',
+        test: (cx) => {
+          const amps = cx.currentSeen();
+          return { ok: amps >= 0.1, detail: `наибольший ток ${amps.toFixed(2)} А` };
+        },
+      },
+      {
+        id: 'reading', kind: 'behavior', text: 'В мониторе порта есть значение тока в амперах',
+        hint: 'Напечатайте результат: Serial.print(amps, 3); Serial.println(" А");',
+        test: (cx) => {
+          const text = cx.serialText();
+          const m = /(-?\d+[.,]\d+)\s*А/.exec(text);
+          const v = m ? Number(m[1].replace(',', '.')) : null;
+          return { ok: v !== null && Math.abs(v) >= 0.05, detail: m ? `${m[1]} А` : 'числа с «А» в порту нет' };
+        },
+      },
+    ],
+    solutionExample: 'acs712-ammeter',
+  },
+
+  {
+    id: 'ev-rtc-clock',
+    title: 'Часы на OLED с модулем DS3231',
+    level: 3,
+    topic: 'Модули',
+    minutes: 30,
+    brief: 'Модуль DS3231 — это часы реального времени: своя батарейка CR2032, точный кварцевый генератор и шина I²C. Подключите его к плате вместе с экраном OLED и выведите время и дату так, чтобы они шли сами.',
+    goals: [
+      'DS3231 на шине I²C: SDA и SCL — на A4 и A5',
+      'Экран OLED на той же шине',
+      'В скетче объект RTC_DS3231 и вызов rtc.now()',
+      'На экране идут часы и стоит дата',
+    ],
+    start: {
+      parts: [
+        board(),
+        { id: 'ds1', type: 'rtc', x: -150, y: 220, props: {} },
+        { id: 'oled1', type: 'oled', x: 120, y: 220, props: {} },
+      ],
+      wires: [],
+      code: SKELETON_CPP,
+    },
+    checks: [
+      {
+        id: 'has-parts', kind: 'schema', text: 'На схеме есть часы DS3231 и экран',
+        hint: 'В палитре: «Часы реального времени DS3231» в разделе «Модули» и «OLED 128×64» на шине I²C.',
+        test: (cx) => ({
+          ok: cx.partsOf('rtc').length > 0
+            && (cx.partsOf('oled').length > 0 || cx.partsOf('lcd1602').length > 0),
+          detail: '',
+        }),
+      },
+      {
+        id: 'i2c', kind: 'schema', text: 'SDA и SCL модуля часов — на выводах I²C платы',
+        hint: 'У Uno шина I²C — это A4 (SDA) и A5 (SCL). Модуль часов и экран висят на одной шине параллельно.',
+        test: (cx) => {
+          const sda = cx.boardPin('A4')?.net;
+          const scl = cx.boardPin('A5')?.net;
+          const ok = cx.partsOf('rtc').some((m) => sda && scl
+            && cx.netOf(m.id, 'SDA') === sda && cx.netOf(m.id, 'SCL') === scl);
+          return { ok, detail: '' };
+        },
+      },
+      {
+        id: 'library', kind: 'code', text: 'В скетче объект RTC_DS3231 и вызов now()',
+        hint: '#include <RTClib.h>, RTC_DS3231 rtc; в setup() — rtc.begin(); в loop() — DateTime now = rtc.now();',
+        test: (cx) => ({
+          ok: cx.codeHas(/RTC_DS3231/) && cx.codeHas(/\.now\s*\(\s*\)/),
+          detail: '',
+        }),
+      },
+      {
+        id: 'fields', kind: 'code', text: 'Из времени берутся часы и минуты (а не только unixtime)',
+        hint: 'now.hour(), now.minute(), now.second() — у объекта DateTime поля читаются функциями.',
+        test: (cx) => cx.codeHas(/\.hour\s*\(/) && (cx.codeHas(/\.minute\s*\(/) || cx.codeHas(/\.second\s*\(/)),
+      },
+      {
+        id: 'on-screen', kind: 'behavior', text: 'На экране видно время в формате ЧЧ:ММ',
+        hint: 'Не забывайте display.display() — без него на экран ничего не попадает. И вызывайте clearDisplay() перед новой картинкой.',
+        test: (cx) => {
+          const text = cx.displays().join(' | ');
+          return { ok: /(^|\D)\d{1,2}:\d{2}/.test(text), detail: text.slice(0, 40) || 'экран пуст' };
+        },
+      },
+      {
+        id: 'date', kind: 'behavior', text: 'На экране есть и дата',
+        hint: 'Дату тоже можно взять у модуля: now.day(), now.month(), now.year().',
+        test: (cx) => {
+          const text = cx.displays().join(' | ');
+          const hasDate = /(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(\d{4}[./-]\d{1,2}[./-]\d{1,2})/.test(text);
+          return { ok: hasDate, detail: text.slice(0, 40) || 'экран пуст' };
+        },
+      },
+    ],
+    solutionExample: 'rtc-clock',
+  },
+
+  {
+    id: 'ev-max7219-matrix',
+    title: 'Матрица 8×8 на MAX7219',
+    level: 3,
+    topic: 'Модули',
+    minutes: 25,
+    brief: 'MAX7219 — драйвер, который сам переключает 64 светодиода: от платы нужны всего три провода (DIN, CLK, CS). Нарисуйте на матрице картинку через библиотеку LedControl и заставьте её двигаться.',
+    goals: [
+      'Три провода SPI: DIN, CLK, CS — на цифровых выводах',
+      'В скетче LedControl с выводом и числом матриц',
+      'Драйвер выведен из спящего режима (shutdown(false))',
+      'На матрице горит картинка, а не весь экран',
+    ],
+    start: {
+      parts: [
+        board(),
+        { id: 'mx1', type: 'max7219', x: 0, y: 230, props: {} },
+      ],
+      wires: [],
+      code: SKELETON_CPP,
+    },
+    checks: [
+      {
+        id: 'has-matrix', kind: 'schema', text: 'На схеме есть матрица MAX7219',
+        hint: 'В палитре, раздел «Модули»: «Матрица 8×8 на MAX7219».',
+        test: (cx) => ({ ok: cx.partsOf('max7219').length > 0, detail: '' }),
+      },
+      {
+        id: 'spi', kind: 'schema', text: 'DIN, CLK и CS — на трёх цифровых выводах платы',
+        hint: 'Например DIN → D12, CLK → D11, CS → D10. Питание (5V, GND) тоже нужно.',
+        test: (cx) => {
+          const ok = cx.partsOf('max7219').some((m) => ['DIN', 'CS', 'CLK'].every((id) => {
+            const net = cx.netOf(m.id, id);
+            if (!net) return false;
+            return [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].some((n) => cx.boardPin(`D${n}`)?.net === net);
+          }));
+          return { ok, detail: '' };
+        },
+      },
+      {
+        id: 'power', kind: 'schema', text: 'Питание матрицы: 5V на 5 В, GND на землю',
+        test: (cx) => ({
+          ok: cx.partsOf('max7219').some((m) => cx.toVcc(m.id, 'VCC') && cx.toGround(m.id, 'GND')),
+          detail: '',
+        }),
+      },
+      {
+        id: 'library', kind: 'code', text: 'В скетче LedControl(din, clk, cs, матриц)',
+        hint: '#include <LedControl.h>; LedControl matrix(12, 11, 10, 1); — первым идёт DIN, затем CLK, затем CS.',
+        test: (cx) => cx.codeHas(/LedControl\s+\w+\s*\(/),
+      },
+      {
+        id: 'wake', kind: 'code', text: 'Драйвер выведен из спящего режима: shutdown(0, false)',
+        hint: 'После включения MAX7219 спит: без shutdown(0, false) матрица останется тёмной, сколько бы точек вы ни задали.',
+        test: (cx) => cx.codeHas(/shutdown\s*\(\s*0\s*,\s*false\s*\)/),
+      },
+      {
+        id: 'draw', kind: 'code', text: 'Точки задаются через setLed() или setRow()',
+        test: (cx) => cx.codeHas(/\.setLed\s*\(|\.setRow\s*\(|\.setColumn\s*\(/),
+      },
+      {
+        id: 'lit', kind: 'behavior', text: 'На матрице горит от 4 до 48 точек — картинка, а не весь экран',
+        hint: 'Если не горит ничего — проверьте shutdown(0, false) и clearDisplay(). Если залито всё — цикл зажигает лишние точки.',
+        test: (cx) => {
+          const lit = cx.litDots();
+          return { ok: lit >= 4 && lit <= 48, detail: `горит ${lit} точек из 64` };
+        },
+      },
+    ],
+    solutionExample: 'max7219-face',
+  },
+
 ];
 
 /** Задание по id. */
