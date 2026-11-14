@@ -487,8 +487,8 @@ body{
 .part-label{transition:opacity .12s}
 .no-labels .part-label,.no-labels .part-tag{display:none}
 .icon-btn.active{border-color:#2f6f8d;color:#9fd8f2;background:#16232e}
-.pin-board{opacity:.8}
-.pin-board:hover{opacity:1}
+.pin-board{fill:rgba(9,13,17,.6);stroke:rgba(255,240,195,.5);stroke-width:1;opacity:.9}
+.pin-board:hover{fill:#37b6ff;stroke:#dff3ff;opacity:1}
 
 
 /* ---------- сгоревшая деталь: копоть и дым ---------- */

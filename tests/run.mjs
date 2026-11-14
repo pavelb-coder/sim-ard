@@ -572,8 +572,10 @@ console.log('\nОтрисовка плат и подписи элементов'
   const uno = renderBoardArt(BOARDS.uno);
   check('Uno: микросхема, логотип и разъёмы', uno.includes('ATmega328P') && uno.includes('ARDUINO') && uno.includes('ICSP'));
   check('Uno: подписи выводов на шелкографии как в железе', uno.includes('>13<') && uno.includes('>GND<') && uno.includes('>5V<') && uno.includes('>A0<'));
+  // золото площадок может быть и градиентом url(#sim-gold), и плотным цветом
+  const goldPads = (uno.match(/url\(#sim-gold\)|d4af37/g) || []).length;
   check('Uno: у каждого вывода есть золотая площадка',
-    (uno.match(/d4af37/g) || []).length >= BOARDS.uno.pins.length, `площадок ${(uno.match(/d4af37/g) || []).length}`);
+    goldPads >= BOARDS.uno.pins.length, `площадок ${goldPads}`);
 
   const esp = renderBoardArt(BOARDS.esp32);
   check('ESP32: модуль WROOM-32 и кнопки EN/BOOT', esp.includes('ESP32-WROOM-32') && esp.includes('BOOT'));

@@ -28,16 +28,31 @@ function silk(str, x, y, o = {}) {
   return `<text x="${x}" y="${y}"${tr} style="${st}">${esc(str)}</text>`;
 }
 
-/** Текстолит: тело платы, фаска, внутренняя тень и крепёжные отверстия. */
+/**
+ * Текстолит: тело платы, фаска, стеклотекстолит, дорожки под маской
+ * и крепёжные отверстия.
+ *
+ * Слои снизу вверх: срез текстолита (чуть светлее корпуса), сама плата,
+ * ткань стеклотекстолита (две диагональные сетки), дорожки под зелёной
+ * маской, свет сверху-слева и затемнение к нижнему краю, фаска и отверстия.
+ */
 function pcbBody(w, h, base, edge, { radius = 9, holes = [] } = {}) {
   const x = -w / 2, y = -h / 2;
   return `
+    <rect x="${x - 1.1}" y="${y - 1.1}" width="${w + 2.2}" height="${h + 2.2}" rx="${radius + 1}"
+          fill="#3f8a63" opacity=".55" filter="url(#sim-raise-big)"/>
     <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${base}" stroke="${edge}" stroke-width="1.2"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-traces)"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-traces2)"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-fiber)"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="url(#sim-face-light)"/>
     <rect x="${x + 2.5}" y="${y + 2.5}" width="${w - 5}" height="${h - 5}" rx="${radius - 2}"
           fill="none" stroke="rgba(255,255,255,.10)" stroke-width="1"/>
     ${holes.map(([hx, hy, r = 4.6]) => `
-      <circle cx="${hx}" cy="${hy}" r="${r}" fill="#0a1014" stroke="#9fb0bd" stroke-width="1.2"/>
-      <circle cx="${hx}" cy="${hy}" r="${r * 0.45}" fill="#05090c"/>`).join('')}`;
+      <circle cx="${hx}" cy="${hy}" r="${r}" fill="url(#sim-drill)" stroke="#9fb0bd" stroke-width="1.2"/>
+      <circle cx="${hx}" cy="${hy}" r="${r * 0.45}" fill="#05090c"/>
+      <path d="M ${hx - r * 0.75} ${hy - r * 0.55} a ${r} ${r} 0 0 1 ${r * 1.5} 0"
+            fill="none" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>`).join('')}`;
 }
 
 /** Одна площадка гребёнки: чёрный пластик, золото, отверстие — по центру вывода. */
@@ -45,9 +60,32 @@ function pad(x, y) {
   const half = 4.7;
   return `
     <rect x="${x - half}" y="${y - 5}" width="${half * 2}" height="10" rx="1.1" fill="#0a0f14"/>
-    <rect x="${x - half + 1.2}" y="${y - 3.6}" width="${half * 2 - 2.4}" height="7.2" rx=".8"
-          fill="none" stroke="#d4af37" stroke-width="1.1" opacity=".9"/>
-    <circle cx="${x}" cy="${y}" r="1.5" fill="#04080a"/>`;
+    <rect x="${x - half + .9}" y="${y - 4.1}" width="${half * 2 - 1.8}" height="8.2" rx="1"
+          fill="url(#sim-gold)" opacity=".95"/>
+    <rect x="${x - half + .9}" y="${y - 4.1}" width="${half * 2 - 1.8}" height="8.2" rx="1"
+          fill="none" stroke="rgba(255,244,200,.35)" stroke-width=".6"/>
+    <rect x="${x - half + 1.5}" y="${y - 3.5}" width="${half * 2 - 3}" height="2.6" rx=".8"
+          fill="rgba(255,255,255,.4)"/>
+    <circle cx="${x}" cy="${y}" r="1.85" fill="url(#sim-drill)"/>
+    <circle cx="${x}" cy="${y}" r="1.85" fill="none" stroke="rgba(255,240,190,.5)" stroke-width=".7"/>`;
+}
+
+/**
+ * Отдельная контактная площадка: чёрный пластик вокруг, золото с бликом,
+ * сверление и галтель припоя. По ней видно, что на плате есть отверстие,
+ * а не «золотой квадратик».
+ */
+function goldPad(cx, cy, s = 6.2) {
+  const h = s / 2;
+  return `
+    <rect x="${cx - h}" y="${cy - h}" width="${s}" height="${s}" rx=".9" fill="#0a0f14"/>
+    <rect x="${cx - h + .8}" y="${cy - h + .8}" width="${s - 1.6}" height="${s - 1.6}" rx=".7"
+          fill="url(#sim-gold)" opacity=".96"/>
+    <rect x="${cx - h + .8}" y="${cy - h + .8}" width="${s - 1.6}" height="${s - 1.6}" rx=".7"
+          fill="none" stroke="rgba(255,244,200,.4)" stroke-width=".55"/>
+    <rect x="${cx - h + 1.2}" y="${cy - h + 1.2}" width="${s - 2.4}" height="1.5" rx=".6"
+          fill="rgba(255,255,255,.42)"/>
+    <circle cx="${cx}" cy="${cy}" r="${Math.min(1.7, s * 0.26)}" fill="url(#sim-drill)"/>`;
 }
 
 /** Гребёнка: тёмная планка на всю длину ряда + площадки. */
@@ -59,8 +97,12 @@ function header(pins, { dir = 'up', w, band = 11.5 } = {}) {
   const maxX = Math.min(Math.max(...xs) + 6.5, w / 2 - 4);
   const yc = row.reduce((sum, p) => sum + p.y, 0) / row.length;
   return `
+    <rect x="${minX}" y="${yc - band / 2 + 1}" width="${maxX - minX}" height="${band}" rx="1.6"
+          fill="#05080a" opacity=".45"/>
     <rect x="${minX}" y="${yc - band / 2}" width="${maxX - minX}" height="${band}" rx="1.6"
           fill="#101519" stroke="#20272e" stroke-width=".8"/>
+    <rect x="${minX + 1}" y="${yc - band / 2 + 1}" width="${maxX - minX - 2}" height="2.4" rx="1.2"
+          fill="rgba(255,255,255,.12)"/>
     ${row.map((p) => pad(p.x, p.y)).join('')}`;
 }
 
@@ -75,8 +117,11 @@ function chip(x, y, w, h, label, sub = '', { legs = 14, silkSize = 5 } = {}) {
   }
   return `
     ${pins.join('')}
+    <rect x="${x + .8}" y="${y + 1.6}" width="${w}" height="${h}" rx="1.8" fill="#04070a" opacity=".42"/>
     <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1.6" fill="#15181c" stroke="#2b3138" stroke-width=".8"/>
+    <rect x="${x + 1.4}" y="${y + 1.2}" width="${w - 2.8}" height="${h * 0.22}" rx="1" fill="rgba(255,255,255,.07)"/>
     <path d="M ${x + 4} ${y} a 4 4 0 0 0 0 ${Math.min(6, h * 0.3)}" fill="none" stroke="#0a0c0e" stroke-width="1.6"/>
+    <circle cx="${x + 2.8}" cy="${y + 2.8}" r="1.1" fill="#0a0c0e" stroke="#3a4148" stroke-width=".4"/>
     ${silk(label, x + w / 2, y + h / 2 + 1.8, { size: silkSize, fill: '#8d9aa6', family: 'ui-sans-serif,sans-serif' })}
     ${sub ? silk(sub, x + w / 2, y + h / 2 + 6.6, { size: 3.6, fill: '#5d6a75', family: 'ui-sans-serif,sans-serif' }) : ''}`;
 }
@@ -94,8 +139,11 @@ function capElectro(x, y, r = 7, label = '') {
 function tactile(x, y, s = 13, label = '', { above = false } = {}) {
   const ly = above ? y - s / 2 - 3 : y + s / 2 + 6.5;
   return `
-    <rect x="${x - s / 2}" y="${y - s / 2}" width="${s}" height="${s}" rx="1.6" fill="#454f59" stroke="#6c7883" stroke-width=".9"/>
-    <circle cx="${x}" cy="${y}" r="${s * 0.28}" fill="#2a323a" stroke="#7b8894" stroke-width=".8"/>
+    <rect x="${x - s / 2 + .7}" y="${y - s / 2 + 1.4}" width="${s}" height="${s}" rx="1.8" fill="#04070a" opacity=".45"/>
+    <rect x="${x - s / 2}" y="${y - s / 2}" width="${s}" height="${s}" rx="1.8" fill="url(#sim-metal)" stroke="#6c7883" stroke-width=".9"/>
+    <rect x="${x - s / 2 + 1.2}" y="${y - s / 2 + 1.2}" width="${s - 2.4}" height="${s * 0.3}" rx="1.2" fill="rgba(255,255,255,.28)"/>
+    <circle cx="${x}" cy="${y}" r="${s * 0.28}" fill="#2a323a" stroke="#9aa6b1" stroke-width=".8"/>
+    <circle cx="${x - s * 0.09}" cy="${y - s * 0.09}" r="${s * 0.1}" fill="rgba(255,255,255,.35)"/>
     ${label ? silk(label, x, ly, { size: 4.4, fill: '#e8f2f4', opacity: 0.85 }) : ''}`;
 }
 
@@ -108,24 +156,56 @@ function boardLed(x, y, color, label, { r = 3.4 } = {}) {
     ${label ? silk(label, x, y + r + 6.4, { size: 4.2, fill: '#e8f2f4', opacity: 0.8 }) : ''}`;
 }
 
+/** Кварцевый резонатор: металлическая «банка» с бликом и ножками. */
+function crystalCan(x, y, w, h) {
+  return `
+    <rect x="${x + .8}" y="${y + 1.4}" width="${w}" height="${h}" rx="${h * 0.32}" fill="#04070a" opacity=".42"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h * 0.32}" fill="url(#sim-metal)" stroke="#8d99a3" stroke-width=".8"/>
+    <rect x="${x + 2}" y="${y + 1.6}" width="${w - 4}" height="${h * 0.34}" rx="${h * 0.18}" fill="rgba(255,255,255,.4)"/>
+    <rect x="${x + 2}" y="${y + h - 3.2}" width="${w - 4}" height="1.8" rx=".9" fill="rgba(0,0,0,.22)"/>`;
+}
+
+/** Стабилизатор в корпусе SOT-223: пластик, металлическая площадка, три ножки. */
+function regSot223(x, y, w, h, label = '1117') {
+  const leg = w / 4.2;
+  return `
+    <rect x="${x + .8}" y="${y + 1.6}" width="${w}" height="${h}" rx="1.4" fill="#04070a" opacity=".42"/>
+    <rect x="${x + w * 0.28}" y="${y - 3.4}" width="${w * 0.44}" height="4.6" rx="1" fill="url(#sim-metal)" stroke="#8d99a3" stroke-width=".6"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1.4" fill="url(#sim-dip)" stroke="#2b3138" stroke-width=".8"/>
+    <rect x="${x + 1.2}" y="${y + 1.2}" width="${w - 2.4}" height="${h * 0.26}" rx=".8" fill="rgba(255,255,255,.09)"/>
+    ${[0, 1, 2].map((i) => `<rect x="${x + 2 + i * leg * 1.35}" y="${y + h - 1.6}" width="${leg * 0.8}" height="3.4" rx=".5" fill="#b9c3cb"/>`).join('')}
+    ${silk(label, x + w / 2, y + h / 2 + 2.2, { size: 4, fill: '#8d9aa6' })}`;
+}
+
 /** USB-разъём: металлический кожух и внутренняя колодка. */
 function usb(x, y, w, h, { type = 'B' } = {}) {
   const kind = type === 'micro'
     ? `<rect x="${x + 3}" y="${y + h * 0.28}" width="${w - 6}" height="${h * 0.44}" rx="1.6" fill="#1b2026"/>`
-    : `<rect x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h - 6}" rx="1.4" fill="#2a3138"/>
-       <rect x="${x + 6}" y="${y + h * 0.34}" width="${w - 12}" height="${h * 0.32}" rx="1" fill="#0e1216"/>`;
+    : `<rect x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h - 6}" rx="1.4" fill="url(#sim-plastic)" stroke="#3b454e" stroke-width=".6"/>
+       <rect x="${x + 5.5}" y="${y + h * 0.3}" width="${w - 11}" height="${h * 0.4}" rx="1.2" fill="#0a0d11"/>
+       <rect x="${x + 7}" y="${y + h * 0.36}" width="${w - 14}" height="${h * 0.1}" rx=".6" fill="rgba(255,255,255,.18)"/>`;
   return `
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2.4" fill="#c3ccd4" stroke="#8d99a3" stroke-width=".9"/>
-    <rect x="${x + 1.5}" y="${y + 1.5}" width="${w - 3}" height="${h * 0.3}" rx="1.6" fill="rgba(255,255,255,.45)"/>
+    <rect x="${x + 1}" y="${y + 2}" width="${w}" height="${h}" rx="2.4" fill="#04070a" opacity=".45"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2.4" fill="url(#sim-metal-v)" stroke="#7d8a96" stroke-width=".9"/>
+    <rect x="${x + 1.4}" y="${y + 1.4}" width="${w - 2.8}" height="${h * 0.26}" rx="1.6"
+          fill="rgba(255,255,255,.5)"/>
+    <rect x="${x + 1.4}" y="${y + h - 3.2}" width="${w - 2.8}" height="1.8" rx=".9"
+          fill="rgba(0,0,0,.35)"/>
     ${kind}`;
 }
 
-/** Разъём питания (бочонок) Arduino. */
+/** Разъём питания (бочонок) Arduino: чёрный корпус, металлические контакты, зев. */
 function barrelJack(x, y, w, h) {
+  const cy = y + h / 2;
   return `
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="#14181d" stroke="#2b333b" stroke-width=".9"/>
-    <rect x="${x + w - 8}" y="${y + 3}" width="5" height="${h - 6}" rx="1.4" fill="#222a32"/>
-    <ellipse cx="${x + 6}" cy="${y + h / 2}" rx="4" ry="${h / 2 - 4}" fill="#0a0d10" stroke="#333c45"/>
+    <rect x="${x + 1.2}" y="${y + 2.4}" width="${w}" height="${h}" rx="2.4" fill="#04070a" opacity=".45"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2.4" fill="url(#sim-plastic)" stroke="#2b333b" stroke-width=".9"/>
+    <rect x="${x + 1.4}" y="${y + 1.6}" width="${w - 2.8}" height="${h * 0.16}" rx="1.4" fill="rgba(255,255,255,.14)"/>
+    <rect x="${x + w - 9}" y="${y + 4}" width="5.4" height="${h - 8}" rx="1.6" fill="#1b2229" stroke="#39434c" stroke-width=".6"/>
+    <rect x="${x + w - 7.6}" y="${y + 6}" width="2.2" height="${h - 12}" rx="1" fill="#2d373f"/>
+    <ellipse cx="${x + 7}" cy="${cy}" rx="4.6" ry="${h / 2 - 4.5}" fill="#05080b" stroke="#39434c" stroke-width=".8"/>
+    <ellipse cx="${x + 7}" cy="${cy}" rx="2.1" ry="${(h / 2 - 4.5) * 0.45}" fill="url(#sim-metal-v)" opacity=".85"/>
+    <path d="M ${x + 7} ${cy - h / 2 + 5} a 4.6 5 0 0 1 0 4" stroke="rgba(255,255,255,.35)" fill="none" stroke-width=".8"/>
     ${silk('9V', x + w / 2 + 1, y + h - 3, { size: 4, fill: '#8a97a2' })}`;
 }
 
@@ -149,25 +229,21 @@ function paintUno(spec) {
     <!-- ATmega16U2 и его ICSP -->
     ${chip(X(15.6), Y(12.8), 32, 24, 'MEGA16U2', '', { legs: 8, silkSize: 3.6 })}
     ${[[15.75, 5.8], [18.29, 5.8], [20.83, 5.8], [15.75, 8.4], [18.29, 8.4], [20.83, 8.4]]
-    .map(([mx, my]) => `<rect x="${X(mx) - 2.6}" y="${Y(my) - 2.6}" width="5.2" height="5.2" rx=".7"
-      fill="#0a0f14" stroke="#d4af37" stroke-width=".9" opacity=".9"/>`).join('')}
+    .map(([mx, my]) => `${goldPad(X(mx), Y(my))}`).join('')}
 
     <!-- «мозг» платы -->
     ${chip(X(24.5), Y(26.5), 130, 30, 'ATmega328P', 'PU', { legs: 14, silkSize: 5.4 })}
     ${silk('16 MHz', X(16.6), Y(23.6), { size: 3.8, opacity: 0.7 })}
-    <rect x="${X(12.4)}" y="${Y(25.4)}" width="26" height="16" rx="4" fill="#c3ccd4" stroke="#8d99a3" stroke-width=".8"/>
-    <rect x="${X(14)}" y="${Y(27.4)}" width="20" height="12" rx="3" fill="#aab6bf"/>
+    ${crystalCan(X(12.4), Y(25.2), 26, 16)}
 
     <!-- ICSP: 2×3 у правого края -->
     <rect x="${X(59.4)}" y="${Y(20.6)}" width="30" height="41" rx="1.6" fill="#101519" stroke="#20272e" stroke-width=".8"/>
     ${[[61.9, 23.3], [64.4, 23.3], [61.9, 25.8], [64.4, 25.8], [61.9, 28.3], [64.4, 28.3]]
-    .map(([mx, my]) => `<rect x="${X(mx) - 2.6}" y="${Y(my) - 2.6}" width="5.2" height="5.2" rx=".7"
-      fill="#0a0f14" stroke="#d4af37" stroke-width=".9" opacity=".9"/>`).join('')}
+    .map(([mx, my]) => `${goldPad(X(mx), Y(my))}`).join('')}
     ${silk('ICSP', X(63.2), Y(19.2), { size: 4.2, opacity: 0.8 })}
 
     <!-- питание: стабилизатор и банки -->
-    <rect x="${X(11.5)}" y="${Y(37)}" width="30" height="20" rx="1.2" fill="#15181c" stroke="#2b3138" stroke-width=".8"/>
-    ${silk('1117', X(15), Y(40.6), { size: 4, fill: '#8d9aa6' })}
+    ${regSot223(X(11.5), Y(37), 30, 20)}
     ${capElectro(X(24.5), Y(40), 8)}
     ${capElectro(X(31.5), Y(40), 6.5)}
 
@@ -427,7 +503,7 @@ function paintNano(spec) {
     <!-- ICSP 2×3 у правого края -->
     <rect x="${X(38.2)}" y="${Y(4.0)}" width="19" height="28" rx="1.2" fill="#101519" stroke="#20272e" stroke-width=".7"/>
     ${[[39.6, 5.1], [42.1, 5.1], [39.6, 7.6], [42.1, 7.6], [39.6, 10.1], [42.1, 10.1]]
-    .map(([mx, my]) => `<circle cx="${X(mx)}" cy="${Y(my)}" r="1.5" fill="#0a0f14" stroke="#d4af37" stroke-width=".9"/>`).join('')}
+    .map(([mx, my]) => `${goldPad(X(mx), Y(my), 4.4)}`).join('')}
 
     <!-- индикаторы TX / RX / L / ON -->
     ${boardLed(X(24.2), Y(11.8), '#ffd166', '', { r: 2.2 })}
@@ -456,7 +532,7 @@ function paintProMini(spec) {
 
     <!-- FTDI-гребёнка слева -->
     <rect x="${X(0.4)}" y="${Y(2.4)}" width="9" height="58" rx="1.2" fill="#101519" stroke="#20272e" stroke-width=".7"/>
-    ${ftdi.map((y) => `<circle cx="${X(1.6)}" cy="${Y(y)}" r="1.6" fill="#0a0f14" stroke="#d4af37" stroke-width=".9"/>`).join('')}
+    ${ftdi.map((y) => `${goldPad(X(1.6), Y(y), 3.6)}`).join('')}
     ${silk('FTDI', X(1.6), Y(1.6), { size: 3, opacity: 0.8 })}
 
     <!-- ATmega328P и кварц -->
@@ -500,13 +576,11 @@ function paintLeonardo(spec) {
     <!-- ICSP 2×3 у правого края -->
     <rect x="${X(59.4)}" y="${Y(20.6)}" width="30" height="41" rx="1.6" fill="#101519" stroke="#20272e" stroke-width=".8"/>
     ${[[61.9, 23.3], [64.4, 23.3], [61.9, 25.8], [64.4, 25.8], [61.9, 28.3], [64.4, 28.3]]
-    .map(([mx, my]) => `<rect x="${X(mx) - 2.6}" y="${Y(my) - 2.6}" width="5.2" height="5.2" rx=".7"
-      fill="#0a0f14" stroke="#d4af37" stroke-width=".9" opacity=".9"/>`).join('')}
+    .map(([mx, my]) => `${goldPad(X(mx), Y(my))}`).join('')}
     ${silk('ICSP', X(63.2), Y(19.2), { size: 4, opacity: 0.8 })}
 
     <!-- питание и индикаторы -->
-    <rect x="${X(11.5)}" y="${Y(37)}" width="30" height="20" rx="1.2" fill="#15181c" stroke="#2b3138" stroke-width=".8"/>
-    ${silk('1117', X(15), Y(40.6), { size: 4, fill: '#8d9aa6' })}
+    ${regSot223(X(11.5), Y(37), 30, 20)}
     ${capElectro(X(24.5), Y(40), 8)}
     ${tactile(X(13.4), Y(11.6), 12)}
     ${silk('RESET', X(13.4), Y(15.6), { size: 3.8, opacity: 0.85 })}
@@ -562,8 +636,7 @@ function paintMega(spec) {
     <!-- ICSP -->
     <rect x="${X(80.6)}" y="${Y(21)}" width="30" height="41" rx="1.6" fill="#101519" stroke="#20272e" stroke-width=".8"/>
     ${[[83.1, 23.7], [85.6, 23.7], [83.1, 26.2], [85.6, 26.2], [83.1, 28.7], [85.6, 28.7]]
-    .map(([mx, my]) => `<rect x="${X(mx) - 2.6}" y="${Y(my) - 2.6}" width="5.2" height="5.2" rx=".7"
-      fill="#0a0f14" stroke="#d4af37" stroke-width=".9" opacity=".9"/>`).join('')}
+    .map(([mx, my]) => `${goldPad(X(mx), Y(my))}`).join('')}
     ${silk('ICSP', X(84.4), Y(19.6), { size: 4, opacity: 0.8 })}
 
     <!-- питание и индикаторы -->

@@ -65,24 +65,32 @@ export function ledLens({ color = '#ff5544', r = 12, label = 'A→K', lit = 0 } 
 
 /** Электролитический конденсатор: алюминиевый стакан, насечка, полоса «−». */
 export function electrolyticCan({ r = 13, text = '' } = {}) {
+  // Полярный электролит: серебристая «банка», синяя полоса со стороны «−»,
+  // крест-насечка на торце, маркировка прямо на корпусе.
   return `
-    <circle cx="0" cy="2" r="${r}" fill="rgba(0,0,0,.45)" opacity=".45"/>
+    <circle cx="${r * 0.1}" cy="${r * 0.22}" r="${r}" fill="rgba(0,0,0,.5)" opacity=".5"/>
     <circle cx="0" cy="0" r="${r}" fill="url(#sim-can)" stroke="#5c6b78" stroke-width="1"/>
     <path d="M ${-r * 0.74} ${-r * 0.68} A ${r} ${r} 0 0 1 ${r * 0.74} ${-r * 0.68}"
           fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.6"/>
-    <rect x="${-r * 0.22}" y="${-r}" width="${r * 0.44}" height="${r * 0.34}" rx="1" fill="#20272e" opacity=".55"/>
+    <path d="M ${-r * 0.62} ${r * 0.78} A ${r} ${r} 0 0 0 ${r * 0.62} ${r * 0.78}"
+          fill="none" stroke="rgba(0,0,0,.22)" stroke-width="1.8"/>
     <path d="M ${r * 0.5} ${-r * 0.85} A ${r} ${r} 0 0 1 ${r * 0.5} ${r * 0.85}" fill="none"
           stroke="#2f6fd0" stroke-width="${Math.max(2, r * 0.28)}" opacity=".85"/>
-    <text x="0" y="${-r - 4}" style="font:7px ui-monospace,monospace;fill:#8fbde3;text-anchor:middle">+</text>
-    ${text ? `<text x="0" y="${-r - 6}" style="font:6px ui-monospace,monospace;fill:#a8c0d2;text-anchor:middle">${text}</text>` : ''}`;
+    <path d="M ${-r * 0.5} ${-r * 0.52} h ${r * 0.5} M ${-r * 0.25} ${-r * 0.77} v ${r * 0.5}"
+          stroke="rgba(70,84,96,.42)" stroke-width="1" stroke-linecap="round"/>
+    <text x="${-r - 4}" y="${-2}" style="font:7px ui-monospace,monospace;fill:#8fbde3;text-anchor:middle">+</text>
+    ${text ? `<text x="0" y="${r * 0.56}" style="font:5.4px ui-monospace,monospace;fill:#33414d;text-anchor:middle;letter-spacing:.3px">${text}</text>` : ''}`;
 }
 
 /** Диод: стеклянная колба с тёмным кольцом катода. */
 export function diodeBody({ x1 = -9, x2 = 9 } = {}) {
+  // 1N4007: чёрный эпоксидный цилиндр, серебристое кольцо катода, блик сверху.
+  const w = x2 - x1;
   return `
-    <rect x="${x1}" y="-7" width="${x2 - x1}" height="14" rx="7" fill="url(#sim-glass-d)" stroke="#7e8ea0" stroke-width=".9"/>
-    <rect x="${x2 - 7}" y="-6.4" width="3.4" height="12.8" fill="#20272e" opacity=".85" rx="1"/>
-    <path d="M ${x1 + 2} -4 L ${x1 + 7} 0 L ${x1 + 2} 4 Z" fill="#cfdae4" opacity=".8"/>`;
+    <rect x="${x1 + .6}" y="-4" width="${w}" height="12" rx="6" fill="rgba(0,0,0,.4)"/>
+    <rect x="${x1}" y="-7" width="${w}" height="14" rx="6" fill="url(#sim-dip)" stroke="#11161b" stroke-width="1"/>
+    <rect x="${x2 - w * 0.3}" y="-6.4" width="${w * 0.16}" height="12.8" rx="1.6" fill="url(#sim-metal-h)"/>
+    <path d="M ${x1 + 3} -4.6 H ${x2 - 4}" stroke="rgba(255,255,255,.28)" stroke-width="1.6" stroke-linecap="round"/>`;
 }
 
 /** Транзистор TO-92: пластиковый полукруг с плоской стороной и три ножки. */

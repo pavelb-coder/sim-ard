@@ -169,17 +169,27 @@ const DISCRETE = {
     ],
     render(comp) {
       const uf = (comp.props?.farads ?? 1e-5) * 1e6;
+      const text = uf >= 1 ? `${uf.toFixed(0)} мкФ` : `${(uf * 1000).toFixed(0)} нФ`;
+      // маркировка как на настоящей керамике: «104» = 10·10⁴ пФ = 100 нФ
+      const mark = uf >= 1
+        ? `${uf.toFixed(0)}u`
+        : `${Math.round(uf * 1e3)}n`;
       return partTag(comp, 64, 30, `
-        <line x1="-30" y1="0" x2="-5" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="5" y1="0" x2="30" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="-5" y1="-10" x2="-5" y2="10" stroke="#bfe0ff" stroke-width="2"/>
-        <line x1="5" y1="-10" x2="5" y2="10" stroke="#bfe0ff" stroke-width="2"/>
-        <text x="0" y="22" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">${uf >= 1 ? uf.toFixed(0) + ' мкФ' : (uf * 1000).toFixed(0) + ' нФ'}</text>`);
+        ${lead(-30, -15)}
+        ${lead(15, 30)}
+        <rect x="-.7" y="-9" width="30" height="22" rx="7" fill="#04070a" opacity=".35"/>
+        <rect x="-15" y="-11" width="30" height="22" rx="7" fill="url(#sim-ceramic)" stroke="#8a4a18" stroke-width=".9"/>
+        <rect x="-12.5" y="-9" width="25" height="6" rx="3" fill="rgba(255,255,255,.45)"/>
+        <ellipse cx="-6" cy="-7.4" rx="5" ry="2" fill="rgba(255,255,255,.5)" transform="rotate(-8 -6 -7.4)"/>
+        <text x="0" y="4.2" style="font:6px ui-monospace,monospace;fill:#5c2f0f;text-anchor:middle;letter-spacing:.5px">${mark}</text>
+        <rect class="charge" x="-13" y="-9" width="26" height="18" rx="6" fill="#bfe8ff" opacity="0"/>
+        <text x="0" y="22" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">${text}</text>`);
     },
     update(g, comp, env) {
-      const v = g.querySelectorAll('line');
+      // чем больше напряжение — тем ярче «заряд» внутри корпуса
       const charge = Math.min(1, Math.abs(env.voltage || 0) / 5);
-      if (v[2]) v[2].setAttribute('stroke', charge > 0.05 ? `rgba(140,220,255,${0.35 + charge * 0.65})` : '#bfe0ff');
+      const glow = g.querySelector('.charge');
+      if (glow) glow.setAttribute('opacity', String(charge * 0.45));
     },
   },
 
@@ -195,7 +205,8 @@ const DISCRETE = {
       return partTag(comp, 64, 34, `
         ${lead(-30, -12)}
         ${lead(12, 30)}
-        ${electrolyticCan({ r: 13, text })}`);
+        ${electrolyticCan({ r: 13 })}
+        <text x="0" y="26" style="font:6px ui-monospace,monospace;fill:#a8c0d2;text-anchor:middle">${text}</text>`);
     },
   },
 
@@ -207,11 +218,19 @@ const DISCRETE = {
     ],
     render(comp) {
       const mh = (comp.props?.henries ?? 1e-3) * 1000;
+      // дроссель: тёмный ферритовый сердечник и витки медного провода поверх
+      const turns = [0, 1, 2, 3].map((i) => {
+        const x = -14 + i * 7.4;
+        return `<path d="M ${x} 9 a 5 7.4 0 0 1 0 -18" fill="none" stroke="url(#sim-copper)" stroke-width="2.6"/>
+                <path d="M ${x} 9 a 5 7.4 0 0 1 0 -18" fill="none" stroke="rgba(255,255,255,.25)" stroke-width=".7"/>`;
+      }).join('');
       return partTag(comp, 70, 30, `
-        <line x1="-32" y1="0" x2="-18" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="18" y1="0" x2="32" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <path d="M -18 0 a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0"
-              fill="none" stroke="#b8a1ff" stroke-width="1.6"/>
+        ${lead(-32, -16)}
+        ${lead(16, 32)}
+        <rect x="-.7" y="-8" width="30" height="20" rx="6" fill="#04070a" opacity=".35"/>
+        <rect x="-16" y="-9.5" width="32" height="19" rx="6" fill="url(#sim-plastic)" stroke="#20272e" stroke-width=".9"/>
+        ${turns}
+        <rect x="-13" y="-8.4" width="26" height="3" rx="1.5" fill="rgba(255,255,255,.10)"/>
         <text x="0" y="22" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">${mh.toFixed(1)} мГн</text>`);
     },
   },
@@ -277,16 +296,25 @@ const DISCRETE = {
     render(comp) {
       const light = comp.props?.light ?? 0.5;
       return partTag(comp, 64, 44, `
-        <line x1="-28" y1="0" x2="-14" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <line x1="14" y1="0" x2="28" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
-        <circle cx="0" cy="0" r="13" fill="#2a3440" stroke="#46586a"/>
-        <path d="M -8 -6 l 16 12 M -8 0 l 16 0 M -8 6 l 16 -12" stroke="#e6c07b" stroke-width="1.2" fill="none"/>
+        <line x1="-28" y1="0" x2="-15" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
+        <line x1="15" y1="0" x2="28" y2="0" stroke="#8aa4b8" stroke-width="1.4"/>
+        <circle cx=".8" cy="1.4" r="13.4" fill="rgba(0,0,0,.42)"/>
+        <circle cx="0" cy="0" r="13" fill="#e9e4d8" stroke="#9aa3ab" stroke-width=".9"/>
+        <path d="M -8 -7 H 8 M 8 -7 V -2.4 M 8 -2.4 H -8 M -8 -2.4 V 2.2 M -8 2.2 H 8 M 8 2.2 V 6.8 M 8 6.8 H -8"
+              fill="none" stroke="#8a5a2a" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M -8 -7 H 8" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+        <path d="M -11.4 -3.6 V 3.6 M 11.4 -3.6 V 3.6" stroke="#b8c0c7" stroke-width="2.4" stroke-linecap="round"/>
+        <ellipse class="dark" cx="0" cy="0" rx="12.6" ry="12.6" fill="#141b21" opacity="${(1 - light) * 0.55}"/>
+        <path d="M -6.4 -8.4 A 10.6 10.6 0 0 1 4.6 -10.2" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/>
         <text x="0" y="24" style="font:6px ui-monospace;fill:#a8c0d2;text-anchor:middle">свет ${Math.round(light * 100)}%</text>
         <rect data-role="knob" x="-13" y="-13" width="26" height="26" fill="transparent" style="cursor:ew-resize"/>`);
     },
     update(g, comp) {
+      const light = comp.props?.light ?? 0.5;
       const t = g.querySelector('.body text');
-      if (t) t.textContent = `свет ${Math.round((comp.props?.light ?? 0.5) * 100)}%`;
+      if (t) t.textContent = `свет ${Math.round(light * 100)}%`;
+      const dark = g.querySelector('.dark');
+      if (dark) dark.setAttribute('opacity', String((1 - light) * 0.55));
     },
   },
 
@@ -583,11 +611,11 @@ const DISCRETE = {
     ],
     render(comp) {
       return partTag(comp, 60, 34, `
-        ${lead(-28, -9)}
-        ${lead(9, 28)}
-        <circle class="glow" cx="0" cy="0" r="17" fill="#ffd166" opacity="0"/>
-        ${diodeBody({ x1: -9, x2: 9 })}
-        <path class="tri" d="M -3.5 -4.6 L 5 0 L -3.5 4.6 Z" fill="#dbe6ee" opacity=".9"/>
+        ${lead(-28, -12)}
+        ${lead(12, 28)}
+        <circle class="glow" cx="0" cy="0" r="18" fill="#ffd166" opacity="0"/>
+        ${diodeBody({ x1: -12, x2: 12 })}
+        <rect class="tri" x="4.4" y="-6.4" width="3.8" height="12.8" rx="1.4" fill="#c9d3db"/>
         <text x="0" y="23" style="font:6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">A→K · 0,65 В</text>`);
     },
     update(g, comp, env) {
@@ -595,7 +623,7 @@ const DISCRETE = {
       const on = i > 0.0005;
       const glow = g.querySelector('.glow'), tri = g.querySelector('.tri');
       if (glow) glow.setAttribute('opacity', String(Math.min(0.35, i * 6)));
-      if (tri) tri.setAttribute('fill', on ? '#fff0c2' : '#d8e4ee');
+      if (tri) tri.setAttribute('fill', on ? '#fff0c2' : '#c9d3db');
     },
   },
 
@@ -646,13 +674,16 @@ const DISCRETE = {
         <circle class="halo halo-b" cx="0" cy="-6" r="24" fill="#3b82f6" opacity="0"/>
         <path d="M -13 4 L -13 24 M -7 8 L -7 24 M 7 8 L 7 24 M 13 4 L 13 24"
               stroke="url(#sim-metal-h)" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-        <circle cx="0" cy="-6" r="14" fill="#0f1a22" opacity=".5"/>
-        <circle cx="0" cy="-6" r="14" fill="url(#sim-lens)" stroke="#9fb0bf" stroke-width="1.1"/>
-        <circle cx="0" cy="-6" r="13" fill="#eaf1f6" fill-opacity=".18"/>
-        <path d="M -5 -11 L 4 -6 L -5 -1 Z" fill="#e9a0a0" opacity=".8"/>
-        <path d="M 5 -11 L -4 -6 L 5 -1 Z" fill="#9fe0b4" opacity=".7"/>
-        <circle class="core" cx="0" cy="-6" r="5" fill="#dfe8ef" opacity=".6"/>
-        <ellipse cx="-4.5" cy="-11" rx="3.6" ry="2.2" fill="rgba(255,255,255,.8)" transform="rotate(-25 -4.5 -11)"/>
+        <circle cx=".8" cy="-5.2" r="14.4" fill="rgba(0,0,0,.45)"/>
+        <circle cx="0" cy="-6" r="14" fill="#0f1a22" opacity=".55"/>
+        <circle class="core" cx="0" cy="-6" r="14" fill="#dfe8ef" stroke="#9fb0bf" stroke-width="1.1"/>
+        <circle cx="0" cy="-6" r="14" fill="url(#sim-lens)" opacity=".5"/>
+        <rect x="-7.6" y="-14.6" width="3.2" height="7" rx="1.2" fill="#e05a52" opacity=".85"/>
+        <rect x="-1.6" y="-14.6" width="3.2" height="7" rx="1.2" fill="#4cc47c" opacity=".8"/>
+        <rect x="4.4" y="-14.6" width="3.2" height="7" rx="1.2" fill="#5b7ee0" opacity=".8"/>
+        <path d="M -12 -1.4 A 12 12 0 0 0 12 -1.4" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1.6"/>
+        <ellipse cx="-5" cy="-12" rx="4.6" ry="2.6" fill="rgba(255,255,255,.85)" transform="rotate(-25 -5 -12)"/>
+        <path d="M -10.6 1.4 A 12.6 12.6 0 0 0 10.6 1.4" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="1.6"/>
         <text x="0" y="46" style="font:5.6px ui-monospace,monospace;fill:#7d93a6;text-anchor:middle">общий катод</text>`);
     },
     update(g, comp, env) {
@@ -662,7 +693,6 @@ const DISCRETE = {
       const core = g.querySelector('.core');
       if (core) {
         const m = Math.max(ch[0], ch[1], ch[2]);
-        core.setAttribute('opacity', String(0.35 + Math.min(0.65, m * 0.65)));
         core.setAttribute('fill', m > 0.05
           ? `rgb(${Math.round(120 + 135 * Math.min(1, ch[0]))},${Math.round(120 + 135 * Math.min(1, ch[1]))},${Math.round(120 + 135 * Math.min(1, ch[2]))})`
           : '#dfe8ef');
@@ -721,11 +751,14 @@ const DISCRETE = {
         DP: 'M 19 7 h 6 v 6 h -6 z',
       };
       const segs = Object.entries(SEG).map(([k, d]) =>
-        `<path class="seg seg-${k}" d="${d}" fill="#3a2114"/>`).join('');
+        `<path class="seg seg-${k}" d="${d}" fill="#33201a"/>`).join('');
       return partTag(comp, 84, 120, `
-        <rect x="-24" y="-48" width="52" height="64" rx="3" fill="#25150d" stroke="#3f2517"/>
+        <rect x="-24" y="-48" width="52" height="64" rx="3" fill="rgba(0,0,0,.45)"/>
+        <rect x="-25" y="-49" width="52" height="64" rx="3.4" fill="#161b20" stroke="#3a424a" stroke-width="1"/>
+        <rect x="-23.4" y="-47.4" width="48.8" height="60.8" rx="2.6" fill="#0c0f13" stroke="#05080a" stroke-width=".8"/>
         ${segs}
-        <rect x="-24" y="-48" width="52" height="64" rx="3" fill="#000" opacity=".18"/>
+        <rect x="-23.4" y="-47.4" width="48.8" height="60.8" rx="2.6" fill="url(#sim-glass-d)" opacity=".2"/>
+        <path d="M -22 -46 L 22 -46 L 22 -20 L -22 -34 Z" fill="rgba(255,255,255,.05)"/>
         <text class="dig" x="0" y="42" style="font:9px ui-monospace;fill:#8a6a4a;text-anchor:middle">—</text>
         ${['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP'].map((id, i) =>
           `<line x1="-34" y1="${-35 + i * 10}" x2="-24" y2="${Math.max(-46, Math.min(14, -35 + i * 10))}" stroke="#8aa4b8" stroke-width="1.2"/>`).join('')}

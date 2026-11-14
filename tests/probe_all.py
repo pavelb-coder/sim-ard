@@ -4,10 +4,11 @@
   ./start.sh &
   LD_LIBRARY_PATH=/tmp/libsys/usr/lib/x86_64-linux-gnu python3 tests/probe_all.py
 """
-import asyncio, json, pathlib
+import asyncio, json, os, pathlib
 from playwright.async_api import async_playwright
 
-URL = "http://127.0.0.1:8080/"
+# адрес сайта: по умолчанию 8080, можно переопределить ROBOSIM_URL
+URL = os.environ.get("ROBOSIM_URL", "http://127.0.0.1:8080/")
 OUT = pathlib.Path(__file__).parent / "shots"
 OUT.mkdir(exist_ok=True)
 
