@@ -147,6 +147,7 @@ function iconFor(type) {
     case 'sound': return `<svg ${c} aria-hidden="true"><circle cx="9" cy="9" r="4"/><path d="M15 5a6 6 0 0 1 0 8M18 3a9 9 0 0 1 0 12"/></svg>`;
     case 'servo': return `<svg ${c} aria-hidden="true"><rect x="5" y="6" width="16" height="8" rx="2"/><circle cx="13" cy="6" r="3"/><path d="M13 3v-3"/></svg>`;
     case 'lcd1602': return `<svg ${c} aria-hidden="true"><rect x="2" y="4" width="22" height="11" rx="1" fill="#0d3a1f" stroke="#1d6b38"/><path d="M5 8h16M5 11h10" stroke="#7ef29d"/></svg>`;
+    case 'lcd1602p': return `<svg ${c} aria-hidden="true"><rect x="1" y="5" width="24" height="11" rx="1" fill="#0d3a1f" stroke="#1d6b38"/><path d="M4 9h18M4 12h11" stroke="#7ef29d"/><path d="M3 19v3M6 19v3M9 19v3M12 19v3M15 19v3M18 19v3M21 19v3" stroke="#8fa3b5"/></svg>`;
     case 'oled': return `<svg ${c} aria-hidden="true"><rect x="6" y="2" width="14" height="14" rx="2" fill="#04121f" stroke="#24405c"/><path d="M8 7h10M8 10h6" stroke="#9ad7ff"/></svg>`;
     case 'buzzer': return `<svg ${c} aria-hidden="true"><path d="M6 13a7 7 0 0 1 14 0z"/><path d="M2 13h4M20 13h4"/></svg>`;
     case 'diode': return `<svg ${c} aria-hidden="true"><path d="M2 9h5M19 9h5"/><path d="M9 4l6 5-6 5z"/><path d="M15 4v10"/></svg>`;
@@ -443,6 +444,29 @@ function makeBus(boardPart) {
       return schematic.parts.find((p) => p.type === type && pinsOf(p).some((pp) => circuit.netOf(p.id, pp.id) === net)) || null;
     },
     firstOfType(type) { return schematic.parts.find((p) => p.type === type) || null; },
+    partsOfType(type) { return schematic.parts.filter((p) => p.type === type); },
+    /** Вывод платы и вывод детали на одном узле? (по ним библиотека находит экран) */
+    sameNet(pinNum, part, pinId) {
+      if (!part) return false;
+      const pin = spec.pins.find((p) => p.num === Number(pinNum));
+      if (!pin) return false;
+      const a = circuit.netOf(boardPart.id, pin.id);
+      const b = circuit.netOf(part.id, pinId);
+      return Boolean(a) && a === b;
+    },
+    /** Напряжение на выводе платы по последнему расчёту цепи. */
+    voltageOfPin(pinNum) {
+      const v = circuit.voltageOf(boardPart.id, Number(pinNum));
+      return Number.isFinite(v) ? v : 0;
+    },
+    /** Деталь подключена к питанию: «плюс» — на 5 В, «минус» — на земле платы. */
+    poweredOn(part, plusPin = 'VCC', minusPin = 'GND') {
+      if (!part) return false;
+      const vcc = circuit.vccNet();
+      const g = circuit.groundNet;
+      if (!vcc || !g) return false;
+      return circuit.netOf(part.id, plusPin) === vcc && circuit.netOf(part.id, minusPin) === g;
+    },
     changed(part) { schematic.refreshPart(part.id); },
   };
 }
@@ -1319,7 +1343,7 @@ function sampleTrace(res) {
       s.min = Math.min(s.min, a);
       s.max = Math.max(s.max, a);
       trace.servos[p.id] = s;
-    } else if (p.type === 'lcd1602') {
+    } else if (p.type === 'lcd1602' || p.type === 'lcd1602p') {
       trace.lcd[p.id] = [...(p.props?.lines || [])];
     }
   }

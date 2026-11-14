@@ -19,7 +19,7 @@ IDS = ["blink", "led", "button", "pot", "rc", "servo", "lcd", "oled",
        "transistor-motor", "for-loop", "array-pattern", "functions", "switch-menu",
        "serial-echo", "string-cmd", "random-dice", "millis-blink", "servo-pot",
        "mpu-tilt", "bmp-altimeter", "ds18b20-thermo", "bh1750-lux", "mq2-gas",
-       "soil-watering", "sound-clap"]
+       "soil-watering", "sound-clap", "lcd-parallel"]
 
 
 async def main():

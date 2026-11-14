@@ -36,7 +36,7 @@ const UNSUPPORTED = {
 
 /** Классы из libraries.js: их можно объявлять как в скетче — Servo myservo; */
 const LIB_CLASSES = new Set([
-  'Servo', 'DHT', 'DHT11', 'Stepper', 'LiquidCrystal_I2C', 'Adafruit_SSD1306', 'Wire', 'TwoWire',
+  'Servo', 'DHT', 'DHT11', 'Stepper', 'LiquidCrystal', 'LiquidCrystal_I2C', 'Adafruit_SSD1306', 'Wire', 'TwoWire',
   // датчики-модули: у каждого своя библиотека
   'MPU6050', 'Adafruit_MPU6050', 'Adafruit_BMP280', 'OneWire', 'DallasTemperature', 'BH1750',
 ]);

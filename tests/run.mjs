@@ -1758,8 +1758,8 @@ console.log('\nЗадания «Эвольвектора»: эталоны пр�
   const examples = EXAMPLES;
   const byId = Object.fromEntries(examples.map((e) => [e.id, e]));
 
-  check('в курсе 36 заданий: 8 базовых, 23 из наборов «Эвольвектор» и 5 про датчики',
-    TASKS.length === 36 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 28,
+  check('в курсе 37 заданий: 8 базовых, 23 из наборов «Эвольвектор», 5 про датчики и 1 про экран без I2C',
+    TASKS.length === 37 && TASKS.filter((t) => t.id.startsWith('ev-') || t.id === 'usb-link').length === 29,
     `всего ${TASKS.length}`);
   check('у заданий уникальные id и заполнены уровень, тема, минуты, цели и проверки',
     new Set(TASKS.map((t) => t.id)).size === TASKS.length
@@ -2026,6 +2026,150 @@ void loop() {}`);
       const t = TASKS.find((x) => x.id === id);
       return t && t.goals.length >= 3 && t.checks.length >= 4 && t.solutionExample;
     }), sensorTasks.filter((id) => !TASKS.find((x) => x.id === id)).join(', '));
+}
+
+console.log('\nLCD 1602 по проводам, без I2C');
+
+{
+  const def = PARTS.lcd1602p;
+  const pins = def.pins({ props: {} });
+  const ids = pins.map((p) => p.id);
+  check('деталь «LCD 1602 (параллельный)»: 16 выводов по паспорту HD44780',
+    def.category === 'Модули' && pins.length === 16
+    && ['VSS', 'VDD', 'V0', 'RS', 'RW', 'E', 'D0', 'D7', 'A', 'K'].every((id) => ids.includes(id))
+    && ids.indexOf('RS') + 1 === ids.indexOf('RW') && ids.indexOf('A') === 14,
+    `выводы: ${ids.join(' ')}`);
+
+  // --- электрика: подсветка светится, логика цепь не нагружает
+  const mk = (type, id, props = {}) => ({ id, type, x: 0, y: 0, props, __def: PARTS[type] });
+  const w = (n, a, ap, b, bp) => ({ id: `w${n}`, a: { compId: a, pin: ap }, b: { compId: b, pin: bp } });
+  const solve = (parts, wires) => {
+    const c = new Circuit(parts, wires);
+    c.solve(new Map([['b1', { pins: new Map() }]]), 1 / 60);
+    return c;
+  };
+  /** То же, но с телеметрией деталей (яркость и ток) из результата расчёта. */
+  const solveWithInfo = (parts, wires) => {
+    const c = new Circuit(parts, wires);
+    c.partInfo = c.solve(new Map([['b1', { pins: new Map() }]]), 1 / 60).partInfo;
+    return c;
+  };
+  {
+    const c = solveWithInfo([mk('uno', 'b1'), mk('lcd1602p', 'l1', {})],
+      [w(1, 'b1', '5V2', 'l1', 'VDD'), w(2, 'b1', 'GND2', 'l1', 'VSS'),
+        w(3, 'b1', '5V2', 'l1', 'A'), w(4, 'b1', 'GND2', 'l1', 'K')]);
+    const info = c.partInfo.get('l1');
+    const glow = info?.brightness ?? 0;
+    check('подсветка A/K светится от 5 В (около 18 мА, резистор уже в модуле)',
+      glow > 0.5 && glow <= 1.25, `яркость ${glow.toFixed(2)}, ток ${Math.round((info?.current || 0) * 1000)} мА`);
+
+    const reversed = solveWithInfo([mk('uno', 'b1'), mk('lcd1602p', 'l1', {})],
+      [w(1, 'b1', '5V2', 'l1', 'VDD'), w(2, 'b1', 'GND2', 'l1', 'VSS'),
+        w(3, 'b1', 'GND2', 'l1', 'A'), w(4, 'b1', '5V2', 'l1', 'K')]);
+    check('перевёрнутая подсветка не горит', (reversed.partInfo.get('l1')?.brightness || 0) < 0.1);
+
+    const data = solve([mk('uno', 'b1'), mk('lcd1602p', 'l1', {})],
+      [w(1, 'b1', '5V2', 'l1', 'VDD'), w(2, 'b1', 'GND2', 'l1', 'VSS'),
+        w(3, 'b1', 'D12', 'l1', 'RS'), w(4, 'b1', 'D11', 'l1', 'E')]);
+    check('линии RS и E — входы с высоким импедансом: вывод платы они не просаживают',
+      data.voltageOf('b1', 12) < 0.2 && data.voltageOf('b1', 11) < 0.2,
+      `${data.voltageOf('b1', 12).toFixed(2)} В`);
+  }
+
+  // --- библиотека: ищет экран по проводам и пишет в его буфер
+  const lcdPart = (lines = ['', '']) => ({
+    id: 'l1', type: 'lcd1602p', props: { lines, backlight: true },
+  });
+  const lcdBus = (wiring, part = lcdPart(), powered = true, volts = {}) => ({
+    firstOfType: () => null,
+    partOnPin: () => null,
+    partsOfType: (type) => (type === 'lcd1602p' ? [part] : []),
+    sameNet: (pin, p, pinId) => Boolean(wiring[pinId]) && Number(wiring[pinId]) === Number(pin),
+    voltageOfPin: (pin) => Number(volts[pin] ?? 0),
+    poweredOn: () => powered,
+    changed: () => {},
+    addStepper: () => {},
+    stepMotor: () => {},
+  });
+  const wiring = { RS: 12, E: 11, D4: 5, D5: 4, D6: 3, D7: 2 };
+  {
+    const part = lcdPart();
+    const libs = createLibraries(lcdBus(wiring, part));
+    const lcd = new libs.LiquidCrystal(12, 11, 5, 4, 3, 2);
+    lcd.begin(16, 2);
+    lcd.backlight();
+    lcd.print('Privet');
+    lcd.setCursor(0, 1);
+    lcd.print('RoboSim');
+    check('LiquidCrystal (4 бита): begin/print/setCursor пишут две строки на экран',
+      part.props.lines[0].startsWith('Privet') && part.props.lines[1].startsWith('RoboSim'),
+      `«${part.props.lines[0].trim()}» / «${part.props.lines[1].trim()}»`);
+  }
+  {
+    const part = lcdPart();
+    const libs = createLibraries(lcdBus({ RS: 8, E: 9, D0: 2, D1: 3, D2: 4, D3: 5, D4: 6, D5: 7, D6: 10, D7: 11 }, part));
+    const lcd = new libs.LiquidCrystal(8, 7, 9, 2, 3, 4, 5, 6, 7, 10, 11);
+    lcd.begin(16, 2);
+    lcd.print('8 bit');
+    check('LiquidCrystal (8 бит): вариант с RW и D0…D7 тоже работает',
+      lcd.bits === 8 && part.props.lines[0].trim() === '8 bit', `${lcd.bits} бита, «${part.props.lines[0].trim()}»`);
+  }
+  {
+    const part = lcdPart();
+    const libs = createLibraries(lcdBus({ RS: 12, E: 11, D4: 5, D5: 4, D6: 3, D7: 2 }, part, false));
+    const lcd = new libs.LiquidCrystal(12, 11, 5, 4, 3, 2);
+    lcd.begin(16, 2);
+    lcd.print('hello');
+    check('без питания на VDD/VSS экран остаётся пустым', part.props.lines.join('').trim() === '');
+  }
+  {
+    const part = lcdPart();
+    const libs = createLibraries(lcdBus({ RS: 12, E: 11, D4: 5, D5: 4, D6: 3, D7: 2 }, part));
+    const lcd = new libs.LiquidCrystal(12, 11, 5, 4, 3, 2);
+    lcd.begin(16, 2);
+    lcd.print('bez provodov');
+    const stray = new libs.LiquidCrystal(7, 8, 9, 10);
+    stray.begin(16, 2);
+    stray.print('xxxx');
+    check('библиотека находит экран только по своим проводам, чужие номера игнорирует',
+      part.props.lines[0].trim() === 'bez provodov', `«${part.props.lines[0].trim()}»`);
+  }
+  {
+    const part = lcdPart();
+    const libs = createLibraries(lcdBus({ ...wiring, RW: 10 }, part, true, { 10: 5 }));
+    const lcd = new libs.LiquidCrystal(12, 10, 11, 5, 4, 3, 2);   // rs, rw, en, d4…d7
+    lcd.begin(16, 2);
+    lcd.print('read mode');
+    check('RW в высоком уровне — режим чтения, дисплей не принимает текст',
+      lcd.rw === 10 && part.props.lines.join('').trim() === '');
+  }
+
+  // --- транспайлер и include
+  {
+    const t = transpile(`#include <LiquidCrystal.h>
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+void setup() {
+  lcd.begin(16, 2);
+  lcd.print("hi");
+}
+void loop() {}`);
+    check('#include <LiquidCrystal.h> и объект объявляются без ошибок',
+      t.errors.length === 0 && /new LiquidCrystal\(12,\s*11,\s*5,\s*4,\s*3,\s*2\)/.test(t.js),
+      t.errors.map((e) => e.msg).join('; '));
+    check('checkIncludes знает LiquidCrystal.h', checkIncludes('#include <LiquidCrystal.h>').length === 0);
+  }
+
+  // --- пример и задание
+  {
+    const ex = EXAMPLES.find((e) => e.id === 'lcd-parallel');
+    const task = TASKS.find((t) => t.id === 'ev-lcd-parallel');
+    check('пример lcd-parallel: экран, RW на земле, 11 проводов',
+      ex && ex.schematic.parts.some((p) => p.type === 'lcd1602p') && ex.schematic.wires.length === 11,
+      ex ? `${ex.schematic.wires.length} проводов` : 'нет примера');
+    check('задание ev-lcd-parallel: 8 проверок и эталон',
+      task && task.checks.length === 8 && task.solutionExample === 'lcd-parallel',
+      task ? `${task.checks.length} проверок` : 'нет задания');
+  }
 }
 
 console.log(`\nИтого: ${passed} ок, ${failed} провалено\n`);

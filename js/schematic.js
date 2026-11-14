@@ -102,6 +102,7 @@ export class Schematic {
     if (type === 'battery9') return { voltage: 9 };
     if (type === 'batteryAA') return { voltage: 6 };
     if (type === 'psu') return { voltage: 5 };
+    if (type === 'lcd1602p') return { lines: ['', ''], backlight: true };
     if (type === 'scope') return {};
     if (type === 'multimeter') return { mode: 'V' };
     if (type === 'logicprobe') return {};
