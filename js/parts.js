@@ -1951,18 +1951,18 @@ const lineWheel = (comp, side) => {
   const y = (side * CAR.trackW) / 2;
   const half = CAR.wheelR;
   return `
-    <clipPath id="${cid}"><rect x="${-half}" y="-8" width="${half * 2}" height="16" rx="7"/></clipPath>
+    <clipPath id="${cid}"><rect x="${-half}" y="-11" width="${half * 2}" height="22" rx="9"/></clipPath>
     <g transform="translate(0 ${y})">
-      <rect x="${-half}" y="-8" width="${half * 2}" height="16" rx="7" fill="#141619" stroke="#33393f" stroke-width=".9"/>
+      <rect x="${-half}" y="-11" width="${half * 2}" height="22" rx="9" fill="#141619" stroke="#3b4249" stroke-width="1"/>
       <g clip-path="url(#${cid})">
         <g class="tread" data-side="${side > 0 ? 'R' : 'L'}">
-          ${Array.from({ length: 12 }, (_, i) => `<line x1="${-half + i * 6}" y1="-8.5" x2="${-half + i * 6}" y2="8.5"
-            stroke="#2f353b" stroke-width="2.4"/>`).join('')}
+          ${Array.from({ length: 12 }, (_, i) => `<line x1="${-half + i * 6}" y1="-11.5" x2="${-half + i * 6}" y2="11.5"
+            stroke="#31373d" stroke-width="3"/>`).join('')}
         </g>
       </g>
-      <rect x="${-half + 4}" y="-7" width="${half * 2 - 8}" height="2" rx="1" fill="rgba(255,255,255,.07)"/>
-      <circle cx="0" cy="0" r="4.6" fill="#3d444c" stroke="#151a1e" stroke-width=".9"/>
-      <circle cx="0" cy="0" r="1.7" fill="#1d2227"/>
+      <rect x="${-half + 5}" y="-9.6" width="${half * 2 - 10}" height="2.2" rx="1.1" fill="rgba(255,255,255,.09)"/>
+      <circle cx="0" cy="0" r="6" fill="#454d55" stroke="#151a1e" stroke-width="1"/>
+      <circle cx="0" cy="0" r="2.4" fill="#1d2227"/>
     </g>`;
 };
 
